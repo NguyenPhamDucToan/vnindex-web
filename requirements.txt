@@ -1,0 +1,6 @@
+# Export step only; the front-end needs no build deps.
+# The valuation reuse imports from the sibling ../vnindex-valuation package,
+# so run this in that project's virtualenv (which already has these).
+pandas>=2.0
+SQLAlchemy>=2.0
+psycopg2-binary>=2.9

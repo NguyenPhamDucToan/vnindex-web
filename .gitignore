@@ -1,0 +1,9 @@
+# dev server logs
+server*.log
+# python
+__pycache__/
+*.pyc
+.env
+# os
+Thumbs.db
+.DS_Store
