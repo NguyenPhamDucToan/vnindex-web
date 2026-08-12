@@ -1,31 +1,44 @@
-/* Hallmark · component: financial-dashboard · genre: modern-minimal · theme: Cobalt-adjacent
- * tone: technical/utilitarian · anchor hue: navy (cool)
- * pre-emit critique: P5 H5 E4 S5 R5 V4
- * numbers: tabular-nums everywhere · display: Fira Code (roman) · body: Inter
+/* VNIndex static dashboard.
+ *
+ * Visual system is deliberately NOT an original design: it mirrors the
+ * Streamlit app in ../vnindex-valuation so the two builds look like the same
+ * product. Palette is copied from that app's :root token block; type sizes and
+ * families were measured off the running app with getComputedStyle rather than
+ * eyeballed (body 16px Source Sans, headings 28px/600 Fira Code, metric labels
+ * 16px, scorecard values 22px). Sections sit flat on the page background with
+ * hairline dividers -- no card chrome, matching the original's layout.
+ *
+ * If you change anything here, re-run the comparison against localhost:8501
+ * instead of guessing.
  */
 :root {
-  /* paper / ink — cool navy-grey ladder */
-  --bg: #eef2f9;
-  --paper: #ffffff;
-  --paper-2: #f5f8fd;
-  --paper-3: #eef3fb;
-  --ink: #0b1420;
-  --ink-2: #33404f;
-  --muted: #5c6775;
-  --rule: rgba(148, 163, 184, 0.22);
-  --rule-strong: rgba(100, 116, 139, 0.34);
+  /* Palette copied verbatim from the Streamlit app's :root token block so the
+     two builds render the same colours, not merely similar ones. */
+  --bg: #f2f5fb;
+  --paper: #fcfeff;
+  --paper-2: #fcfeff;
+  --paper-3: #e2e8f1;
+  --ink: #0a121d;
+  --ink-2: #1b2532;
+  --muted: #666f7c;
+  --neutral: #47515e;
+  --rule: #ced5df;
+  --rule-strong: #afb8c4;
 
   /* accent + semantics */
   --primary: #00347b;
-  --primary-soft: rgba(0, 52, 123, 0.09);
-  --primary-ring: rgba(0, 52, 123, 0.35);
+  --primary-light: #367ad1;
+  --primary-soft: #d3e3f9;
+  --primary-ring: rgba(0, 109, 221, 0.4);
   --gain: #15803d;
   --loss: #b91c1c;
   --warn: #b45309;
 
-  /* type */
-  --mono: "Fira Code", ui-monospace, "SFMono-Regular", monospace;
-  --sans: "Inter", system-ui, -apple-system, sans-serif;
+  /* Type. The original's *visible* body text renders in Source Sans (Streamlit's
+     markdown default), with Fira Code on headings and numbers — measured off the
+     running app, not assumed from its theme config. */
+  --mono: "Fira Code", ui-monospace, "SF Mono", Consolas, monospace;
+  --sans: "Source Sans 3", "Source Sans Pro", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 
   /* scale */
   --space-xs: 4px; --space-sm: 8px; --space-md: 14px; --space-lg: 20px; --space-xl: 28px;
@@ -40,7 +53,7 @@
 html, body { overflow-x: clip; }
 body {
   margin: 0; background: var(--bg); color: var(--ink);
-  font-family: var(--sans); font-size: 14px; line-height: 1.5;
+  font-family: var(--sans); font-size: 16px; line-height: 1.5;
   font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
   display: grid; grid-template-columns: 244px 1fr; min-height: 100vh;
@@ -83,19 +96,24 @@ b, strong { font-weight: 600; }
 .meta { margin-top: auto; font-family: var(--mono); font-size: 10px; color: var(--muted); line-height: 1.6; }
 
 /* ── main ─────────────────────────────────────────────────── */
-.main { padding: var(--space-xl) 32px; max-width: 1240px; width: 100%; }
+/* The original's content column runs wide with generous side padding
+   (Streamlit block-container: 80px sides) rather than a narrow centred measure. */
+.main { padding: 40px 56px; max-width: 1500px; width: 100%; }
 .view.hidden, .hidden { display: none !important; }
 .loading { color: var(--muted); padding: 48px; font-family: var(--mono); font-size: 13px; }
+/* Sections sit flat on the page background and are separated by a hairline
+   rule, matching the Streamlit original (st.markdown("---") dividers) -- no
+   card chrome, no elevation. */
 .card {
-  background: var(--paper); border: 1px solid var(--rule); border-radius: var(--radius);
-  padding: var(--space-lg) 22px; margin-bottom: var(--space-md); box-shadow: var(--shadow-1);
+  background: transparent; border: none; box-shadow: none; padding: 0;
+  margin-bottom: var(--space-xl); padding-bottom: var(--space-xl);
+  border-bottom: 1px solid var(--rule);
 }
+.card:last-child { border-bottom: none; }
 .sec-h {
-  font-family: var(--mono); font-size: 18px; font-weight: 700; letter-spacing: -0.2px;
-  margin: 0 0 var(--space-md); color: var(--ink); padding-bottom: 10px;
-  border-bottom: 1px solid var(--rule); display: flex; align-items: center; gap: 9px;
+  font-family: var(--mono); font-size: 28px; font-weight: 600;
+  margin: 0 0 var(--space-md); color: var(--ink);
 }
-.sec-h::before { content: ""; width: 3px; height: 15px; background: var(--primary); border-radius: 2px; flex-shrink: 0; }
 
 /* ── stock header ─────────────────────────────────────────── */
 .stock-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-xl); margin-bottom: var(--space-lg); flex-wrap: wrap; }
@@ -114,11 +132,13 @@ b, strong { font-weight: 600; }
 .fill.gain { background: var(--gain); } .fill.loss { background: var(--loss); } .fill.flat { background: var(--muted); }
 
 /* ── metrics grid ─────────────────────────────────────────── */
-.metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--rule); border: 1px solid var(--rule); border-radius: var(--radius); overflow: hidden; margin-bottom: var(--space-md); }
-.metric { background: var(--paper); padding: 13px 16px; transition: background var(--dur) var(--ease-out); }
-.metric:hover { background: var(--paper-2); }
-.mk { font-size: 11px; color: var(--muted); letter-spacing: .2px; }
-.mv { font-family: var(--mono); font-size: 18px; font-weight: 500; margin-top: 3px; letter-spacing: -0.3px; }
+/* Plain 3-across grid on the page background — the original's layout; no
+   boxes, no separators. */
+.metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px 18px; margin-bottom: var(--space-xl); }
+.metric { min-width: 0; }
+.mk { font-size: 16px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mv { font-size: 20px; font-weight: 600; color: #1e3a8a; white-space: nowrap; }
+.mv.accent { color: #3b82f6; }
 
 /* ── range buttons ────────────────────────────────────────── */
 .range-row { display: flex; gap: 6px; margin-bottom: var(--space-md); }
@@ -133,12 +153,12 @@ b, strong { font-weight: 600; }
 
 /* ── scorecard ────────────────────────────────────────────── */
 .sc-block { border: 1px solid var(--rule); border-radius: var(--radius-sm); margin-bottom: 10px; overflow: hidden; }
-.sc-title { background: var(--paper-2); padding: 7px 14px; font-size: 10px; font-weight: 700; letter-spacing: 1.4px; color: var(--muted); border-bottom: 1px solid var(--rule); }
+.sc-title { background: rgba(148, 163, 184, 0.08); padding: 6px 14px; font-size: 10px; font-weight: 700; letter-spacing: 1.4px; color: var(--muted); }
 .sc-cells { display: flex; }
 .sc-cell { flex: 1; text-align: center; padding: 15px 10px; min-width: 0; transition: background var(--dur) var(--ease-out); }
 .sc-cell:hover { background: var(--paper-2); }
 .sc-k { font-size: 11px; color: var(--muted); margin-bottom: 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sc-v { font-family: var(--mono); font-size: 21px; font-weight: 700; letter-spacing: -0.5px; }
+.sc-v { font-family: var(--mono); font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
 .legend { display: flex; gap: 16px; justify-content: flex-end; padding: 6px 2px 0; font-size: 11px; color: var(--muted); }
 .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
 
@@ -175,8 +195,8 @@ b, strong { font-weight: 600; }
 /* ── tables ───────────────────────────────────────────────── */
 table.screen { width: 100%; border-collapse: collapse; font-size: 13px; }
 table.screen th {
-  text-align: right; padding: 9px 10px; font-size: 10px; color: var(--muted); border-bottom: 1px solid var(--rule-strong);
-  font-weight: 700; letter-spacing: .5px; text-transform: uppercase; position: sticky; top: 0; background: var(--paper);
+  text-align: right; padding: 9px 10px; font-size: 11px; color: var(--muted); border-bottom: 1px solid var(--rule-strong);
+  font-weight: 600; position: sticky; top: 0; background: var(--bg);
 }
 table.screen th:first-child, table.screen th:nth-child(2) { text-align: left; }
 table.screen td { text-align: right; padding: 8px 10px; border-bottom: 1px solid var(--rule); font-family: var(--mono); letter-spacing: -0.2px; }

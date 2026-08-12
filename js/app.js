@@ -151,19 +151,22 @@ function header(co, last, prev, chg, chgPct) {
 }
 
 function metricsGrid(co, v, q, mcap, shares, vol15) {
+  // Same nine cells, same order, same accent on P/E + P/B as the original
+  // header's 3x3 grid.
   const cells = [
-    ["Vốn hóa (tỷ)", F.num(mcap, 0)],
-    ["Vốn chủ (tỷ)", F.num(q ? q.equity : null, 0)],
-    ["P/E", F.mult(v.pe)],
-    ["EPS (VND)", q && F.isNum(q.eps) ? F.rawVND(q.eps) : "—"],
-    ["P/B", F.mult(v.pb)],
-    ["EV/EBITDA", F.mult(v.ev_ebitda)],
-    ["KLTB 15D", F.num(vol15, 0)],
-    ["Số CP (triệu)", F.num(shares, 0)],
+    ["Market Cap (bn)", F.num(mcap, 0), false],
+    ["Book Value (bn)", F.num(q ? q.equity : null, 0), false],
+    ["P/E", F.mult(v.pe, 1), true],
+    ["Avg Vol 15D (K)", F.num(vol15 / 1000, 0), false],
+    ["EPS (VND)", q && F.isNum(q.eps) ? F.rawVND(q.eps) : "—", false],
+    ["P/B", F.mult(v.pb, 1), true],
+    ["Shares (M)", F.num(shares, 0), false],
+    ["EV/EBITDA", F.mult(v.ev_ebitda, 1), false],
+    ["Ngành", F.escapeHtml(co.sector || "—"), false],
   ];
   const grid = el(`<div class="metrics"></div>`);
-  for (const [k, val] of cells)
-    grid.appendChild(el(`<div class="metric"><div class="mk">${k}</div><div class="mv">${val}</div></div>`));
+  for (const [k, val, accent] of cells)
+    grid.appendChild(el(`<div class="metric"><div class="mk">${k}</div><div class="mv${accent ? " accent" : ""}">${val}</div></div>`));
   return grid;
 }
 
