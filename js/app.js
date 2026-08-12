@@ -30,7 +30,7 @@ async function boot() {
 
 function buildNav() {
   const nav = $("#nav");
-  const views = [["stock", "Phân tích cổ phiếu"], ["screen", "Sàng lọc"]];
+  const views = [["stock", "Phân tích cổ phiếu"], ["screen", "Sàng lọc"], ["sector", "Phân tích ngành"]];
   for (const [id, label] of views) {
     const a = el(`<button class="nav-item" data-view="${id}">${label}</button>`);
     a.onclick = () => showView(id);
@@ -43,6 +43,7 @@ function showView(id) {
   document.querySelectorAll(".nav-item").forEach((n) => n.classList.toggle("active", n.dataset.view === id));
   document.querySelectorAll(".view").forEach((v) => v.classList.toggle("hidden", v.id !== `view-${id}`));
   if (id === "screen") renderScreener();
+  if (id === "sector") renderSector();
 }
 
 // ── ticker picker ───────────────────────────────────────────────────
@@ -318,14 +319,12 @@ function fmtUpside(frac) {
 }
 
 // ── screener view ───────────────────────────────────────────────────
-let screenerBuilt = false;
-async function renderScreener() {
-  if (screenerBuilt) return;
-  screenerBuilt = true;
-  const root = $("#view-screen");
-  root.innerHTML = `<div class="loading">Đang tải…</div>`;
+let SCREEN_ROWS = null;      // enriched, sorted, cached across filter changes
+
+async function enrichScreener() {
+  if (SCREEN_ROWS) return SCREEN_ROWS;
   const rows = await loadScreener();
-  const enriched = rows.map((r) => {
+  SCREEN_ROWS = rows.map((r) => {
     const q = computeQualityScore(r.roe, r.net_margin, r.profit_quality, r.fcf_margin, r.current_ratio, r.debt_to_equity);
     const upFrac = F.isNum(r.model_upside) ? r.model_upside : null;   // sector-adjusted fraction
     const sig = upFrac != null ? classifySignal(upFrac, q) : null;
@@ -340,24 +339,137 @@ async function renderScreener() {
     if (b.q !== a.q) return b.q - a.q;
     return (b.upFrac ?? -1e9) - (a.upFrac ?? -1e9);
   });
+  return SCREEN_ROWS;
+}
 
-  const tbl = el(`<div class="card"><h2 class="sec-h">Sàng lọc cổ phiếu (${enriched.length} mã)</h2>
+let screenerBuilt = false;
+async function renderScreener() {
+  if (screenerBuilt) return;
+  screenerBuilt = true;
+  const root = $("#view-screen");
+  root.innerHTML = `<div class="loading">Đang tải…</div>`;
+  const rows = await enrichScreener();
+  const sectors = [...new Set(rows.map((r) => r.sector).filter(Boolean))].sort();
+
+  root.innerHTML = "";
+  const card = el(`<div class="card"><h2 class="sec-h">Sàng lọc cổ phiếu</h2>
+    <div class="filters">
+      <label>Ngành <select id="f-sector"><option value="">Tất cả</option>${sectors.map((s) => `<option>${F.escapeHtml(s)}</option>`).join("")}</select></label>
+      <label>Tín hiệu <select id="f-signal"><option value="">Tất cả</option>${SIGNAL_ORDER.map((s) => `<option value="${s}">${SIGNAL_VI[s]}</option>`).join("")}</select></label>
+      <label>P/E ≤ <input id="f-pe" type="number" step="1" placeholder="—" /></label>
+      <label>ROE ≥ <input id="f-roe" type="number" step="1" placeholder="%" /></label>
+      <label>Upside ≥ <input id="f-up" type="number" step="5" placeholder="%" /></label>
+      <button id="f-reset" class="range-btn">Xóa lọc</button>
+      <span id="f-count" class="fcount"></span>
+    </div>
     <table class="screen"><thead><tr>
       <th>Mã</th><th>Ngành</th><th>P/E</th><th>P/B</th><th>ROE</th>
       <th>Upside</th><th>Chất lượng</th><th>Tín hiệu</th></tr></thead><tbody></tbody></table></div>`);
-  const tb = $("tbody", tbl);
-  for (const r of enriched) {
-    const tr = el(`<tr>
-      <td><b>${r.ticker}</b></td>
-      <td class="dim">${F.escapeHtml(r.sector || "")}</td>
-      <td>${F.mult(r.pe)}</td><td>${F.mult(r.pb)}</td><td>${F.pct(r.roe)}</td>
-      <td style="color:${(r.upFrac ?? 0) >= 0 ? "#15803d" : "#b91c1c"}">${fmtUpside(r.upFrac)}</td>
-      <td>${r.q.toFixed(0)}</td>
-      <td>${r.sig ? `<span style="color:${SIGNAL_COLOR[r.sig]}">${SIGNAL_VI[r.sig]}</span>` : "—"}</td></tr>`);
-    tr.onclick = () => selectTicker(r.ticker);
-    tb.appendChild(tr);
+  root.appendChild(card);
+  const tb = $("tbody", card);
+
+  const apply = () => {
+    const sec = $("#f-sector", card).value;
+    const sig = $("#f-signal", card).value;
+    const maxPe = parseFloat($("#f-pe", card).value);
+    const minRoe = parseFloat($("#f-roe", card).value);
+    const minUp = parseFloat($("#f-up", card).value);
+    const out = rows.filter((r) =>
+      (!sec || r.sector === sec) &&
+      (!sig || r.sig === sig) &&
+      (isNaN(maxPe) || (F.isNum(r.pe) && r.pe <= maxPe)) &&
+      (isNaN(minRoe) || (F.isNum(r.roe) && r.roe * 100 >= minRoe)) &&
+      (isNaN(minUp) || (F.isNum(r.upFrac) && r.upFrac * 100 >= minUp)));
+    tb.innerHTML = "";
+    for (const r of out) {
+      const tr = el(`<tr>
+        <td><b>${r.ticker}</b></td>
+        <td class="dim">${F.escapeHtml(r.sector || "")}</td>
+        <td>${F.mult(r.pe)}</td><td>${F.mult(r.pb)}</td><td>${F.pct(r.roe)}</td>
+        <td style="color:${(r.upFrac ?? 0) >= 0 ? "#15803d" : "#b91c1c"}">${fmtUpside(r.upFrac)}</td>
+        <td>${r.q.toFixed(0)}</td>
+        <td>${r.sig ? `<span style="color:${SIGNAL_COLOR[r.sig]}">${SIGNAL_VI[r.sig]}</span>` : "—"}</td></tr>`);
+      tr.onclick = () => selectTicker(r.ticker);
+      tb.appendChild(tr);
+    }
+    $("#f-count", card).textContent = `${out.length} / ${rows.length} mã`;
+  };
+  card.querySelectorAll("select, input").forEach((c) => c.addEventListener("input", apply));
+  $("#f-reset", card).onclick = () => {
+    card.querySelectorAll("select").forEach((s) => (s.value = ""));
+    card.querySelectorAll("input").forEach((i) => (i.value = ""));
+    apply();
+  };
+  apply();
+}
+
+// ── sector view ─────────────────────────────────────────────────────
+function median(arr) {
+  const a = arr.filter((x) => F.isNum(x)).sort((x, y) => x - y);
+  if (!a.length) return null;
+  const m = Math.floor(a.length / 2);
+  return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+}
+
+let sectorBuilt = false;
+async function renderSector() {
+  if (sectorBuilt) return;
+  sectorBuilt = true;
+  const root = $("#view-sector");
+  root.innerHTML = `<div class="loading">Đang tải…</div>`;
+  const rows = await enrichScreener();
+
+  const bySec = {};
+  for (const r of rows) {
+    if (!r.sector) continue;
+    (bySec[r.sector] ||= []).push(r);
   }
+  const agg = Object.entries(bySec).map(([sector, rs]) => ({
+    sector, n: rs.length,
+    pe: median(rs.map((r) => r.pe)),
+    pb: median(rs.map((r) => r.pb)),
+    roe: median(rs.map((r) => r.roe)),
+    up: median(rs.map((r) => r.upFrac)),
+    q: median(rs.map((r) => r.q)),
+  })).sort((a, b) => (b.up ?? -1e9) - (a.up ?? -1e9));
+
   root.innerHTML = "";
+  const treeCard = el(`<div class="card"><h2 class="sec-h">Phân tích ngành</h2>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Ô lớn = nhiều mã; màu xanh = định giá còn rẻ (upside trung vị dương), đỏ = đắt.</div>
+    <div id="sec-tree"></div></div>`);
+  root.appendChild(treeCard);
+  window.Plotly.react($("#sec-tree", treeCard), [{
+    type: "treemap",
+    labels: agg.map((s) => s.sector),
+    parents: agg.map(() => ""),
+    values: agg.map((s) => s.n),
+    text: agg.map((s) => (F.isNum(s.up) ? F.pctSigned(s.up * 100) : "—")),
+    texttemplate: "%{label}<br>%{value} mã · %{text}",
+    hovertemplate: "%{label}<br>%{value} mã<extra></extra>",
+    marker: {
+      colors: agg.map((s) => (F.isNum(s.up) ? Math.max(-0.5, Math.min(0.5, s.up)) : 0)),
+      colorscale: [[0, "#b91c1c"], [0.5, "#f5f5f5"], [1, "#15803d"]], cmid: 0,
+      line: { width: 1, color: "#fff" },
+    },
+    tiling: { pad: 2 },
+  }], {
+    height: 420, margin: { l: 0, r: 0, t: 0, b: 0 },
+    paper_bgcolor: "rgba(0,0,0,0)",
+    font: { family: "'Fira Code', monospace", size: 11, color: "#0a121d" },
+  }, { displayModeBar: false, responsive: true });
+
+  const tbl = el(`<div class="card"><h2 class="sec-h">Chỉ số trung vị theo ngành</h2>
+    <table class="screen"><thead><tr>
+      <th>Ngành</th><th>Số mã</th><th>P/E</th><th>P/B</th><th>ROE</th><th>Upside</th><th>Chất lượng</th>
+    </tr></thead><tbody></tbody></table></div>`);
+  const tb = $("tbody", tbl);
+  for (const s of agg) {
+    tb.appendChild(el(`<tr>
+      <td class="dim">${F.escapeHtml(s.sector)}</td>
+      <td>${s.n}</td><td>${F.mult(s.pe)}</td><td>${F.mult(s.pb)}</td><td>${F.pct(s.roe)}</td>
+      <td style="color:${(s.up ?? 0) >= 0 ? "#15803d" : "#b91c1c"}">${fmtUpside(s.up)}</td>
+      <td>${F.isNum(s.q) ? s.q.toFixed(0) : "—"}</td></tr>`));
+  }
   root.appendChild(tbl);
 }
 
