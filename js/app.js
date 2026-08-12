@@ -2,6 +2,8 @@ import { loadCompanies, loadScreener, loadTicker, loadMeta } from "./data.js";
 import { priceChart, priceVsValueChart } from "./charts.js";
 import { computeQualityScore, classifySignal, SIGNAL_VI, SIGNAL_COLOR, SIGNAL_ORDER } from "./signals.js";
 import { ratingColor } from "./ratings.js";
+import { computeTTM } from "./ttm.js";
+import { quarterlyCharts } from "./quarterly.js";
 import * as F from "./format.js";
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -103,8 +105,13 @@ async function renderStock(t) {
   buildRangeButtons($("#range-row", chartWrap), prices);
   priceChart($("#price-chart", chartWrap), prices, currentRange);
 
-  root.appendChild(scorecard(co, v));
+  const ttm = computeTTM(d.financials || []);
+  root.appendChild(scorecard(co, v, ttm));
   root.appendChild(valuationSummary(co, v, d.model || {}, last));
+
+  // Quarterly analysis charts (the "meat" rows) from the exported financials.
+  // Appends itself to root, then renders (Plotly needs an attached node).
+  quarterlyCharts(root, co, d.financials || []);
 
   if ((d.valuation_history || []).length > 2) {
     const pv = el(`<div class="card"><h2 class="sec-h">Giá thị trường vs Định giá</h2><div id="pv-chart"></div></div>`);
@@ -167,11 +174,14 @@ function scoreRow(title, cells) {
   return row;
 }
 
-function scorecard(co, v) {
+function scorecard(co, v, ttm) {
   const isFin = FINANCIAL_SECTORS.has(co.sector);
   const isBank = co.sector === "Ngân hàng";
+  const isSec = co.sector === "Chứng khoán";
+  const isRE = co.sector === "Bất động sản";
   const card = el(`<div class="card"><h2 class="sec-h">Chỉ số tài chính chủ chốt (TTM)</h2></div>`);
   const R = ratingColor;
+  const div = (a, b) => (F.isNum(a) && b) ? a / b : null;
 
   card.appendChild(scoreRow("SINH LỜI", [
     { label: isBank ? "Thu nhập lãi / Tổng TN" : "Biên LN gộp", value: F.pct(v.gross_margin), color: R(v.gross_margin, 0.25, 0.15) },
@@ -183,28 +193,67 @@ function scorecard(co, v) {
     { label: "ROA", value: F.pct(v.roa), color: isBank ? R(v.roa, 0.015, 0.010) : R(v.roa, 0.08, 0.05) },
   ]));
 
-  card.appendChild(scoreRow("THANH KHOẢN", [
-    { label: "Current ratio", value: F.mult(v.current_ratio), color: R(v.current_ratio, 2, 1) },
-    { label: "Quick ratio", value: F.mult(v.quick_ratio), color: R(v.quick_ratio, 1, 0.5) },
-    { label: "OCF / Nợ ngắn hạn", value: F.mult(v.ocf_to_current_liab), color: R(v.ocf_to_current_liab, 0.4, 0.2) },
-    { label: "Đòn bẩy (TS/VCSH)", value: F.mult(v.financial_leverage), color: isFin ? ratingColor(v.financial_leverage, 12, 15, false) : ratingColor(v.financial_leverage, 2.5, 4, false) },
-  ]));
-
-  card.appendChild(scoreRow("ĐÒN BẨY & DÒNG TIỀN", [
-    { label: "Nợ / Vốn chủ (D/E)", value: F.mult(v.debt_to_equity), color: R(v.debt_to_equity, 1, 2, false) },
-    { label: "Nợ / Tổng tài sản", value: F.pct(v.debt_to_assets), color: R(v.debt_to_assets, 0.30, 0.60, false) },
-    { label: "Biên FCF", value: F.pct(v.fcf_margin), color: R(v.fcf_margin, 0.10, 0.0) },
-    { label: "Chất lượng LN", value: F.mult(v.profit_quality), color: R(v.profit_quality, 1, 0.8) },
-  ]));
-
-  // Working-capital cycle is meaningless for financials (banks read DSO in the
-  // thousands of days because "receivables" is the loan book) -- hidden.
-  if (!isFin) {
+  if (isBank && ttm) {
+    // Banks fail the generic liquidity row (no current/non-current split), so
+    // it's swapped for the metrics the sector is actually judged on -- all from
+    // the bank field remap (revenue=TOI, gross_profit=NII, cogs=provisions,
+    // receivables=loan book, payables=customer deposits).
+    const nim = div(ttm.gross_profit, ttm.total_assets);
+    const cir = div(ttm.ga_expense != null ? Math.abs(ttm.ga_expense) : null, ttm.revenue);
+    const ldr = div(ttm.receivables, ttm.payables);
+    const cc = div(ttm.cogs != null ? Math.abs(ttm.cogs) : null, ttm.receivables);
+    const ea = div(ttm.equity, ttm.total_assets);
+    card.appendChild(scoreRow("HIỆU QUẢ & AN TOÀN NGÂN HÀNG", [
+      { label: "Biên lãi thuần (NIM)", value: F.pct(nim), color: R(nim, 0.030, 0.020) },
+      { label: "Chi phí / Thu nhập (CIR)", value: F.pct(cir), color: R(cir, 0.35, 0.50, false) },
+      { label: "Cho vay / Tiền gửi", value: F.pct(ldr), color: R(ldr, 1.00, 1.20, false) },
+      { label: "Chi phí tín dụng", value: F.pct(cc), color: R(cc, 0.010, 0.020, false) },
+      { label: "Vốn chủ / Tổng tài sản", value: F.pct(ea), color: R(ea, 0.09, 0.06) },
+    ]));
+    const lev = div(ttm.total_assets, ttm.equity);
+    const dep = div(ttm.payables, ttm.total_assets);
+    card.appendChild(scoreRow("CƠ CẤU VỐN & NGUỒN VỐN", [
+      { label: "Đòn bẩy (TS / VCSH)", value: F.mult(lev), color: R(lev, 12, 15, false) },
+      { label: "Tiền gửi KH / Tổng TS", value: F.pct(dep), color: R(dep, 0.60, 0.45) },
+      { label: "Vay liên NH / Vốn chủ", value: F.mult(v.debt_to_equity), color: R(v.debt_to_equity, 2, 4, false) },
+    ]));
+  } else if (isSec && ttm) {
+    // Brokers keep D/E (leverage is real risk) but drop FCF/profit-quality --
+    // they run structurally negative OCF from growing the margin book.
+    const ea = div(ttm.equity, ttm.total_assets);
+    card.appendChild(scoreRow("THANH KHOẢN", [
+      { label: "Current ratio", value: F.mult(v.current_ratio), color: R(v.current_ratio, 2, 1) },
+      { label: "Quick ratio", value: F.mult(v.quick_ratio), color: R(v.quick_ratio, 1, 0.5) },
+      { label: "OCF / Nợ ngắn hạn", value: F.mult(v.ocf_to_current_liab), color: R(v.ocf_to_current_liab, 0.4, 0.2) },
+    ]));
+    card.appendChild(scoreRow("ĐÒN BẨY & AN TOÀN VỐN", [
+      { label: "Nợ / Vốn chủ (D/E)", value: F.mult(v.debt_to_equity), color: R(v.debt_to_equity, 1, 2, false) },
+      { label: "Nợ / Tổng tài sản", value: F.pct(v.debt_to_assets), color: R(v.debt_to_assets, 0.30, 0.60, false) },
+      { label: "Vốn chủ / Tổng tài sản", value: F.pct(ea), color: R(ea, 0.40, 0.25) },
+    ]));
+  } else {
+    card.appendChild(scoreRow("THANH KHOẢN", [
+      { label: "Current ratio", value: F.mult(v.current_ratio), color: R(v.current_ratio, 2, 1) },
+      { label: "Quick ratio", value: F.mult(v.quick_ratio), color: R(v.quick_ratio, 1, 0.5) },
+      { label: "OCF / Nợ ngắn hạn", value: F.mult(v.ocf_to_current_liab), color: R(v.ocf_to_current_liab, 0.4, 0.2) },
+      { label: "Đòn bẩy (TS/VCSH)", value: F.mult(v.financial_leverage), color: R(v.financial_leverage, 2.5, 4, false) },
+    ]));
+    card.appendChild(scoreRow("ĐÒN BẨY & DÒNG TIỀN", [
+      { label: "Nợ / Vốn chủ (D/E)", value: F.mult(v.debt_to_equity), color: R(v.debt_to_equity, 1, 2, false) },
+      { label: "Nợ / Tổng tài sản", value: F.pct(v.debt_to_assets), color: R(v.debt_to_assets, 0.30, 0.60, false) },
+      { label: "Biên FCF", value: F.pct(v.fcf_margin), color: R(v.fcf_margin, 0.10, 0.0) },
+      { label: "Chất lượng LN", value: F.mult(v.profit_quality), color: R(v.profit_quality, 1, 0.8) },
+    ]));
+    // Property developers hold years of project inventory by design, so the
+    // DIO/CCC bands widen for them.
+    const dioGood = isRE ? 1095 : 50, dioWarn = isRE ? 1825 : 100;
+    const cccGood = isRE ? 1095 : 50, cccWarn = isRE ? 1825 : 90;
+    const cic = v.cash_interest_coverage;
     card.appendChild(scoreRow("VÒNG QUAY VỐN & AN TOÀN NỢ", [
-      { label: "Chu kỳ tiền mặt (CCC)", value: F.days(v.ccc), color: R(v.ccc, 50, 90, false) },
+      { label: "Chu kỳ tiền mặt (CCC)", value: F.days(v.ccc), color: R(v.ccc, cccGood, cccWarn, false) },
       { label: "Ngày thu tiền (DSO)", value: F.days(v.dso), color: R(v.dso, 30, 60, false) },
-      { label: "Ngày tồn kho (DIO)", value: F.days(v.dio), color: R(v.dio, 50, 100, false) },
-      { label: "Tiền mặt trả lãi vay", value: F.isNum(v.cash_interest_coverage) && v.cash_interest_coverage > 100 ? "Không vay nợ" : F.mult(v.cash_interest_coverage), color: F.isNum(v.cash_interest_coverage) && v.cash_interest_coverage > 100 ? "#16a34a" : R(v.cash_interest_coverage, 5, 3) },
+      { label: "Ngày tồn kho (DIO)", value: F.days(v.dio), color: R(v.dio, dioGood, dioWarn, false) },
+      { label: "Tiền mặt trả lãi vay", value: F.isNum(cic) && cic > 100 ? "Không vay nợ" : F.mult(cic), color: F.isNum(cic) && cic > 100 ? "#16a34a" : R(cic, 5, 3) },
     ]));
   }
 

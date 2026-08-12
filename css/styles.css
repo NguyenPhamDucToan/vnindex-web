@@ -97,6 +97,11 @@ body {
 .ev-s { font-size: 12px; color: var(--muted); margin-top: 5px; }
 .ev-note { font-size: 11px; color: var(--muted); margin-top: 10px; }
 
+/* quarterly charts grid */
+.qgrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+.qchart { border: 1px solid var(--rule); border-radius: 4px; padding: 8px 10px 4px; min-width: 0; }
+.qtitle { font-size: 11px; font-weight: 700; letter-spacing: .6px; color: var(--muted); text-transform: uppercase; margin-bottom: 2px; }
+
 /* screener table */
 table.screen { width: 100%; border-collapse: collapse; font-size: 13px; }
 table.screen th { text-align: right; padding: 8px 10px; font-size: 11px; color: var(--muted); border-bottom: 1px solid var(--rule); font-weight: 600; }
@@ -116,4 +121,5 @@ table.screen tbody tr:hover { background: var(--paper2); }
   .metrics { grid-template-columns: repeat(2, 1fr); }
   .sc-cells { flex-wrap: wrap; }
   .sc-cell { flex: 1 1 45%; }
+  .qgrid { grid-template-columns: 1fr; }
 }
