@@ -150,6 +150,7 @@ def main() -> None:
 
     n = 0
     model_out = {}          # ticker -> {"price": .., "upside": ..} for screener
+    change_out = {}         # ticker -> {"chg": .., "close": .., "vol": ..}
     for _, co in companies.iterrows():
         t = co.ticker
         vg = val_by_ticker.get(t)
@@ -165,6 +166,15 @@ def main() -> None:
             except Exception as e:         # never let one ticker abort the export
                 print(f"    ! model {t}: {e}")
         model_out[t] = model
+
+        # Latest daily % change + volume, for the market-overview movers.
+        chg = None
+        if px is not None and len(px) >= 2:
+            prev = float(px["close"].iloc[-2])
+            if prev:
+                chg = (last_close - prev) / prev
+        change_out[t] = {"chg": _clean(chg), "close": _clean(last_close),
+                         "vol": _clean(float(px["volume"].iloc[-1]) if px is not None and len(px) else None)}
 
         obj = {
             "company": {k: _clean(co[k]) for k in
@@ -183,11 +193,29 @@ def main() -> None:
             print(f"    …{n}")
     print(f"  wrote {n} per-ticker files")
 
-    # screener.json with the sector-adjusted model price/upside attached.
+    # screener.json with the sector-adjusted model price/upside + day change.
     screener["model_price"] = screener.ticker.map(lambda t: model_out.get(t, {}).get("price"))
     screener["model_upside"] = screener.ticker.map(lambda t: model_out.get(t, {}).get("upside"))
+    screener["chg"] = screener.ticker.map(lambda t: change_out.get(t, {}).get("chg"))
+    screener["vol"] = screener.ticker.map(lambda t: change_out.get(t, {}).get("vol"))
     _write(OUT / "screener.json", _records(screener))
     print(f"  wrote screener.json ({len(screener)} rows)")
+
+    # ---- macro.json (curated headline indicators) ----------------------
+    _MACRO_KEYS = ["gdp_growth", "cpi_yoy", "credit_growth_total", "exchange_rate",
+                   "lending_rate", "deposit_rate", "trade_balance", "fdi",
+                   "retail_sales_growth", "unemployment_rate"]
+    with engine.connect() as conn:
+        macro = pd.read_sql(text(
+            "SELECT indicator, period, value FROM macro_indicators "
+            "WHERE indicator = ANY(:keys) ORDER BY indicator, period"),
+            conn, params={"keys": _MACRO_KEYS})
+    macro_out = {}
+    for ind, g in macro.groupby("indicator"):
+        macro_out[ind] = [{"period": _clean(r["period"]), "value": _clean(r["value"])}
+                          for _, r in g.iterrows()]
+    _write(OUT / "macro.json", macro_out)
+    print(f"  wrote macro.json ({len(macro_out)} indicators)")
 
     _write(OUT / "meta.json", {
         "generated_at": datetime.utcnow().isoformat() + "Z",

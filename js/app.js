@@ -1,4 +1,4 @@
-import { loadCompanies, loadScreener, loadTicker, loadMeta } from "./data.js";
+import { loadCompanies, loadScreener, loadTicker, loadMeta, loadMacro } from "./data.js";
 import { priceChart, priceVsValueChart } from "./charts.js";
 import { computeQualityScore, classifySignal, SIGNAL_VI, SIGNAL_COLOR, SIGNAL_ORDER } from "./signals.js";
 import { ratingColor } from "./ratings.js";
@@ -30,7 +30,8 @@ async function boot() {
 
 function buildNav() {
   const nav = $("#nav");
-  const views = [["stock", "Phân tích cổ phiếu"], ["screen", "Sàng lọc"], ["sector", "Phân tích ngành"], ["portfolio", "Danh mục"]];
+  const views = [["stock", "Phân tích cổ phiếu"], ["screen", "Sàng lọc"], ["sector", "Phân tích ngành"],
+    ["market", "Tổng quan thị trường"], ["macro", "Vĩ mô"], ["portfolio", "Danh mục"]];
   for (const [id, label] of views) {
     const a = el(`<button class="nav-item" data-view="${id}">${label}</button>`);
     a.onclick = () => showView(id);
@@ -45,6 +46,8 @@ function showView(id) {
   if (id === "screen") renderScreener();
   if (id === "sector") renderSector();
   if (id === "portfolio") renderPortfolio();
+  if (id === "market") renderMarket();
+  if (id === "macro") renderMacro();
 }
 
 // ── ticker picker ───────────────────────────────────────────────────
@@ -555,6 +558,114 @@ async function renderPortfolio() {
     kpi.innerHTML = cells.map(([k, val], idx) =>
       `<div class="metric"><div class="mk">${k}</div><div class="mv" style="color:${idx === 2 && totPl < 0 ? "#b91c1c" : idx === 2 ? "#15803d" : "var(--ink)"}">${val}</div></div>`).join("");
   } else kpi.style.display = "none";
+}
+
+// ── market overview ─────────────────────────────────────────────────
+let marketBuilt = false;
+async function renderMarket() {
+  if (marketBuilt) return;
+  marketBuilt = true;
+  const root = $("#view-market");
+  root.innerHTML = `<div class="loading">Đang tải…</div>`;
+  const rows = (await loadScreener()).filter((r) => F.isNum(r.chg));
+
+  const up = rows.filter((r) => r.chg > 0).length;
+  const down = rows.filter((r) => r.chg < 0).length;
+  const flat = rows.length - up - down;
+  const byChg = [...rows].sort((a, b) => b.chg - a.chg);
+  const byVol = [...rows].filter((r) => F.isNum(r.vol)).sort((a, b) => b.vol - a.vol);
+
+  root.innerHTML = "";
+  // breadth KPIs
+  const kpi = el(`<div class="card"><h2 class="sec-h">Tổng quan thị trường</h2>
+    <div class="metrics">
+      <div class="metric"><div class="mk">Tăng giá</div><div class="mv" style="color:#15803d">${up}</div></div>
+      <div class="metric"><div class="mk">Giảm giá</div><div class="mv" style="color:#b91c1c">${down}</div></div>
+      <div class="metric"><div class="mk">Đứng giá</div><div class="mv" style="color:var(--muted)">${flat}</div></div>
+      <div class="metric"><div class="mk">Độ rộng (Tăng/Giảm)</div><div class="mv">${down ? (up / down).toFixed(2) : "—"}</div></div>
+    </div></div>`);
+  root.appendChild(kpi);
+
+  const moversCard = (title, list, valFn) => {
+    const c = el(`<div class="card" style="flex:1;min-width:280px"><h2 class="sec-h">${title}</h2>
+      <table class="screen"><tbody></tbody></table></div>`);
+    const tb = $("tbody", c);
+    for (const r of list) {
+      const tr = el(`<tr><td><b>${r.ticker}</b></td><td class="dim">${F.escapeHtml(r.sector || "")}</td>
+        <td style="color:${valFn(r).c}">${valFn(r).t}</td></tr>`);
+      tr.onclick = () => selectTicker(r.ticker);
+      tb.appendChild(tr);
+    }
+    return c;
+  };
+  const wrap = el(`<div style="display:flex;gap:16px;flex-wrap:wrap"></div>`);
+  wrap.appendChild(moversCard("Tăng mạnh nhất", byChg.slice(0, 10), (r) => ({ t: F.pctSigned(r.chg * 100), c: "#15803d" })));
+  wrap.appendChild(moversCard("Giảm mạnh nhất", byChg.slice(-10).reverse(), (r) => ({ t: F.pctSigned(r.chg * 100), c: "#b91c1c" })));
+  wrap.appendChild(moversCard("Khối lượng lớn nhất", byVol.slice(0, 10), (r) => ({ t: F.num(r.vol, 0), c: "var(--ink)" })));
+  root.appendChild(wrap);
+
+  // sector performance (avg day change)
+  const bySec = {};
+  for (const r of rows) { if (r.sector) (bySec[r.sector] ||= []).push(r.chg); }
+  const perf = Object.entries(bySec).map(([s, cs]) => [s, cs.reduce((a, b) => a + b, 0) / cs.length])
+    .sort((a, b) => b[1] - a[1]);
+  const perfCard = el(`<div class="card"><h2 class="sec-h">Hiệu suất theo ngành (hôm nay)</h2><div id="perf-chart"></div></div>`);
+  root.appendChild(perfCard);
+  window.Plotly.react($("#perf-chart", perfCard), [{
+    type: "bar", orientation: "h",
+    x: perf.map((p) => p[1]).reverse(), y: perf.map((p) => p[0]).reverse(),
+    marker: { color: perf.map((p) => p[1] >= 0 ? "#15803d" : "#b91c1c").reverse() },
+    hovertemplate: "%{y}: %{x:.2%}<extra></extra>",
+  }], {
+    height: Math.max(300, perf.length * 20), margin: { l: 150, r: 20, t: 10, b: 30 },
+    paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+    font: { family: "'Fira Code', monospace", size: 10, color: "#0a121d" },
+    xaxis: { tickformat: ".1%", gridcolor: "rgba(148,163,184,0.22)", zeroline: true },
+    yaxis: { tickfont: { size: 9 } }, dragmode: false,
+  }, { displayModeBar: false, responsive: true });
+}
+
+// ── macro view ──────────────────────────────────────────────────────
+const MACRO_LABELS = {
+  gdp_growth: "Tăng trưởng GDP (%)", cpi_yoy: "Lạm phát CPI (% YoY)",
+  credit_growth_total: "Tăng trưởng tín dụng (%)", exchange_rate: "Tỷ giá USD/VND",
+  lending_rate: "Lãi suất cho vay (%)", deposit_rate: "Lãi suất tiền gửi (%)",
+  trade_balance: "Cán cân thương mại (tr USD)", fdi: "FDI (tr USD)",
+  retail_sales_growth: "Tăng trưởng bán lẻ (%)", unemployment_rate: "Thất nghiệp (%)",
+};
+let macroBuilt = false;
+async function renderMacro() {
+  if (macroBuilt) return;
+  macroBuilt = true;
+  const root = $("#view-macro");
+  root.innerHTML = `<div class="loading">Đang tải…</div>`;
+  const macro = await loadMacro();
+  root.innerHTML = "";
+  const card = el(`<div class="card"><h2 class="sec-h">Kinh tế vĩ mô</h2><div class="qgrid"></div></div>`);
+  const grid = $(".qgrid", card);
+  root.appendChild(card);
+  const pending = [];
+  for (const key of Object.keys(MACRO_LABELS)) {
+    const series = (macro[key] || []).filter((d) => F.isNum(d.value));
+    if (series.length < 2) continue;
+    const box = el(`<div class="qchart"><div class="qtitle">${MACRO_LABELS[key]}</div><div></div></div>`);
+    grid.appendChild(box);
+    const canvas = box.lastElementChild;
+    const x = series.map((d) => String(d.period).slice(0, 10));
+    const y = series.map((d) => d.value);
+    pending.push(() => window.Plotly.react(canvas, [{
+      type: "scatter", mode: "lines", x, y, line: { color: "#2563eb", width: 1.5 },
+      fill: "tozeroy", fillcolor: "rgba(37,99,235,0.06)",
+      hovertemplate: "%{x}: %{y:,.2f}<extra></extra>",
+    }], {
+      height: 200, margin: { l: 48, r: 12, t: 8, b: 26 },
+      paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+      font: { family: "'Fira Code', monospace", size: 9, color: "#0a121d" },
+      xaxis: { tickfont: { size: 8 }, nticks: 5, showgrid: false },
+      yaxis: { gridcolor: "rgba(148,163,184,0.22)", tickfont: { size: 8 } }, dragmode: false,
+    }, { displayModeBar: false, responsive: true }));
+  }
+  pending.forEach((fn) => fn());
 }
 
 boot();

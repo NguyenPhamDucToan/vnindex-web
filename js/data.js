@@ -19,3 +19,4 @@ export const loadMeta = () => getJSON("data/meta.json");
 export const loadCompanies = () => getJSON("data/companies.json");
 export const loadScreener = () => getJSON("data/screener.json");
 export const loadTicker = (t) => getJSON(`data/ticker/${t}.json`);
+export const loadMacro = () => getJSON("data/macro.json");

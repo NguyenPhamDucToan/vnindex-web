@@ -57,10 +57,20 @@ site is fully static; no build step.
 
 ## Status
 
-Implemented: **Phân tích cổ phiếu** (header, key metrics, candlestick + volume
-chart, sector-aware TTM ratio scorecard, sector-adjusted valuation + quality
-signal, price-vs-value chart) and **Sàng lọc** (screener, ranked by signal).
+Six views implemented:
+- **Phân tích cổ phiếu** — header, key metrics, candlestick+volume chart,
+  sector-aware TTM ratio scorecard (bank NIM/CIR/…, securities & real-estate
+  variants), sector-adjusted valuation + quality signal, 6 quarterly analysis
+  charts, price-vs-value chart.
+- **Sàng lọc** — screener with sector/signal/P-E/ROE/upside filters.
+- **Phân tích ngành** — treemap + median-by-sector table.
+- **Tổng quan thị trường** — breadth, top gainers/losers/most-active, sector
+  performance (from the exported daily % change).
+- **Vĩ mô** — 10 headline macro indicator charts.
+- **Danh mục** — portfolio tracker (localStorage), P&L + model upside per holding.
 
-Not yet ported from the Streamlit app: sector-specific bank/securities metric
-rows (NIM/CIR/…), the deep quarterly chart rows, sector heatmap, portfolio
-tracker, market overview, macro tab, and live intraday quotes.
+**Deliberately not ported** — these need a live call the static site can't make:
+live intraday quotes (the app's ticking price during trading hours; this site
+shows the EOD close) and the analyst-recommendation card (a per-ticker vnstock
+call, not stored in the DB). A handful of the Streamlit app's deeper per-ticker
+chart rows (foreign trading, dividends, business projection) are also left out.
