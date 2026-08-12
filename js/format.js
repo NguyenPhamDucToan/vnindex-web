@@ -45,6 +45,15 @@ export function days(v) {
   return Math.round(v).toLocaleString("en-US") + " ngày";
 }
 
+// raw VND -> adaptive "1.2 tỷ" / "340 triệu" / "12,000 ₫"
+export function moneyVND(vnd) {
+  if (!isNum(vnd)) return "—";
+  const a = Math.abs(vnd);
+  if (a >= 1e9) return (vnd / 1e9).toLocaleString("en-US", { maximumFractionDigits: 2 }) + " tỷ";
+  if (a >= 1e6) return (vnd / 1e6).toLocaleString("en-US", { maximumFractionDigits: 0 }) + " triệu";
+  return Math.round(vnd).toLocaleString("en-US") + " ₫";
+}
+
 export function escapeHtml(s) {
   return String(s == null ? "" : s)
     .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");

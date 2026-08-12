@@ -102,6 +102,13 @@ body {
 .qchart { border: 1px solid var(--rule); border-radius: 4px; padding: 8px 10px 4px; min-width: 0; }
 .qtitle { font-size: 11px; font-weight: 700; letter-spacing: .6px; color: var(--muted); text-transform: uppercase; margin-bottom: 2px; }
 
+/* portfolio */
+.pf-add { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.pf-add input { font-family: var(--mono); font-size: 13px; padding: 7px 9px; border: 1px solid var(--rule); border-radius: 4px; background: var(--paper2); color: var(--ink); }
+.pf-add input:focus { outline: none; border-color: var(--primary); }
+.pf-del { border: none; background: none; color: var(--muted); cursor: pointer; font-size: 13px; padding: 2px 6px; }
+.pf-del:hover { color: var(--loss); }
+
 /* screener filters */
 .filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--rule); }
 .filters label { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 5px; }

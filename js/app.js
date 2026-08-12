@@ -30,7 +30,7 @@ async function boot() {
 
 function buildNav() {
   const nav = $("#nav");
-  const views = [["stock", "Phân tích cổ phiếu"], ["screen", "Sàng lọc"], ["sector", "Phân tích ngành"]];
+  const views = [["stock", "Phân tích cổ phiếu"], ["screen", "Sàng lọc"], ["sector", "Phân tích ngành"], ["portfolio", "Danh mục"]];
   for (const [id, label] of views) {
     const a = el(`<button class="nav-item" data-view="${id}">${label}</button>`);
     a.onclick = () => showView(id);
@@ -44,6 +44,7 @@ function showView(id) {
   document.querySelectorAll(".view").forEach((v) => v.classList.toggle("hidden", v.id !== `view-${id}`));
   if (id === "screen") renderScreener();
   if (id === "sector") renderSector();
+  if (id === "portfolio") renderPortfolio();
 }
 
 // ── ticker picker ───────────────────────────────────────────────────
@@ -471,6 +472,89 @@ async function renderSector() {
       <td>${F.isNum(s.q) ? s.q.toFixed(0) : "—"}</td></tr>`));
   }
   root.appendChild(tbl);
+}
+
+// ── portfolio tracker (localStorage) ────────────────────────────────
+const PF_KEY = "vnindex_portfolio";
+const pfLoad = () => { try { return JSON.parse(localStorage.getItem(PF_KEY)) || []; } catch { return []; } };
+const pfSave = (h) => localStorage.setItem(PF_KEY, JSON.stringify(h));
+
+async function renderPortfolio() {
+  const root = $("#view-portfolio");
+  const holdings = pfLoad();
+
+  root.innerHTML = "";
+  const card = el(`<div class="card"><h2 class="sec-h">Danh mục đầu tư</h2>
+    <div class="pf-add">
+      <input id="pf-t" placeholder="Mã" style="width:80px;text-transform:uppercase" />
+      <input id="pf-s" type="number" placeholder="Số CP" style="width:100px" />
+      <input id="pf-e" type="number" step="0.1" placeholder="Giá mua (nghìn₫)" style="width:130px" />
+      <button id="pf-add" class="range-btn active">Thêm</button>
+      <span class="dim" style="font-size:11px">Lưu trên máy bạn (localStorage)</span>
+    </div>
+    <div id="pf-kpi" class="metrics" style="margin:14px 0"></div>
+    <table class="screen"><thead><tr>
+      <th>Mã</th><th>Số CP</th><th>Giá mua</th><th>Giá hiện tại</th><th>Giá trị</th>
+      <th>Lãi/Lỗ</th><th>Định giá</th><th>Tín hiệu</th><th></th></tr></thead><tbody></tbody></table>
+    <div id="pf-empty" class="dim" style="padding:16px;font-size:13px;${holdings.length ? "display:none" : ""}">Chưa có mã nào. Thêm cổ phiếu để theo dõi lãi/lỗ và định giá.</div></div>`);
+  root.appendChild(card);
+
+  const add = () => {
+    const t = $("#pf-t", card).value.trim().toUpperCase();
+    const s = parseFloat($("#pf-s", card).value);
+    const e = parseFloat($("#pf-e", card).value);
+    if (!t || !(s > 0) || !(e > 0)) return;
+    const h = pfLoad(); h.push({ ticker: t, shares: s, entry: e }); pfSave(h);
+    renderPortfolio();
+  };
+  $("#pf-add", card).onclick = add;
+  card.querySelectorAll(".pf-add input").forEach((i) =>
+    i.addEventListener("keydown", (ev) => { if (ev.key === "Enter") add(); }));
+
+  const tb = $("tbody", card);
+  let totCost = 0, totVal = 0, wUp = 0, wUpBase = 0;
+  for (let i = 0; i < holdings.length; i++) {
+    const h = holdings[i];
+    let d = null;
+    try { d = await loadTicker(h.ticker); } catch { /* unknown ticker */ }
+    const last = d && d.prices && d.prices.length ? d.prices[d.prices.length - 1].close : null;
+    const up = d && d.model ? d.model.upside : null;
+    const v = d && d.valuation || {};
+    const q = d ? computeQualityScore(v.roe, v.net_margin, v.profit_quality, v.fcf_margin, v.current_ratio, v.debt_to_equity) : null;
+    const sig = (F.isNum(up) && q != null) ? classifySignal(up, q) : null;
+    const cost = h.shares * h.entry * 1000;
+    const val = F.isNum(last) ? h.shares * last * 1000 : null;
+    const pl = (val != null) ? val - cost : null;
+    const plPct = (pl != null && cost) ? pl / cost : null;
+    totCost += cost; if (val != null) { totVal += val; if (F.isNum(up)) { wUp += up * val; wUpBase += val; } }
+
+    const tr = el(`<tr>
+      <td><b>${h.ticker}</b></td>
+      <td>${F.num(h.shares, 0)}</td>
+      <td>${F.priceVND(h.entry)}</td>
+      <td>${F.priceVND(last)}</td>
+      <td>${F.moneyVND(val)}</td>
+      <td style="color:${(pl ?? 0) >= 0 ? "#15803d" : "#b91c1c"}">${pl == null ? "—" : F.pctSigned((plPct || 0) * 100)}</td>
+      <td style="color:${(up ?? 0) >= 0 ? "#15803d" : "#b91c1c"}">${fmtUpside(up)}</td>
+      <td>${sig ? `<span style="color:${SIGNAL_COLOR[sig]}">${SIGNAL_VI[sig]}</span>` : "—"}</td>
+      <td><button class="pf-del" data-i="${i}" title="Xóa">✕</button></td></tr>`);
+    tr.querySelector("td b").onclick = () => selectTicker(h.ticker);
+    tr.querySelector(".pf-del").onclick = () => { const hh = pfLoad(); hh.splice(i, 1); pfSave(hh); renderPortfolio(); };
+    tb.appendChild(tr);
+  }
+
+  const totPl = totVal - totCost;
+  const kpi = $("#pf-kpi", card);
+  if (holdings.length) {
+    const cells = [
+      ["Giá trị thị trường", F.moneyVND(totVal)],
+      ["Vốn gốc", F.moneyVND(totCost)],
+      ["Lãi/Lỗ", (totCost ? F.pctSigned(totPl / totCost * 100) : "—")],
+      ["Upside bình quân", (wUpBase ? F.pctSigned(wUp / wUpBase * 100) : "—")],
+    ];
+    kpi.innerHTML = cells.map(([k, val], idx) =>
+      `<div class="metric"><div class="mk">${k}</div><div class="mv" style="color:${idx === 2 && totPl < 0 ? "#b91c1c" : idx === 2 ? "#15803d" : "var(--ink)"}">${val}</div></div>`).join("");
+  } else kpi.style.display = "none";
 }
 
 boot();
