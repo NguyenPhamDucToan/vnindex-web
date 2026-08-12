@@ -48,6 +48,8 @@ export function quarterlyCharts(parent, co, financials) {
   const x = qs.map((q) => label(q.period));
   const col = (k) => qs.map((q) => (isN(q[k]) ? q[k] : null));
   const ratio = (a, b) => qs.map((q) => (isN(q[a]) && q[b] ? q[a] / q[b] : null));
+  // derived series (clamped at 0 so rounding noise can't draw a negative slice)
+  const derived = (fn) => qs.map((q) => { const v = fn(q); return isN(v) ? Math.max(0, v) : null; });
 
   const card = el(`<div class="card"><h2 class="sec-h">Phân tích theo quý</h2><div class="qgrid"></div></div>`);
   const grid = card.querySelector(".qgrid");
@@ -58,53 +60,121 @@ export function quarterlyCharts(parent, co, financials) {
     grid.appendChild(box);
     pending.push(() => window.Plotly.react(canvas, traces, layout, { displayModeBar: false, responsive: true }));
   };
+  const pctLine = (layout) => Object.assign(layout, { yaxis: { tickformat: ".0%", gridcolor: RULE, tickfont: { ...FONT, size: 9 } } });
 
-  // 1. Revenue / TOI + Net income (bars) with net-margin line.
+  // ── shared income charts ────────────────────────────────────────
   add(isBank ? "Tổng thu nhập & Lãi ròng" : "Doanh thu & Lãi ròng", [
     { type: "bar", name: isBank ? "Tổng TN hoạt động" : "Doanh thu", x, y: col("revenue"), marker: { color: BLUE } },
     { type: "bar", name: "Lãi ròng", x, y: col("net_income"), marker: { color: LBLUE } },
     { type: "scatter", mode: "lines+markers", name: "Biên LN ròng", x, y: ratio("net_income", "revenue"), yaxis: "y2", line: { color: ORANGE, width: 1.5 }, marker: { size: 4 } },
   ], pctAxis(base()));
 
-  // 2. Profitability margins (lines).
   add("Biên lợi nhuận", [
     { type: "scatter", mode: "lines+markers", name: isBank ? "Biên NII" : "Biên gộp", x, y: ratio("gross_profit", "revenue"), line: { color: GREEN, width: 1.5 }, marker: { size: 4 } },
     { type: "scatter", mode: "lines+markers", name: isBank ? "Biên trước DP" : "Biên hoạt động", x, y: ratio("ebit", "revenue"), line: { color: BLUE, width: 1.5 }, marker: { size: 4 } },
     { type: "scatter", mode: "lines+markers", name: "Biên ròng", x, y: ratio("net_income", "revenue"), line: { color: ORANGE, width: 1.5 }, marker: { size: 4 } },
-  ], Object.assign(base(), { yaxis: { tickformat: ".0%", gridcolor: RULE, tickfont: { ...FONT, size: 9 } } }));
+  ], pctLine(base()));
 
-  // 3. Capital structure: equity vs debt (stacked) + D/E line.
-  add("Cơ cấu vốn", [
-    { type: "bar", name: "Vốn chủ", x, y: col("equity"), marker: { color: BLUE } },
-    { type: "bar", name: isBank ? "Vay liên NH" : "Nợ vay", x, y: col("debt"), marker: { color: GREY } },
-    { type: "scatter", mode: "lines+markers", name: "D/E", x, y: ratio("debt", "equity"), yaxis: "y2", line: { color: RED, width: 1.5 }, marker: { size: 4 } },
-  ], Object.assign(pctAxis(base()), { barmode: "stack", yaxis2: { overlaying: "y", side: "right", tickformat: ".2f", tickfont: { ...FONT, size: 9 }, showgrid: false } }));
-
-  // 4. Cash flow: OCF / ICF / FCF bars.
-  add("Dòng tiền", [
-    { type: "bar", name: "HĐ Kinh doanh", x, y: col("operating_cf"), marker: { color: GREEN } },
-    { type: "bar", name: "HĐ Đầu tư", x, y: col("investing_cf"), marker: { color: ORANGE } },
-    { type: "bar", name: "Dòng tiền tự do", x, y: col("fcf"), marker: { color: BLUE } },
-  ], base());
-
-  // 5. Non-banks: cost structure (COGS / selling / G&A stacked).
   if (!isBank) {
+    // ── non-bank: full income + balance-sheet + cash-flow set ──────
     add("Cơ cấu chi phí", [
       { type: "bar", name: "Giá vốn", x, y: col("cogs"), marker: { color: GREY } },
       { type: "bar", name: "Chi phí bán hàng", x, y: col("selling_expense"), marker: { color: ORANGE } },
       { type: "bar", name: "Chi phí QLDN", x, y: col("ga_expense"), marker: { color: LBLUE } },
     ], Object.assign(base(), { barmode: "stack" }));
+
+    // Cân đối kế toán — cơ cấu tài sản
+    add("Cơ cấu tài sản", [
+      { type: "bar", name: "Tiền", x, y: col("cash"), marker: { color: GREEN } },
+      { type: "bar", name: "Phải thu", x, y: col("receivables"), marker: { color: BLUE } },
+      { type: "bar", name: "Tồn kho", x, y: col("inventory"), marker: { color: ORANGE } },
+      { type: "bar", name: "TS ngắn hạn khác", x, y: derived((q) => q.current_assets - (q.cash || 0) - (q.receivables || 0) - (q.inventory || 0)), marker: { color: LBLUE } },
+      { type: "bar", name: "TS dài hạn", x, y: derived((q) => q.total_assets - q.current_assets), marker: { color: GREY } },
+    ], Object.assign(base(), { barmode: "stack" }));
+
+    // Cân đối kế toán — cơ cấu nguồn vốn
+    add("Cơ cấu nguồn vốn", [
+      { type: "bar", name: "Nợ vay", x, y: col("debt"), marker: { color: RED } },
+      { type: "bar", name: "Nợ khác", x, y: derived((q) => q.total_assets - q.equity - (q.debt || 0)), marker: { color: ORANGE } },
+      { type: "bar", name: "Vốn chủ", x, y: col("equity"), marker: { color: BLUE } },
+    ], Object.assign(base(), { barmode: "stack" }));
+
+    // Thanh khoản
+    add("Chỉ số thanh khoản", [
+      { type: "scatter", mode: "lines+markers", name: "Current ratio", x, y: ratio("current_assets", "current_liabilities"), line: { color: BLUE, width: 1.5 }, marker: { size: 4 } },
+      { type: "scatter", mode: "lines+markers", name: "Quick ratio", x, y: qs.map((q) => (isN(q.current_assets) && q.current_liabilities ? (q.current_assets - (q.inventory || 0)) / q.current_liabilities : null)), line: { color: GREEN, width: 1.5 }, marker: { size: 4 } },
+    ], Object.assign(base(), { yaxis: { gridcolor: RULE, tickfont: { ...FONT, size: 9 }, tickformat: ".1f" } }));
+
+    // Phải thu & Tồn kho + tỷ trọng tài sản
+    add("Phải thu & Tồn kho", [
+      { type: "bar", name: "Phải thu", x, y: col("receivables"), marker: { color: BLUE } },
+      { type: "bar", name: "Tồn kho", x, y: col("inventory"), marker: { color: ORANGE } },
+      { type: "scatter", mode: "lines+markers", name: "% Tổng TS", x, y: qs.map((q) => (isN(q.total_assets) && q.total_assets ? ((q.receivables || 0) + (q.inventory || 0)) / q.total_assets : null)), yaxis: "y2", line: { color: RED, width: 1.5 }, marker: { size: 4 } },
+    ], pctAxis(base()));
+
+    // Đòn bẩy tài chính
+    add("Đòn bẩy tài chính", [
+      { type: "bar", name: "Nợ vay", x, y: col("debt"), marker: { color: GREY } },
+      { type: "bar", name: "Vốn chủ", x, y: col("equity"), marker: { color: BLUE } },
+      { type: "scatter", mode: "lines+markers", name: "D/E", x, y: ratio("debt", "equity"), yaxis: "y2", line: { color: RED, width: 1.5 }, marker: { size: 4 } },
+    ], Object.assign(base(), { barmode: "stack", yaxis2: { overlaying: "y", side: "right", tickformat: ".2f", tickfont: { ...FONT, size: 9 }, showgrid: false } }));
+
+    // CAPEX & Khấu hao
+    add("CAPEX & Khấu hao", [
+      { type: "bar", name: "CAPEX", x, y: col("capex"), marker: { color: ORANGE } },
+      { type: "bar", name: "Khấu hao", x, y: col("depreciation"), marker: { color: LBLUE } },
+    ], base());
+
+    // Dòng tiền
+    add("Dòng tiền", [
+      { type: "bar", name: "HĐ Kinh doanh", x, y: col("operating_cf"), marker: { color: GREEN } },
+      { type: "bar", name: "HĐ Đầu tư", x, y: col("investing_cf"), marker: { color: ORANGE } },
+      { type: "bar", name: "Dòng tiền tự do", x, y: col("fcf"), marker: { color: BLUE } },
+    ], base());
+
   } else {
-    // Banks: income mix -- net interest income vs the rest of TOI.
+    // ── bank: remapped income + funding + asset-quality set ────────
     const nonNii = qs.map((q) => (isN(q.revenue) && isN(q.gross_profit) ? q.revenue - q.gross_profit : null));
     add("Cơ cấu thu nhập", [
       { type: "bar", name: "Thu nhập lãi thuần", x, y: col("gross_profit"), marker: { color: BLUE } },
       { type: "bar", name: "Thu ngoài lãi", x, y: nonNii, marker: { color: LBLUE } },
       { type: "bar", name: "Chi phí dự phòng", x, y: col("cogs"), marker: { color: RED } },
     ], Object.assign(base(), { barmode: "stack" }));
+
+    // Cho vay & Tiền gửi + LDR
+    add("Cho vay & Tiền gửi", [
+      { type: "bar", name: "Dư nợ cho vay", x, y: col("receivables"), marker: { color: BLUE } },
+      { type: "bar", name: "Tiền gửi KH", x, y: col("payables"), marker: { color: LBLUE } },
+      { type: "scatter", mode: "lines+markers", name: "Cho vay/Tiền gửi", x, y: ratio("receivables", "payables"), yaxis: "y2", line: { color: RED, width: 1.5 }, marker: { size: 4 } },
+    ], pctAxis(base()));
+
+    // Cơ cấu nguồn vốn: tiền gửi / liên NH / vốn chủ
+    add("Cơ cấu nguồn vốn", [
+      { type: "bar", name: "Tiền gửi KH", x, y: col("payables"), marker: { color: BLUE } },
+      { type: "bar", name: "Vay liên NH & NHNN", x, y: col("debt"), marker: { color: ORANGE } },
+      { type: "bar", name: "Vốn chủ", x, y: col("equity"), marker: { color: GREEN } },
+    ], Object.assign(base(), { barmode: "stack" }));
+
+    // Chi phí tín dụng: dự phòng + credit cost %
+    add("Chi phí tín dụng", [
+      { type: "bar", name: "Chi phí dự phòng", x, y: col("cogs"), marker: { color: RED } },
+      { type: "scatter", mode: "lines+markers", name: "% Dư nợ", x, y: ratio("cogs", "receivables"), yaxis: "y2", line: { color: ORANGE, width: 1.5 }, marker: { size: 4 } },
+    ], pctAxis(base()));
+
+    // Chỉ số vốn & đòn bẩy
+    add("Chỉ số vốn", [
+      { type: "scatter", mode: "lines+markers", name: "Vốn chủ / Tổng TS", x, y: ratio("equity", "total_assets"), line: { color: GREEN, width: 1.5 }, marker: { size: 4 } },
+      { type: "scatter", mode: "lines+markers", name: "Đòn bẩy (TS/VCSH)", x, y: ratio("total_assets", "equity"), yaxis: "y2", line: { color: RED, width: 1.5 }, marker: { size: 4 } },
+    ], Object.assign(pctLine(base()), { yaxis2: { overlaying: "y", side: "right", tickformat: ".1f", tickfont: { ...FONT, size: 9 }, showgrid: false } }));
+
+    // Dòng tiền
+    add("Dòng tiền", [
+      { type: "bar", name: "HĐ Kinh doanh", x, y: col("operating_cf"), marker: { color: GREEN } },
+      { type: "bar", name: "HĐ Đầu tư", x, y: col("investing_cf"), marker: { color: ORANGE } },
+    ], base());
   }
 
-  // 6. Assets & profitability trend: total assets bars + ROE line (quarterly).
+  // Tài sản & ROE (quarterly) — both sectors
   add("Tài sản & ROE (quý)", [
     { type: "bar", name: "Tổng tài sản", x, y: col("total_assets"), marker: { color: LBLUE } },
     { type: "scatter", mode: "lines+markers", name: "ROE quý", x, y: ratio("net_income", "equity"), yaxis: "y2", line: { color: RED, width: 1.5 }, marker: { size: 4 } },
