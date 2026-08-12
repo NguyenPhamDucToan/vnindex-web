@@ -85,6 +85,47 @@ def _records(df: pd.DataFrame) -> list[dict]:
     return [{k: _clean(v) for k, v in row.items()} for row in df.to_dict("records")]
 
 
+def fetch_foreign(code: str, sessions: int = 30) -> list[dict]:
+    """Foreign net trading (VND) for the last N sessions, from VNDirect finfo."""
+    import requests
+    from datetime import timedelta
+    try:
+        start = (date.today() - timedelta(days=sessions * 3 + 20)).strftime("%Y-%m-%d")
+        url = ("https://api-finfo.vndirect.com.vn/v4/foreigns"
+               f"?q=code:{code}~tradingDate:gte:{start}&size=200&sort=tradingDate:asc")
+        r = requests.get(url, timeout=12, headers={
+            "User-Agent": "Mozilla/5.0", "Accept": "application/json",
+            "Referer": "https://dstock.vndirect.com.vn/"})
+        if r.status_code != 200:
+            return []
+        rows = []
+        for d in r.json().get("data", [])[-sessions:]:
+            rows.append({"date": str(d.get("tradingDate")),
+                         "net_val": _clean(float(d.get("netVal") or 0))})
+        return rows
+    except Exception:
+        return []
+
+
+def fetch_analyst(ticker: str) -> dict | None:
+    """Current analyst target/rating from VCI via vnstock (name omitted on purpose)."""
+    import warnings
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            from vnstock import Company
+            ov = Company(symbol=ticker, source="VCI").overview()
+        if ov is None or ov.empty:
+            return None
+        row = ov.iloc[0]
+        tp = float(row.get("target_price") or 0)
+        if not tp:
+            return None
+        return {"target_price": _clean(tp), "rating": str(row.get("rating") or "")}
+    except (Exception, SystemExit):
+        return None
+
+
 def _write(path: Path, obj) -> None:
     path.write_text(json.dumps(obj, ensure_ascii=False, separators=(",", ":")),
                     encoding="utf-8")
@@ -176,11 +217,19 @@ def main() -> None:
         change_out[t] = {"chg": _clean(chg), "close": _clean(last_close),
                          "vol": _clean(float(px["volume"].iloc[-1]) if px is not None and len(px) else None)}
 
+        # Fast VNDirect foreign flow inline. Analyst rec is a rate-limited VCI
+        # call (~20/min Guest cap, with 57s penalties) so it can't run in this
+        # synchronous loop -- export_analyst.py patches it in separately.
+        foreign = fetch_foreign(t) if (vg is not None and len(vg)) else []
+        analyst = None
+
         obj = {
             "company": {k: _clean(co[k]) for k in
                         ("ticker", "name", "sector", "industry", "exchange")},
             "valuation": (_records(vg)[0] if vg is not None and len(vg) else None),
             "model": model,
+            "analyst": analyst,
+            "foreign": foreign,
             "financials": _records(fin_by_ticker[t]) if t in fin_by_ticker else [],
             "prices": _records(px_by_ticker[t][["date", "open", "high", "low",
                                                 "close", "volume"]])

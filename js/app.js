@@ -3,7 +3,7 @@ import { priceChart, priceVsValueChart } from "./charts.js";
 import { computeQualityScore, classifySignal, SIGNAL_VI, SIGNAL_COLOR, SIGNAL_ORDER } from "./signals.js";
 import { ratingColor } from "./ratings.js";
 import { computeTTM } from "./ttm.js";
-import { quarterlyCharts } from "./quarterly.js";
+import { quarterlyCharts, extraCharts } from "./quarterly.js";
 import * as F from "./format.js";
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -112,11 +112,12 @@ async function renderStock(t) {
 
   const ttm = computeTTM(d.financials || []);
   root.appendChild(scorecard(co, v, ttm));
-  root.appendChild(valuationSummary(co, v, d.model || {}, last));
+  root.appendChild(valuationSummary(co, v, d.model || {}, d.analyst, last));
 
   // Quarterly analysis charts (the "meat" rows) from the exported financials.
   // Appends itself to root, then renders (Plotly needs an attached node).
   quarterlyCharts(root, co, d.financials || []);
+  extraCharts(root, co, d.financials || [], d.foreign || []);
 
   if ((d.valuation_history || []).length > 2) {
     const pv = el(`<div class="card"><h2 class="sec-h">Giá thị trường vs Định giá</h2><div id="pv-chart"></div></div>`);
@@ -270,8 +271,8 @@ function scorecard(co, v, ttm) {
   return card;
 }
 
-// ── valuation summary (sector-adjusted model + quality/signal) ──────
-function valuationSummary(co, v, model, last) {
+// ── valuation summary (model + analyst + quality/signal) ────────────
+function valuationSummary(co, v, model, analyst, last) {
   const priceRaw = F.isNum(last.close) ? last.close * 1000 : null;
   // model.upside is a FRACTION (0.15 = +15%), already sector-adjusted and
   // winsorized by model_valuation.py -- unlike the raw dcf_estimate, which is
@@ -282,18 +283,40 @@ function valuationSummary(co, v, model, last) {
 
   const mColor = upFrac == null ? "#5b6675" : upFrac >= 0 ? "#15803d" : "#b91c1c";
   const qColor = q >= 70 ? "#15803d" : q >= 50 ? "#b45309" : "#b91c1c";
+  const hasAnalyst = analyst && F.isNum(analyst.target_price) && analyst.target_price > 0;
 
   const card = el(`<div class="card"><h2 class="sec-h">Đánh giá tổng hợp</h2><div class="ev-cards"></div>
-    <div class="ev-note">Mô hình định giá lấy trung bình các phương pháp (đã kẹp ngoại lai, điều chỉnh theo ngành) và điểm chất lượng nội bộ (ROE · biên LN · chất lượng LN · FCF · thanh khoản · nợ). Khi hai góc nhìn <b>mâu thuẫn nhau</b> là lúc đáng xem kỹ lại giả định.</div></div>`);
+    <div class="ev-note"></div></div>`);
   const wrap = $(".ev-cards", card);
+
   wrap.appendChild(el(`<div class="ev-card">
     <div class="ev-t">Mô hình định giá</div>
     <div class="ev-m" style="color:${mColor}">${F.rawVND(model.price)}</div>
     <div class="ev-s">${upFrac == null ? "Thiếu dữ liệu" : F.pctSigned(upFrac * 100) + " so với thị giá " + F.rawVND(priceRaw)}</div></div>`));
+
+  if (hasAnalyst) {
+    // Analyst target from VCI; the individual analyst's name is deliberately
+    // omitted -- the useful part is the house's call, not who wrote it.
+    const aUp = priceRaw ? (analyst.target_price - priceRaw) / priceRaw : null;
+    const aColor = aUp == null ? "#5b6675" : aUp >= 0 ? "#15803d" : "#b91c1c";
+    const rating = (analyst.rating || "").toUpperCase() || "—";
+    wrap.appendChild(el(`<div class="ev-card">
+      <div class="ev-t">Chuyên viên phân tích</div>
+      <div class="ev-m" style="color:${aColor}">${F.rawVND(analyst.target_price)}</div>
+      <div class="ev-s">${aUp == null ? "" : F.pctSigned(aUp * 100) + " · Khuyến nghị <b>" + rating + "</b>"}</div>
+      <div class="ev-src">Nguồn: VCI</div></div>`));
+  }
+
   wrap.appendChild(el(`<div class="ev-card">
     <div class="ev-t">Điểm chất lượng</div>
     <div class="ev-m" style="color:${qColor}">${q.toFixed(0)}<span class="ev-u">/100</span></div>
     <div class="ev-s">${sig ? "Tín hiệu: <b style='color:" + (SIGNAL_COLOR[sig]) + "'>" + SIGNAL_VI[sig] + "</b>" : "—"}</div></div>`));
+
+  const nViews = 1 + (hasAnalyst ? 1 : 0) + 1;
+  const nWord = { 2: "Hai", 3: "Ba" }[nViews] || nViews;
+  $(".ev-note", card).innerHTML = hasAnalyst
+    ? `${nWord} góc nhìn độc lập: mô hình từ báo cáo tài chính, khuyến nghị của chuyên viên phân tích bên ngoài, và điểm chất lượng nội bộ. Khi chúng <b>mâu thuẫn nhau</b> là lúc đáng xem kỹ lại giả định.`
+    : `Mô hình định giá (trung bình các phương pháp, kẹp ngoại lai, điều chỉnh theo ngành) và điểm chất lượng nội bộ. Mã này chưa có chuyên viên phân tích nào công bố giá mục tiêu.`;
   return card;
 }
 

@@ -7,3 +7,6 @@ __pycache__/
 # os
 Thumbs.db
 .DS_Store
+export_run.log
+analyst_run.log
+export_analyst.log

@@ -114,6 +114,64 @@ export function quarterlyCharts(parent, co, financials) {
   return card;
 }
 
+// Business projection + foreign flow, appended as their own card row.
+export function extraCharts(parent, co, financials, foreign) {
+  const annual = (financials || []).filter((f) => f.period_type === "Y")
+    .sort((a, b) => String(a.period).localeCompare(String(b.period)));
+  const hasProj = annual.length >= 3;
+  const hasForeign = (foreign || []).length >= 2;
+  if (!hasProj && !hasForeign) return;
+
+  const card = el(`<div class="card"><h2 class="sec-h">Dự phóng & Dòng tiền khối ngoại</h2><div class="qgrid"></div></div>`);
+  const grid = card.querySelector(".qgrid");
+  parent.appendChild(card);
+  const pending = [];
+  const add = (title, traces, layout) => {
+    const { box, canvas } = chartBox(title);
+    grid.appendChild(box);
+    pending.push(() => window.Plotly.react(canvas, traces, layout, { displayModeBar: false, responsive: true }));
+  };
+
+  if (hasProj) {
+    const yrs = annual.slice(-6);
+    const years = yrs.map((r) => String(r.period).slice(0, 4));
+    const rev = yrs.map((r) => (isN(r.revenue) ? r.revenue : null));
+    const ni = yrs.map((r) => (isN(r.net_income) ? r.net_income : null));
+    // CAGR from the last 3 actual years, projected 3 years forward.
+    const cagr = (arr) => {
+      const v = arr.filter(isN);
+      if (v.length < 2) return 0;
+      const a = v[Math.max(0, v.length - 3)], b = v[v.length - 1], n = Math.min(3, v.length) - 1;
+      return (a > 0 && b > 0 && n > 0) ? Math.pow(b / a, 1 / n) - 1 : 0;
+    };
+    const gR = cagr(rev), gN = cagr(ni);
+    const projYears = [], projRev = [], projNi = [];
+    let lr = rev.filter(isN).slice(-1)[0] ?? 0, ln = ni.filter(isN).slice(-1)[0] ?? 0;
+    const lastY = parseInt(years[years.length - 1]) || new Date().getFullYear();
+    for (let i = 1; i <= 3; i++) { lr *= 1 + gR; ln *= 1 + gN; projYears.push(String(lastY + i)); projRev.push(lr); projNi.push(ln); }
+    const allY = [...years, ...projYears];
+    const pad = (a, before) => before ? [...a, ...new Array(3).fill(null)] : [...new Array(years.length).fill(null), ...a];
+    add(`Dự phóng KQKD (CAGR ${(gR * 100).toFixed(0)}%)`, [
+      { type: "bar", name: "Doanh thu", x: allY, y: pad(rev, true), marker: { color: BLUE } },
+      { type: "bar", name: "Lãi ròng", x: allY, y: pad(ni, true), marker: { color: LBLUE } },
+      { type: "bar", name: "DT dự phóng", x: allY, y: pad(projRev, false), marker: { color: BLUE, pattern: { shape: "/" } } },
+      { type: "bar", name: "LN dự phóng", x: allY, y: pad(projNi, false), marker: { color: LBLUE, pattern: { shape: "/" } } },
+    ], Object.assign(base(), { barmode: "group" }));
+  }
+
+  if (hasForeign) {
+    const fx = foreign.slice(-20);
+    const x = fx.map((d) => String(d.date).slice(5, 10));
+    const y = fx.map((d) => (isN(d.net_val) ? d.net_val / 1e9 : null));   // -> tỷ VND
+    add("Khối ngoại mua/bán ròng (tỷ ₫)", [
+      { type: "bar", x, y, marker: { color: y.map((v) => (v >= 0 ? GREEN : RED)) },
+        hovertemplate: "%{x}: %{y:.1f} tỷ<extra></extra>" },
+    ], Object.assign(base(), { yaxis: { gridcolor: RULE, tickfont: { ...FONT, size: 9 }, zeroline: true, zerolinecolor: MUTED } }));
+  }
+
+  pending.forEach((fn) => fn());
+}
+
 // tiny local el() so this module doesn't depend on app.js
 function el(html) {
   const t = document.createElement("template");
