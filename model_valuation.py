@@ -129,14 +129,43 @@ def _winsorized_mean(values):
 
 
 def model_price(ticker: str, sector: str, price_vnd: float | None):
-    """Return (model_price_vnd, upside_fraction) or (None, None)."""
+    """Return (model_price_vnd, upside_fraction, per_method_prices, dcf_params).
+
+    per_method_prices is the sector-adjusted {method_key: price_vnd} dict the
+    valuation panel renders as individual cards; dcf_params carries the WACC and
+    growth rate behind the DCF figure.
+    """
     ttm = compute_ttm(ticker)
     if ttm is None:
-        return None, None
+        return None, None, {}, {}
+
+    # growth + wacc, recomputed the same way _all_methods does, for display
+    params = {}
+    try:
+        _hg = annual_fcff_growth(ticker)
+        growth = max(0.02, min(_hg, 0.35)) if isinstance(_hg, (int, float)) else 0.12
+        shares = ttm.get("shares_outstanding") or 0
+        fcff_base = compute_fcff_ttm(ttm)
+        if fcff_base is not None and shares > 0:
+            r = dcf_valuation(fcff_base=fcff_base,
+                              net_debt_bn=(ttm.get("debt") or 0) - (ttm.get("cash") or 0),
+                              shares_millions=shares, fcff_growth_rate=growth,
+                              beta=DEFAULT_BETA, cost_of_debt=DEFAULT_COD,
+                              debt_bn=(ttm.get("debt") or 0),
+                              equity_bn=(ttm.get("equity") or 1.0))
+            params = {"wacc": r.get("wacc"), "growth": growth,
+                      "fcff": fcff_base, "shares": shares}
+        else:
+            params = {"wacc": None, "growth": growth, "fcff": fcff_base, "shares": shares}
+    except Exception:
+        params = {}
+
     adj = _sector_adjust(_all_methods(ttm, ticker), ttm, sector)
+    methods = {k: (round(x) if isinstance(x, (int, float)) and x and x > 0 else None)
+               for k, x in adj.items()}
     prices = sorted(x for x in adj.values() if isinstance(x, (int, float)) and x and x > 0)
     m = _winsorized_mean(prices)
     if m is None:
-        return None, None
+        return None, None, methods, params
     up = ((m - price_vnd) / price_vnd) if (price_vnd and price_vnd > 0) else None
-    return round(m), (round(up, 4) if up is not None else None)
+    return round(m), (round(up, 4) if up is not None else None), methods, params

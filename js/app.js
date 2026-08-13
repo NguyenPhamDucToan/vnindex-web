@@ -4,6 +4,8 @@ import { computeQualityScore, classifySignal, SIGNAL_VI, SIGNAL_COLOR, SIGNAL_OR
 import { ratingColor } from "./ratings.js";
 import { computeTTM } from "./ttm.js";
 import { quarterlyCharts, extraCharts } from "./quarterly.js";
+import { valuationPanel, technicalPanel } from "./valuation-panel.js";
+import { dupontSection, roicSection, peerSection, valuationBandSection } from "./sections.js";
 import * as F from "./format.js";
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -105,13 +107,37 @@ async function renderStock(t) {
   root.appendChild(header(co, last, prev, chg, chgPct));
   root.appendChild(metricsGrid(co, v, q, mcap, shares, vol15));
 
-  const chartWrap = el(`<div class="card"><div class="range-row" id="range-row"></div><div id="price-chart"></div></div>`);
-  root.appendChild(chartWrap);
-  buildRangeButtons($("#range-row", chartWrap), prices);
-  priceChart($("#price-chart", chartWrap), prices, currentRange);
+  // Two-column split matching the original: price chart on the left, the
+  // valuation-estimates + technical panel down the right.
+  const split = el(`<div class="card split">
+    <div class="split-l"><div class="range-row" id="range-row"></div><div id="price-chart"></div></div>
+    <div class="split-r"></div></div>`);
+  root.appendChild(split);
+  buildRangeButtons($("#range-row", split), prices);
+  priceChart($("#price-chart", split), prices, currentRange);
+
+  const right = $(".split-r", split);
+  const vp = valuationPanel(co, d.model || {}, F.isNum(last.close) ? last.close * 1000 : null);
+  if (vp) right.appendChild(vp);
+  const tp = technicalPanel(prices);
+  if (tp) right.appendChild(tp);
+
+  // Peer comparison sits under the chart in the original, before the scorecard.
+  const peers = await loadScreener().catch(() => null);
+  const pc = peerSection(co, v, peers, (d.model || {}).upside);
+  if (pc) root.appendChild(pc);
 
   const ttm = computeTTM(d.financials || []);
   root.appendChild(scorecard(co, v, ttm));
+
+  const dp = dupontSection(v);
+  if (dp) root.appendChild(dp);
+  const rw = roicSection(d.financials || [], d.model || {});
+  if (rw) root.appendChild(rw);
+
+  // Self-relative valuation band (P/E or P/B vs the ticker's own history).
+  valuationBandSection(root, d.financials || [], prices);
+
   root.appendChild(valuationSummary(co, v, d.model || {}, d.analyst, last));
 
   // Quarterly analysis charts (the "meat" rows) from the exported financials.
@@ -332,7 +358,7 @@ function buildRangeButtons(row, prices) {
       currentRange = days;
       row.querySelectorAll(".range-btn").forEach((x) => x.classList.remove("active"));
       b.classList.add("active");
-      priceChart(row.parentElement.querySelector("#price-chart"), prices, days);
+      priceChart(document.getElementById("price-chart"), prices, days);
     };
     row.appendChild(b);
   }
@@ -382,13 +408,20 @@ async function renderScreener() {
   const sectors = [...new Set(rows.map((r) => r.sector).filter(Boolean))].sort();
 
   root.innerHTML = "";
+  // Filter set mirrors the original's sidebar sliders (Avg Upside, Max P/E,
+  // Max P/B, ROE, Net margin, Quality, D/E) plus sector and signal.
   const card = el(`<div class="card"><h2 class="sec-h">Sàng lọc cổ phiếu</h2>
+    <div class="sig-counts" id="sig-counts"></div>
     <div class="filters">
       <label>Ngành <select id="f-sector"><option value="">Tất cả</option>${sectors.map((s) => `<option>${F.escapeHtml(s)}</option>`).join("")}</select></label>
       <label>Tín hiệu <select id="f-signal"><option value="">Tất cả</option>${SIGNAL_ORDER.map((s) => `<option value="${s}">${SIGNAL_VI[s]}</option>`).join("")}</select></label>
-      <label>P/E ≤ <input id="f-pe" type="number" step="1" placeholder="—" /></label>
+      <label>Avg Upside ≥ <input id="f-up" type="number" step="5" placeholder="%" /></label>
+      <label>Max P/E <input id="f-pe" type="number" step="1" placeholder="×" /></label>
+      <label>Max P/B <input id="f-pb" type="number" step="0.5" placeholder="×" /></label>
       <label>ROE ≥ <input id="f-roe" type="number" step="1" placeholder="%" /></label>
-      <label>Upside ≥ <input id="f-up" type="number" step="5" placeholder="%" /></label>
+      <label>Biên LN ròng ≥ <input id="f-nm" type="number" step="1" placeholder="%" /></label>
+      <label>Quality ≥ <input id="f-qs" type="number" step="5" placeholder="0-100" /></label>
+      <label>D/E ≤ <input id="f-de" type="number" step="0.5" placeholder="×" /></label>
       <button id="f-reset" class="range-btn">Xóa lọc</button>
       <span id="f-count" class="fcount"></span>
     </div>
@@ -398,17 +431,35 @@ async function renderScreener() {
   root.appendChild(card);
   const tb = $("tbody", card);
 
+  // Signal-count row; clicking one filters to that signal (as in the original).
+  const counts = $("#sig-counts", card);
+  for (const s of SIGNAL_ORDER) {
+    const n = rows.filter((r) => r.sig === s).length;
+    const b = el(`<button class="sig-c" data-sig="${s}" style="border-top-color:${SIGNAL_COLOR[s]}">
+      <div class="sig-n">${n}</div><div class="sig-l">${SIGNAL_VI[s]}</div></button>`);
+    b.onclick = () => {
+      const sel = $("#f-signal", card);
+      sel.value = sel.value === s ? "" : s;
+      apply();
+    };
+    counts.appendChild(b);
+  }
+
   const apply = () => {
+    const num = (id) => parseFloat($(id, card).value);
     const sec = $("#f-sector", card).value;
     const sig = $("#f-signal", card).value;
-    const maxPe = parseFloat($("#f-pe", card).value);
-    const minRoe = parseFloat($("#f-roe", card).value);
-    const minUp = parseFloat($("#f-up", card).value);
+    const maxPe = num("#f-pe"), maxPb = num("#f-pb"), minRoe = num("#f-roe");
+    const minNm = num("#f-nm"), minQs = num("#f-qs"), maxDe = num("#f-de"), minUp = num("#f-up");
     const out = rows.filter((r) =>
       (!sec || r.sector === sec) &&
       (!sig || r.sig === sig) &&
       (isNaN(maxPe) || (F.isNum(r.pe) && r.pe <= maxPe)) &&
+      (isNaN(maxPb) || (F.isNum(r.pb) && r.pb <= maxPb)) &&
       (isNaN(minRoe) || (F.isNum(r.roe) && r.roe * 100 >= minRoe)) &&
+      (isNaN(minNm) || (F.isNum(r.net_margin) && r.net_margin * 100 >= minNm)) &&
+      (isNaN(minQs) || r.q >= minQs) &&
+      (isNaN(maxDe) || (F.isNum(r.debt_to_equity) && r.debt_to_equity <= maxDe)) &&
       (isNaN(minUp) || (F.isNum(r.upFrac) && r.upFrac * 100 >= minUp)));
     tb.innerHTML = "";
     for (const r of out) {

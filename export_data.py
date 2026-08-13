@@ -100,11 +100,70 @@ def fetch_foreign(code: str, sessions: int = 30) -> list[dict]:
             return []
         rows = []
         for d in r.json().get("data", [])[-sessions:]:
-            rows.append({"date": str(d.get("tradingDate")),
-                         "net_val": _clean(float(d.get("netVal") or 0))})
+            rows.append({
+                "date": str(d.get("tradingDate")),
+                "net_val": _clean(float(d.get("netVal") or 0)),
+                "buy_val": _clean(float(d.get("buyVal") or 0)),
+                "sell_val": _clean(float(d.get("sellVal") or 0)),
+                "buy_vol": _clean(float(d.get("buyVol") or 0)),
+                "sell_vol": _clean(float(d.get("sellVol") or 0)),
+                "net_vol": _clean(float(d.get("netVol") or 0)),
+            })
         return rows
     except Exception:
         return []
+
+
+def load_vnindex() -> "pd.Series | None":
+    """VNINDEX daily closes, fetched once and reused as the market series.
+
+    valuation.wacc.compute_beta() re-fetches VNINDEX per ticker, which would
+    mean 400+ rate-limited calls here; the maths is identical if we pull the
+    index once and align each ticker's own price history against it.
+    """
+    import warnings
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            from vnstock import Quote
+            raw = Quote(symbol="VNINDEX", source="VCI").history(
+                start=(date.today() - timedelta(days=520)).isoformat(),
+                end=date.today().isoformat(), interval="1D")
+        if raw is None or len(raw) < 60:
+            return None
+        s = raw[["time", "close"]].copy()
+        s["time"] = pd.to_datetime(s["time"]).dt.date
+        return s.set_index("time")["close"]
+    except (Exception, SystemExit):
+        return None
+
+
+def compute_beta_from(prices_df, vni: "pd.Series | None", days: int = 252) -> float:
+    """β = Cov(stock, market) / Var(market) on daily returns — same as wacc.compute_beta."""
+    DEFAULT_BETA = 1.2
+    if vni is None or prices_df is None or len(prices_df) < 60:
+        return DEFAULT_BETA
+    try:
+        s = prices_df.tail(days + 10)[["date", "close"]].copy()
+        s["date"] = pd.to_datetime(s["date"]).dt.date
+        m = vni.rename("mkt")
+        j = s.set_index("date").join(m, how="inner").dropna()
+        if len(j) < 60:
+            return DEFAULT_BETA
+        rs = j["close"].pct_change().dropna()
+        rm = j["mkt"].pct_change().dropna()
+        n = min(len(rs), len(rm))
+        if n < 60:
+            return DEFAULT_BETA
+        rs, rm = rs.iloc[-n:], rm.iloc[-n:]
+        var = float(rm.var())
+        if not var:
+            return DEFAULT_BETA
+        beta = float(rs.cov(rm)) / var
+        # wacc.compute_beta clamps to [0.2, 3.0] rather than falling back.
+        return round(min(max(beta, 0.2), 3.0), 4)
+    except Exception:
+        return DEFAULT_BETA
 
 
 def fetch_analyst(ticker: str) -> dict | None:
@@ -135,9 +194,12 @@ def main() -> None:
     # Imported here so sys.path (set at module load) already includes the
     # sibling valuation package.
     from model_valuation import model_price
+    from valuation.wacc import wacc as _wacc_calc, DEFAULT_COD
 
     engine = create_engine(_DB_URL, pool_pre_ping=True)
     print(f"Connected: {engine.dialect.name}")
+    vni = load_vnindex()
+    print(f"  VNINDEX series: {'ok' if vni is not None else 'unavailable (beta falls back)'}")
 
     with engine.connect() as conn:
         companies = pd.read_sql(
@@ -199,11 +261,28 @@ def main() -> None:
         last_close = float(px["close"].iloc[-1]) if px is not None and len(px) else None
         price_vnd = last_close * 1000 if last_close is not None else None
 
-        model = {"price": None, "upside": None}
+        model = {"price": None, "upside": None, "methods": {}, "params": {}}
         if vg is not None and len(vg):     # only tickers we actually value
             try:
-                mp, mu = model_price(t, sec_by_ticker.get(t) or "", price_vnd)
-                model = {"price": _clean(mp), "upside": _clean(mu)}
+                mp, mu, meth, prm = model_price(t, sec_by_ticker.get(t) or "", price_vnd)
+                prm = dict(prm or {})
+                # Ticker-specific beta + WACC, which is what the ROIC-vs-WACC
+                # verdict compares against (the DCF above uses DEFAULT_BETA).
+                _lq = vg.iloc[0] if vg is not None and len(vg) else None
+                _beta = compute_beta_from(px, vni)
+                _fin_q = fin_by_ticker.get(t)
+                _dbt = _eqt = None
+                if _fin_q is not None and len(_fin_q):
+                    _lastq = _fin_q[_fin_q["period_type"] == "Q"].tail(1)
+                    if len(_lastq):
+                        _dbt = float(_lastq["debt"].iloc[0] or 0)
+                        _eqt = float(_lastq["equity"].iloc[0] or 1)
+                prm["beta"] = _clean(_beta)
+                prm["wacc_ticker"] = _clean(
+                    _wacc_calc(_beta, DEFAULT_COD, _dbt or 0.0, _eqt or 1.0))
+                model = {"price": _clean(mp), "upside": _clean(mu),
+                         "methods": {k: _clean(x) for k, x in (meth or {}).items()},
+                         "params": {k: _clean(x) for k, x in prm.items()}}
             except Exception as e:         # never let one ticker abort the export
                 print(f"    ! model {t}: {e}")
         model_out[t] = model
@@ -221,7 +300,17 @@ def main() -> None:
         # call (~20/min Guest cap, with 57s penalties) so it can't run in this
         # synchronous loop -- export_analyst.py patches it in separately.
         foreign = fetch_foreign(t) if (vg is not None and len(vg)) else []
+
+        # Carry forward whatever export_analyst.py already fetched. Without
+        # this, every re-export silently wipes the analyst column and the ~22
+        # minute throttled fetch has to be repeated from scratch.
         analyst = None
+        _prev = OUT / "ticker" / f"{t}.json"
+        if _prev.exists():
+            try:
+                analyst = json.loads(_prev.read_text(encoding="utf-8")).get("analyst")
+            except (ValueError, OSError):
+                analyst = None
 
         obj = {
             "company": {k: _clean(co[k]) for k in

@@ -45,11 +45,18 @@ def fetch_analyst(ticker: str):
 
 def main() -> None:
     # Only tickers that actually have a valuation (the ones the UI values).
+    # --all refetches everything; default only fills tickers that don't have an
+    # analyst record yet, so a re-run after a partial failure costs minutes
+    # rather than the full ~22.
+    refetch_all = "--all" in sys.argv
     files = sorted(TICKER_DIR.glob("*.json"))
     done = skipped = 0
     for i, f in enumerate(files, 1):
         obj = json.loads(f.read_text(encoding="utf-8"))
         if obj.get("valuation") is None:      # not a valued ticker -> skip
+            skipped += 1
+            continue
+        if not refetch_all and obj.get("analyst") is not None:
             skipped += 1
             continue
         a = fetch_analyst(f.stem)

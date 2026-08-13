@@ -231,12 +231,27 @@ export function extraCharts(parent, co, financials, foreign) {
 
   if (hasForeign) {
     const fx = foreign.slice(-20);
-    const x = fx.map((d) => String(d.date).slice(5, 10));
+    const x = fx.map((d) => String(d.date).slice(5, 10).split("-").reverse().join("/"));
     const y = fx.map((d) => (isN(d.net_val) ? d.net_val / 1e9 : null));   // -> tỷ VND
-    add("Khối ngoại mua/bán ròng (tỷ ₫)", [
+    add("Khối ngoại mua/bán ròng (tỷ ₫) · 20 phiên", [
       { type: "bar", x, y, marker: { color: y.map((v) => (v >= 0 ? GREEN : RED)) },
-        hovertemplate: "%{x}: %{y:.1f} tỷ<extra></extra>" },
+        hovertemplate: "%{x}: %{y:.2f} tỷ<extra></extra>" },
     ], Object.assign(base(), { yaxis: { gridcolor: RULE, tickfont: { ...FONT, size: 9 }, zeroline: true, zerolinecolor: MUTED } }));
+
+    // Latest-session stat row, matching the original's six metric cells.
+    const L = fx[fx.length - 1] || {};
+    const n0 = (v) => (isN(v) ? Math.round(v).toLocaleString("en-US") : "—");
+    const nS = (v) => (isN(v) ? (v >= 0 ? "+" : "") + Math.round(v).toLocaleString("en-US") : "—");
+    const bn = (v) => (isN(v) ? (v / 1e9).toFixed(2) : "—");
+    const bnS = (v) => (isN(v) ? (v >= 0 ? "+" : "") + (v / 1e9).toFixed(2) : "—");
+    const stats = [
+      ["KL Mua", n0(L.buy_vol), ""], ["KL Bán", n0(L.sell_vol), ""],
+      ["KL Mua-Bán", nS(L.net_vol), (L.net_vol ?? 0) >= 0 ? "gain" : "loss"],
+      ["GT Mua (tỷ)", bn(L.buy_val), ""], ["GT Bán (tỷ)", bn(L.sell_val), ""],
+      ["GT Mua-Bán (tỷ)", bnS(L.net_val), (L.net_val ?? 0) >= 0 ? "gain" : "loss"],
+    ];
+    grid.appendChild(el(`<div class="ff-stats">${stats.map(([k, v, c]) =>
+      `<div class="ff-cell"><div class="ff-k">${k}</div><div class="ff-v ${c}">${v}</div></div>`).join("")}</div>`));
   }
 
   pending.forEach((fn) => fn());
