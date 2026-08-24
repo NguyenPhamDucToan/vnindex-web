@@ -3,7 +3,7 @@ import { priceChart, priceVsValueChart } from "./charts.js";
 import { computeQualityScore, classifySignal, SIGNAL_VI, SIGNAL_COLOR, SIGNAL_ORDER } from "./signals.js";
 import { ratingColor } from "./ratings.js";
 import { computeTTM } from "./ttm.js";
-import { quarterlyCharts, extraCharts } from "./quarterly.js";
+import { quarterlyCharts, extraCharts, foreignSection } from "./quarterly.js";
 import { valuationPanel, technicalPanel } from "./valuation-panel.js";
 import { dupontSection, roicSection, peerSection, valuationBandSection } from "./sections.js";
 import * as F from "./format.js";
@@ -122,11 +122,17 @@ async function renderStock(t) {
   const tp = technicalPanel(prices);
   if (tp) right.appendChild(tp);
 
-  // Peer comparison sits under the chart in the original, before the scorecard.
+  // These three live inside the left column in the original (col_chart), under
+  // the price chart -- putting them full-width below the split left a tall gap
+  // beside the valuation panel.
+  const left = $(".split-l", split);
   const peers = await loadScreener().catch(() => null);
   const pc = peerSection(co, v, peers, (d.model || {}).upside);
-  if (pc) root.appendChild(pc);
+  if (pc) left.appendChild(pc);
+  foreignSection(left, d.foreign || []);
+  valuationBandSection(left, d.financials || [], prices);
 
+  // Full width from the TTM scorecard down, as in the original.
   const ttm = computeTTM(d.financials || []);
   root.appendChild(scorecard(co, v, ttm));
 
@@ -134,9 +140,6 @@ async function renderStock(t) {
   if (dp) root.appendChild(dp);
   const rw = roicSection(d.financials || [], d.model || {});
   if (rw) root.appendChild(rw);
-
-  // Self-relative valuation band (P/E or P/B vs the ticker's own history).
-  valuationBandSection(root, d.financials || [], prices);
 
   root.appendChild(valuationSummary(co, v, d.model || {}, d.analyst, last));
 

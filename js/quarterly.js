@@ -185,14 +185,13 @@ export function quarterlyCharts(parent, co, financials) {
 }
 
 // Business projection + foreign flow, appended as their own card row.
-export function extraCharts(parent, co, financials, foreign) {
+export function extraCharts(parent, co, financials) {
   const annual = (financials || []).filter((f) => f.period_type === "Y")
     .sort((a, b) => String(a.period).localeCompare(String(b.period)));
   const hasProj = annual.length >= 3;
-  const hasForeign = (foreign || []).length >= 2;
-  if (!hasProj && !hasForeign) return;
+  if (!hasProj) return;
 
-  const card = el(`<div class="card"><h2 class="sec-h">Dự phóng & Dòng tiền khối ngoại</h2><div class="qgrid"></div></div>`);
+  const card = el(`<div class="card"><h2 class="sec-h">Dự phóng Kết quả Kinh doanh</h2><div class="qgrid"></div></div>`);
   const grid = card.querySelector(".qgrid");
   parent.appendChild(card);
   const pending = [];
@@ -229,32 +228,49 @@ export function extraCharts(parent, co, financials, foreign) {
     ], Object.assign(base(), { barmode: "group" }));
   }
 
-  if (hasForeign) {
-    const fx = foreign.slice(-20);
-    const x = fx.map((d) => String(d.date).slice(5, 10).split("-").reverse().join("/"));
-    const y = fx.map((d) => (isN(d.net_val) ? d.net_val / 1e9 : null));   // -> tỷ VND
-    add("Khối ngoại mua/bán ròng (tỷ ₫) · 20 phiên", [
-      { type: "bar", x, y, marker: { color: y.map((v) => (v >= 0 ? GREEN : RED)) },
-        hovertemplate: "%{x}: %{y:.2f} tỷ<extra></extra>" },
-    ], Object.assign(base(), { yaxis: { gridcolor: RULE, tickfont: { ...FONT, size: 9 }, zeroline: true, zerolinecolor: MUTED } }));
-
-    // Latest-session stat row, matching the original's six metric cells.
-    const L = fx[fx.length - 1] || {};
-    const n0 = (v) => (isN(v) ? Math.round(v).toLocaleString("en-US") : "—");
-    const nS = (v) => (isN(v) ? (v >= 0 ? "+" : "") + Math.round(v).toLocaleString("en-US") : "—");
-    const bn = (v) => (isN(v) ? (v / 1e9).toFixed(2) : "—");
-    const bnS = (v) => (isN(v) ? (v >= 0 ? "+" : "") + (v / 1e9).toFixed(2) : "—");
-    const stats = [
-      ["KL Mua", n0(L.buy_vol), ""], ["KL Bán", n0(L.sell_vol), ""],
-      ["KL Mua-Bán", nS(L.net_vol), (L.net_vol ?? 0) >= 0 ? "gain" : "loss"],
-      ["GT Mua (tỷ)", bn(L.buy_val), ""], ["GT Bán (tỷ)", bn(L.sell_val), ""],
-      ["GT Mua-Bán (tỷ)", bnS(L.net_val), (L.net_val ?? 0) >= 0 ? "gain" : "loss"],
-    ];
-    grid.appendChild(el(`<div class="ff-stats">${stats.map(([k, v, c]) =>
-      `<div class="ff-cell"><div class="ff-k">${k}</div><div class="ff-v ${c}">${v}</div></div>`).join("")}</div>`));
-  }
 
   pending.forEach((fn) => fn());
+}
+
+// Foreign net trading as its own section under the price chart -- the original
+// renders it inside col_chart as "Giao dịch Nước ngoài & Tự doanh". The
+// proprietary ("Tự doanh") half is a placeholder in the original too: its data
+// source does not expose it.
+export function foreignSection(parent, foreign) {
+  if ((foreign || []).length < 2) return null;
+  const card = el(`<div class="card"><h2 class="sec-h">Giao dịch Nước ngoài <span class="ta-sub">· 20 phiên gần nhất</span></h2><div class="qgrid ff-grid"></div></div>`);
+  const grid = card.querySelector(".qgrid");
+  parent.appendChild(card);
+  const pending = [];
+  const add = (title, traces, layout) => {
+    const { box, canvas } = chartBox(title);
+    grid.appendChild(box);
+    pending.push(() => window.Plotly.react(canvas, traces, layout, { displayModeBar: false, responsive: true }));
+  };
+  const fx = foreign.slice(-20);
+  const x = fx.map((d) => String(d.date).slice(5, 10).split("-").reverse().join("/"));
+  const y = fx.map((d) => (isN(d.net_val) ? d.net_val / 1e9 : null));   // -> tỷ VND
+  add("Khối ngoại mua/bán ròng (tỷ ₫) · 20 phiên", [
+    { type: "bar", x, y, marker: { color: y.map((v) => (v >= 0 ? GREEN : RED)) },
+      hovertemplate: "%{x}: %{y:.2f} tỷ<extra></extra>" },
+  ], Object.assign(base(), { yaxis: { gridcolor: RULE, tickfont: { ...FONT, size: 9 }, zeroline: true, zerolinecolor: MUTED } }));
+
+  // Latest-session stat row, matching the original's six metric cells.
+  const L = fx[fx.length - 1] || {};
+  const n0 = (v) => (isN(v) ? Math.round(v).toLocaleString("en-US") : "—");
+  const nS = (v) => (isN(v) ? (v >= 0 ? "+" : "") + Math.round(v).toLocaleString("en-US") : "—");
+  const bn = (v) => (isN(v) ? (v / 1e9).toFixed(2) : "—");
+  const bnS = (v) => (isN(v) ? (v >= 0 ? "+" : "") + (v / 1e9).toFixed(2) : "—");
+  const stats = [
+    ["KL Mua", n0(L.buy_vol), ""], ["KL Bán", n0(L.sell_vol), ""],
+    ["KL Mua-Bán", nS(L.net_vol), (L.net_vol ?? 0) >= 0 ? "gain" : "loss"],
+    ["GT Mua (tỷ)", bn(L.buy_val), ""], ["GT Bán (tỷ)", bn(L.sell_val), ""],
+    ["GT Mua-Bán (tỷ)", bnS(L.net_val), (L.net_val ?? 0) >= 0 ? "gain" : "loss"],
+  ];
+  grid.appendChild(el(`<div class="ff-stats">${stats.map(([k, v, c]) =>
+    `<div class="ff-cell"><div class="ff-k">${k}</div><div class="ff-v ${c}">${v}</div></div>`).join("")}</div>`));
+  pending.forEach((fn) => fn());
+  return card;
 }
 
 // tiny local el() so this module doesn't depend on app.js

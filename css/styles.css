@@ -96,9 +96,10 @@ b, strong { font-weight: 600; }
 .meta { margin-top: auto; font-family: var(--mono); font-size: 10px; color: var(--muted); line-height: 1.6; }
 
 /* ── main ─────────────────────────────────────────────────── */
-/* The original's content column runs wide with generous side padding
-   (Streamlit block-container: 80px sides) rather than a narrow centred measure. */
-.main { padding: 40px 56px; max-width: 1500px; width: 100%; }
+/* The original's block-container has NO max-width -- it fills the window with
+   80px side padding. Capping it at 1500px left a wide empty gutter on large
+   monitors, which is what made the port look unfinished next to the original. */
+.main { padding: 40px 56px; width: 100%; min-width: 0; }
 .view.hidden, .hidden { display: none !important; }
 .loading { color: var(--muted); padding: 48px; font-family: var(--mono); font-size: 13px; }
 /* Sections sit flat on the page background and are separated by a hairline
