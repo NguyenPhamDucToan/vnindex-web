@@ -326,3 +326,8 @@ table.screen tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--pri
 .mv-card { min-width: 0; }
 .mv-card .sec-h { font-size: 17px; }
 @media (max-width: 1100px) { .mv-row { grid-template-columns: 1fr; } .split-31 { grid-template-columns: 1fr; } }
+
+/* The foreign-trading card holds one chart plus a stat row, not a 2-up grid --
+   inheriting .qgrid's two columns left the chart at half width with dead space
+   beside it. */
+.ff-grid { grid-template-columns: 1fr; }

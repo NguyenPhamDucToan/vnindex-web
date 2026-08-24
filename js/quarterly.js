@@ -191,7 +191,9 @@ export function extraCharts(parent, co, financials) {
   const hasProj = annual.length >= 3;
   if (!hasProj) return;
 
-  const card = el(`<div class="card"><h2 class="sec-h">Dự phóng Kết quả Kinh doanh</h2><div class="qgrid"></div></div>`);
+  // Single chart -- the ff-grid modifier keeps it full width instead of
+  // leaving the second grid column empty beside it.
+  const card = el(`<div class="card"><h2 class="sec-h">Dự phóng Kết quả Kinh doanh</h2><div class="qgrid ff-grid"></div></div>`);
   const grid = card.querySelector(".qgrid");
   parent.appendChild(card);
   const pending = [];
