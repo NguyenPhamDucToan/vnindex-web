@@ -505,50 +505,139 @@ async function renderSector() {
     if (!r.sector) continue;
     (bySec[r.sector] ||= []).push(r);
   }
+  // Every column is a MEDIAN across the sector's tickers, as in the original —
+  // a mean would let one outlier define a whole sector.
   const agg = Object.entries(bySec).map(([sector, rs]) => ({
     sector, n: rs.length,
     pe: median(rs.map((r) => r.pe)),
     pb: median(rs.map((r) => r.pb)),
     roe: median(rs.map((r) => r.roe)),
+    nm: median(rs.map((r) => r.net_margin)),
+    fcf: median(rs.map((r) => r.fcf_margin)),
+    de: median(rs.map((r) => r.debt_to_equity)),
+    cr: median(rs.map((r) => r.current_ratio)),
     up: median(rs.map((r) => r.upFrac)),
     q: median(rs.map((r) => r.q)),
-  })).sort((a, b) => (b.up ?? -1e9) - (a.up ?? -1e9));
+  }));
 
   root.innerHTML = "";
-  const treeCard = el(`<div class="card"><h2 class="sec-h">Phân tích ngành</h2>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Ô lớn = nhiều mã; màu xanh = định giá còn rẻ (upside trung vị dương), đỏ = đắt.</div>
-    <div id="sec-tree"></div></div>`);
-  root.appendChild(treeCard);
-  window.Plotly.react($("#sec-tree", treeCard), [{
-    type: "treemap",
-    labels: agg.map((s) => s.sector),
-    parents: agg.map(() => ""),
-    values: agg.map((s) => s.n),
-    text: agg.map((s) => (F.isNum(s.up) ? F.pctSigned(s.up * 100) : "—")),
-    texttemplate: "%{label}<br>%{value} mã · %{text}",
-    hovertemplate: "%{label}<br>%{value} mã<extra></extra>",
-    marker: {
-      colors: agg.map((s) => (F.isNum(s.up) ? Math.max(-0.5, Math.min(0.5, s.up)) : 0)),
-      colorscale: [[0, "#b91c1c"], [0.5, "#f5f5f5"], [1, "#15803d"]], cmid: 0,
-      line: { width: 1, color: "#fff" },
-    },
-    tiling: { pad: 2 },
-  }], {
-    height: 420, margin: { l: 0, r: 0, t: 0, b: 0 },
-    paper_bgcolor: "rgba(0,0,0,0)",
-    font: { family: "'Fira Code', monospace", size: 11, color: "#0a121d" },
-  }, { displayModeBar: false, responsive: true });
 
-  const tbl = el(`<div class="card"><h2 class="sec-h">Chỉ số trung vị theo ngành</h2>
+  // ── 1. Heatmap with the original's metric selector ────────────────
+  const METRICS = {
+    "Định giá vs Thị trường": { key: "up", label: "Upside %", pct: true, asc: false, lo: -0.8, hi: 1.5 },
+    "P/E (thấp hơn = rẻ hơn)": { key: "pe", label: "P/E", pct: false, asc: true, lo: 0, hi: 50 },
+    "P/B (thấp hơn = rẻ hơn)": { key: "pb", label: "P/B", pct: false, asc: true, lo: 0, hi: 5 },
+    "ROE (cao hơn = tốt hơn)": { key: "roe", label: "ROE %", pct: true, asc: false, lo: -0.2, hi: 0.4 },
+  };
+  let metricName = "Định giá vs Thị trường";
+
+  const heat = el(`<div class="card">
+    <h2 class="sec-h">Bản đồ nhiệt theo Ngành</h2>
+    <div class="range-row" id="sec-metric"></div>
+    <div class="vb-note" id="sec-cap"></div>
+    <div id="sec-tree"></div></div>`);
+  root.appendChild(heat);
+
+  const drawTree = () => {
+    const m = METRICS[metricName];
+    const data = agg.filter((s) => F.isNum(s[m.key]));
+    // Green = favourable for the chosen metric, so a "lower is better" metric
+    // (P/E, P/B) has its scale flipped rather than showing cheap sectors red.
+    const norm = (v) => {
+      const t = Math.max(0, Math.min(1, (v - m.lo) / (m.hi - m.lo)));
+      return m.asc ? 1 - t : t;
+    };
+    const fmtV = (v) => m.pct ? F.pctSigned(v * 100) : v.toFixed(2) + "×";
+    window.Plotly.react($("#sec-tree", heat), [{
+      type: "treemap",
+      labels: data.map((s) => s.sector),
+      parents: data.map(() => ""),
+      values: data.map((s) => s.n),
+      text: data.map((s) => fmtV(s[m.key])),
+      texttemplate: "%{label}<br>%{value} mã · %{text}",
+      hovertemplate: "%{label}<br>%{value} mã · " + m.label + " %{text}<extra></extra>",
+      marker: {
+        colors: data.map((s) => norm(s[m.key])),
+        colorscale: [[0, "#b91c1c"], [0.5, "#f1f5f9"], [1, "#15803d"]],
+        cmin: 0, cmax: 1, line: { width: 1, color: "#fff" },
+      },
+      tiling: { pad: 2 },
+    }], {
+      height: 430, margin: { l: 0, r: 0, t: 0, b: 0 },
+      paper_bgcolor: "rgba(0,0,0,0)",
+      font: { family: "'Fira Code', monospace", size: 11, color: "#0a121d" },
+    }, { displayModeBar: false, responsive: true });
+    $("#sec-cap", heat).textContent =
+      `${agg.length} ngành · Chỉ số là trung vị giữa các mã · ${rows.length} mã có dữ liệu định giá · ` +
+      `Ô lớn = nhiều mã; xanh = tốt hơn theo "${m.label}".`;
+  };
+
+  const mrow = $("#sec-metric", heat);
+  for (const name of Object.keys(METRICS)) {
+    const b = el(`<button class="range-btn ${name === metricName ? "active" : ""}">${name}</button>`);
+    b.onclick = () => {
+      metricName = name;
+      mrow.querySelectorAll(".range-btn").forEach((x) => x.classList.remove("active"));
+      b.classList.add("active");
+      drawTree();
+    };
+    mrow.appendChild(b);
+  }
+  drawTree();
+
+  // ── 2. Valuation multiples by sector — four ranked bar charts ─────
+  const multi = el(`<div class="card"><h2 class="sec-h">Hệ số Định giá theo Ngành</h2><div class="qgrid"></div></div>`);
+  root.appendChild(multi);
+  const mgrid = multi.querySelector(".qgrid");
+  const barSpecs = [
+    ["P/E trung vị theo Ngành", "pe", false, true],
+    ["P/B trung vị theo Ngành", "pb", false, true],
+    ["ROE trung vị theo Ngành", "roe", true, false],
+    ["Biên LN ròng trung vị theo Ngành", "nm", true, false],
+  ];
+  const pending = [];
+  for (const [title, key, isPct, lowerBetter] of barSpecs) {
+    const data = agg.filter((s) => F.isNum(s[key])).sort((a, b) => a[key] - b[key]);
+    const box = el(`<div class="qchart"><div class="qtitle">${title}</div><div></div></div>`);
+    mgrid.appendChild(box);
+    const canvas = box.lastElementChild;
+    pending.push(() => window.Plotly.react(canvas, [{
+      type: "bar", orientation: "h",
+      x: data.map((s) => (isPct ? s[key] * 100 : s[key])),
+      y: data.map((s) => s.sector),
+      marker: { color: data.map((s) => {
+        const vals = data.map((d) => d[key]);
+        const med = vals[Math.floor(vals.length / 2)];
+        const good = lowerBetter ? s[key] <= med : s[key] >= med;
+        return good ? "#15803d" : "#b91c1c";
+      }) },
+      hovertemplate: "%{y}: %{x:.2f}" + (isPct ? "%" : "×") + "<extra></extra>",
+    }], {
+      height: Math.max(280, data.length * 17), dragmode: false,
+      margin: { l: 145, r: 16, t: 6, b: 26 },
+      paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+      font: { family: "'Fira Code', monospace", size: 9, color: "#0a121d" },
+      xaxis: { gridcolor: "rgba(148,163,184,0.22)", tickfont: { size: 9 }, ticksuffix: isPct ? "%" : "×" },
+      yaxis: { tickfont: { size: 8.5 }, automargin: true },
+    }, { displayModeBar: false, responsive: true }));
+  }
+  pending.forEach((fn) => fn());
+
+  // ── 3. Sector summary table — same columns as the original ───────
+  const tbl = el(`<div class="card"><h2 class="sec-h">Bảng tổng hợp theo Ngành</h2>
     <table class="screen"><thead><tr>
-      <th>Ngành</th><th>Số mã</th><th>P/E</th><th>P/B</th><th>ROE</th><th>Upside</th><th>Chất lượng</th>
+      <th>Ngành</th><th>Số mã</th><th>Upside</th><th>P/E</th><th>P/B</th><th>ROE</th>
+      <th>Biên LN ròng</th><th>FCF Margin</th><th>D/E</th><th>Curr Ratio</th><th>Quality</th>
     </tr></thead><tbody></tbody></table></div>`);
   const tb = $("tbody", tbl);
-  for (const s of agg) {
+  for (const s of [...agg].sort((a, b) => (b.up ?? -1e9) - (a.up ?? -1e9))) {
     tb.appendChild(el(`<tr>
       <td class="dim">${F.escapeHtml(s.sector)}</td>
-      <td>${s.n}</td><td>${F.mult(s.pe)}</td><td>${F.mult(s.pb)}</td><td>${F.pct(s.roe)}</td>
+      <td>${s.n}</td>
       <td style="color:${(s.up ?? 0) >= 0 ? "#15803d" : "#b91c1c"}">${fmtUpside(s.up)}</td>
+      <td>${F.mult(s.pe, 1)}</td><td>${F.mult(s.pb)}</td><td>${F.pct(s.roe)}</td>
+      <td>${F.pct(s.nm)}</td><td>${F.pct(s.fcf)}</td>
+      <td>${F.mult(s.de)}</td><td>${F.mult(s.cr)}</td>
       <td>${F.isNum(s.q) ? s.q.toFixed(0) : "—"}</td></tr>`));
   }
   root.appendChild(tbl);
@@ -644,62 +733,221 @@ async function renderMarket() {
   marketBuilt = true;
   const root = $("#view-market");
   root.innerHTML = `<div class="loading">Đang tải…</div>`;
-  const rows = (await loadScreener()).filter((r) => F.isNum(r.chg));
+  const [rows, market] = await Promise.all([
+    loadScreener(),
+    fetch("data/market.json").then((r) => r.json()).catch(() => ({ vnindex: [], foreign: [] })),
+  ]);
+  const withChg = rows.filter((r) => F.isNum(r.chg));
 
-  const up = rows.filter((r) => r.chg > 0).length;
-  const down = rows.filter((r) => r.chg < 0).length;
-  const flat = rows.length - up - down;
-  const byChg = [...rows].sort((a, b) => b.chg - a.chg);
-  const byVol = [...rows].filter((r) => F.isNum(r.vol)).sort((a, b) => b.vol - a.vol);
+  const up = withChg.filter((r) => r.chg > 0).length;
+  const down = withChg.filter((r) => r.chg < 0).length;
+  const flat = withChg.length - up - down;
+  const total = withChg.length || 1;
 
   root.innerHTML = "";
-  // breadth KPIs
-  const kpi = el(`<div class="card"><h2 class="sec-h">Tổng quan thị trường</h2>
-    <div class="metrics">
-      <div class="metric"><div class="mk">Tăng giá</div><div class="mv" style="color:#15803d">${up}</div></div>
-      <div class="metric"><div class="mk">Giảm giá</div><div class="mv" style="color:#b91c1c">${down}</div></div>
-      <div class="metric"><div class="mk">Đứng giá</div><div class="mv" style="color:var(--muted)">${flat}</div></div>
-      <div class="metric"><div class="mk">Độ rộng (Tăng/Giảm)</div><div class="mv">${down ? (up / down).toFixed(2) : "—"}</div></div>
-    </div></div>`);
-  root.appendChild(kpi);
 
+  // ── 1. VN-Index chart + advance/decline panel (3:1, as in the original) ──
+  const top = el(`<div class="card split-31">
+    <div><h2 class="sec-h">VN-Index (1 năm)</h2><div id="vni-chart"></div></div>
+    <div><h2 class="sec-h">Tăng / Giảm</h2><div id="ad-panel"></div></div>
+  </div>`);
+  root.appendChild(top);
+
+  const idx = (market.vnindex || []).slice(-252);
+  if (idx.length) {
+    const closes = idx.map((d) => d.close);
+    const rising = closes[closes.length - 1] >= closes[0];
+    window.Plotly.react($("#vni-chart", top), [{
+      type: "scatter", mode: "lines", x: idx.map((d) => d.date), y: closes,
+      line: { color: rising ? "#15803d" : "#b91c1c", width: 1.6 },
+      fill: "tozeroy", fillcolor: rising ? "rgba(21,128,61,0.07)" : "rgba(185,28,28,0.07)",
+      hovertemplate: "%{x}: %{y:,.2f}<extra></extra>",
+    }], {
+      height: 300, dragmode: false, margin: { l: 54, r: 12, t: 8, b: 28 },
+      paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+      font: { family: "Fira Code, monospace", size: 10, color: "#0a121d" },
+      xaxis: { showgrid: false, tickfont: { size: 9 }, nticks: 8 },
+      // Ranged around the actual band, not from zero -- an index that moves 10%
+      // would otherwise render as a flat line against a 0-baseline axis.
+      yaxis: {
+        gridcolor: "rgba(148,163,184,0.22)", tickfont: { size: 9 },
+        range: [Math.min(...closes) * 0.985, Math.max(...closes) * 1.015],
+      },
+      hovermode: "x unified",
+    }, { displayModeBar: false, responsive: true });
+  }
+
+  const ratio = up / Math.max(down, 1);
+  const rc = ratio >= 1.5 ? "var(--gain)" : ratio >= 0.8 ? "#b45309" : "var(--loss)";
+  $("#ad-panel", top).innerHTML = `
+    <div class="ad-ratio" style="color:${rc}">${ratio.toFixed(2)}
+      <span class="ad-ratio-l">&nbsp;Tỷ lệ Tăng/Giảm</span></div>
+    <div class="ad-bar">
+      <div style="width:${up / total * 100}%;background:#15803d"></div>
+      <div style="width:${flat / total * 100}%;background:#b45309"></div>
+      <div style="width:${down / total * 100}%;background:#b91c1c"></div>
+    </div>
+    <div class="ad-legend">
+      <span><b class="gain">▲ ${up}</b><span class="dimtxt"> Tăng</span></span>
+      <span><b style="color:#b45309">— ${flat}</b><span class="dimtxt"> Đứng</span></span>
+      <span><b class="loss">▼ ${down}</b><span class="dimtxt"> Giảm</span></span>
+    </div>
+    <div class="ad-total">trong ${withChg.length} mã</div>`;
+
+  // ── 2. Market P/E & P/B vs its own history ───────────────────────
+  const hist = await fetch("data/market_history.json").then((r) => r.json()).catch(() => []);
+  if (hist.length > 3) {
+    const c = el(`<div class="card"><h2 class="sec-h">Định giá Thị trường (P/E &amp; P/B) so với Lịch sử</h2>
+      <div id="mkt-hist"></div>
+      <div class="vb-note" id="mkt-hist-note"></div></div>`);
+    root.appendChild(c);
+    const x = hist.map((d) => d.quarter);
+    window.Plotly.react($("#mkt-hist", c), [
+      { type: "scatter", mode: "lines+markers", name: "P/E", x, y: hist.map((d) => d.pe),
+        line: { color: "#2563eb", width: 1.8 }, marker: { size: 5 },
+        hovertemplate: "%{x}: P/E %{y:.1f}×<extra></extra>" },
+      { type: "scatter", mode: "lines+markers", name: "P/B", x, y: hist.map((d) => d.pb),
+        yaxis: "y2", line: { color: "#ea580c", width: 1.8 }, marker: { size: 5 },
+        hovertemplate: "%{x}: P/B %{y:.2f}×<extra></extra>" },
+    ], {
+      height: 320, dragmode: false, margin: { l: 52, r: 52, t: 26, b: 40 },
+      paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+      font: { family: "Fira Code, monospace", size: 10, color: "#0a121d" },
+      legend: { orientation: "h", y: 1.14, x: 0, font: { size: 10 } },
+      xaxis: { type: "category", showgrid: false, tickfont: { size: 9 }, tickangle: -45 },
+      yaxis: { gridcolor: "rgba(148,163,184,0.22)", tickfont: { size: 9 },
+               title: { text: "P/E (×)", font: { size: 10 } } },
+      // P/B lives on a different scale entirely; sharing one axis would flatten it.
+      yaxis2: { overlaying: "y", side: "right", showgrid: false, tickfont: { size: 9 },
+                title: { text: "P/B (×)", font: { size: 10 } } },
+      hovermode: "x unified",
+    }, { displayModeBar: false, responsive: true });
+
+    const pes = hist.map((d) => d.pe).filter((v) => F.isNum(v)).sort((a, b) => a - b);
+    const curPe = hist[hist.length - 1].pe, medPe = pes[Math.floor(pes.length / 2)];
+    if (F.isNum(curPe) && F.isNum(medPe)) {
+      const rel = (curPe - medPe) / medPe * 100;
+      $("#mkt-hist-note", c).innerHTML =
+        `P/E thị trường hiện <b>${curPe.toFixed(1)}×</b> so với trung vị ${pes.length} quý là ` +
+        `<b>${medPe.toFixed(1)}×</b> (${rel >= 0 ? "+" : ""}${rel.toFixed(0)}%). ` +
+        (rel > 10 ? "Thị trường đang đắt hơn mặt bằng lịch sử."
+          : rel < -10 ? "Thị trường đang rẻ hơn mặt bằng lịch sử."
+          : "Thị trường ở vùng định giá quen thuộc.") +
+        ` Trung vị giữa các mã, mỗi quý cần tối thiểu 30 mã có số liệu.`;
+    }
+  }
+
+  // ── 3. Market-wide foreign net trading ───────────────────────────
+  const ff = market.foreign || [];
+  if (ff.length > 2) {
+    const c = el(`<div class="card"><h2 class="sec-h">Giá trị Giao dịch ròng Nước ngoài</h2>
+      <div id="ff-mkt"></div>
+      <div class="vb-note">GTNN = giá trị giao dịch ròng của nhà đầu tư nước ngoài trên toàn thị trường.</div></div>`);
+    root.appendChild(c);
+    const y = ff.map((d) => d.net_val / 1e9);
+    window.Plotly.react($("#ff-mkt", c), [{
+      type: "bar",
+      x: ff.map((d) => String(d.date).slice(5).split("-").reverse().join("/")), y,
+      marker: { color: y.map((v) => (v >= 0 ? "#15803d" : "#b91c1c")) },
+      hovertemplate: "%{x}: %{y:,.0f} tỷ<extra></extra>",
+    }], {
+      height: 300, dragmode: false, margin: { l: 60, r: 12, t: 8, b: 30 },
+      paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+      font: { family: "Fira Code, monospace", size: 10, color: "#0a121d" },
+      xaxis: { type: "category", showgrid: false, tickfont: { size: 9 } },
+      yaxis: {
+        gridcolor: "rgba(148,163,184,0.22)", tickfont: { size: 9 }, zeroline: true,
+        title: { text: "Giá trị ròng (tỷ VND)", font: { size: 10 } },
+      },
+      hovermode: "x unified",
+    }, { displayModeBar: false, responsive: true });
+  }
+
+  // ── 4. Movers. "Thanh khoản tốt" = drawn from the 20 most-traded names, as
+  //       in the original, so a 7% jump on a barely-traded ticker can't top it.
+  const liquid = [...withChg].filter((r) => F.isNum(r.vol)).sort((a, b) => b.vol - a.vol).slice(0, 20);
   const moversCard = (title, list, valFn) => {
-    const c = el(`<div class="card" style="flex:1;min-width:280px"><h2 class="sec-h">${title}</h2>
+    const c = el(`<div class="card mv-card"><h2 class="sec-h">${title}</h2>
       <table class="screen"><tbody></tbody></table></div>`);
     const tb = $("tbody", c);
     for (const r of list) {
-      const tr = el(`<tr><td><b>${r.ticker}</b></td><td class="dim">${F.escapeHtml(r.sector || "")}</td>
-        <td style="color:${valFn(r).c}">${valFn(r).t}</td></tr>`);
+      const v = valFn(r);
+      const tr = el(`<tr><td><b>${r.ticker}</b></td>
+        <td class="dim">${F.escapeHtml(r.sector || "")}</td>
+        <td style="color:${v.c}">${v.t}</td>
+        <td>${F.isNum(r.vol) ? (r.vol / 1e6).toFixed(2) + "M" : "—"}</td></tr>`);
       tr.onclick = () => selectTicker(r.ticker);
       tb.appendChild(tr);
     }
     return c;
   };
-  const wrap = el(`<div style="display:flex;gap:16px;flex-wrap:wrap"></div>`);
-  wrap.appendChild(moversCard("Tăng mạnh nhất", byChg.slice(0, 10), (r) => ({ t: F.pctSigned(r.chg * 100), c: "#15803d" })));
-  wrap.appendChild(moversCard("Giảm mạnh nhất", byChg.slice(-10).reverse(), (r) => ({ t: F.pctSigned(r.chg * 100), c: "#b91c1c" })));
-  wrap.appendChild(moversCard("Khối lượng lớn nhất", byVol.slice(0, 10), (r) => ({ t: F.num(r.vol, 0), c: "var(--ink)" })));
+  const wrap = el(`<div class="mv-row"></div>`);
+  wrap.appendChild(moversCard("Top 10 Tăng giá (thanh khoản tốt)",
+    [...liquid].sort((a, b) => b.chg - a.chg).slice(0, 10),
+    (r) => ({ t: F.pctSigned(r.chg * 100), c: "#15803d" })));
+  wrap.appendChild(moversCard("Top 10 Giảm giá (thanh khoản tốt)",
+    [...liquid].sort((a, b) => a.chg - b.chg).slice(0, 10),
+    (r) => ({ t: F.pctSigned(r.chg * 100), c: "#b91c1c" })));
+  wrap.appendChild(moversCard("Top 10 Khối lượng",
+    [...withChg].filter((r) => F.isNum(r.vol)).sort((a, b) => b.vol - a.vol).slice(0, 10),
+    (r) => ({ t: F.pctSigned(r.chg * 100), c: r.chg >= 0 ? "#15803d" : "#b91c1c" })));
   root.appendChild(wrap);
 
-  // sector performance (avg day change)
+  // ── 5. Sector performance today ──────────────────────────────────
   const bySec = {};
-  for (const r of rows) { if (r.sector) (bySec[r.sector] ||= []).push(r.chg); }
-  const perf = Object.entries(bySec).map(([s, cs]) => [s, cs.reduce((a, b) => a + b, 0) / cs.length])
+  for (const r of withChg) { if (r.sector) (bySec[r.sector] ||= []).push(r.chg); }
+  const perf = Object.entries(bySec)
+    .map(([s, cs]) => [s, cs.reduce((a, b) => a + b, 0) / cs.length])
     .sort((a, b) => b[1] - a[1]);
-  const perfCard = el(`<div class="card"><h2 class="sec-h">Hiệu suất theo ngành (hôm nay)</h2><div id="perf-chart"></div></div>`);
+  const perfCard = el(`<div class="card"><h2 class="sec-h">Hiệu suất theo Ngành</h2><div id="perf-chart"></div></div>`);
   root.appendChild(perfCard);
   window.Plotly.react($("#perf-chart", perfCard), [{
     type: "bar", orientation: "h",
     x: perf.map((p) => p[1]).reverse(), y: perf.map((p) => p[0]).reverse(),
-    marker: { color: perf.map((p) => p[1] >= 0 ? "#15803d" : "#b91c1c").reverse() },
+    marker: { color: perf.map((p) => (p[1] >= 0 ? "#15803d" : "#b91c1c")).reverse() },
     hovertemplate: "%{y}: %{x:.2%}<extra></extra>",
   }], {
-    height: Math.max(300, perf.length * 20), margin: { l: 150, r: 20, t: 10, b: 30 },
+    height: Math.max(320, perf.length * 20), dragmode: false,
+    margin: { l: 150, r: 20, t: 8, b: 30 },
     paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
-    font: { family: "'Fira Code', monospace", size: 10, color: "#0a121d" },
-    xaxis: { tickformat: ".1%", gridcolor: "rgba(148,163,184,0.22)", zeroline: true },
-    yaxis: { tickfont: { size: 9 } }, dragmode: false,
+    font: { family: "Fira Code, monospace", size: 10, color: "#0a121d" },
+    xaxis: {
+      tickformat: ".1%", gridcolor: "rgba(148,163,184,0.22)", zeroline: true,
+      title: { text: "Thay đổi TB %", font: { size: 10 } },
+    },
+    yaxis: { tickfont: { size: 9 }, automargin: true },
   }, { displayModeBar: false, responsive: true });
+
+  // ── 6. Today's market heatmap ────────────────────────────────────
+  const heatRows = withChg.filter((r) => F.isNum(r.vol) && r.vol > 0);
+  if (heatRows.length) {
+    const hc = el(`<div class="card"><h2 class="sec-h">Bản đồ nhiệt Thị trường Hôm nay</h2>
+      <div class="vb-note">Kích thước ô = khối lượng giao dịch; màu = thay đổi giá hôm nay.</div>
+      <div id="mkt-heat"></div></div>`);
+    root.appendChild(hc);
+    const top120 = [...heatRows].sort((a, b) => b.vol - a.vol).slice(0, 120);
+    const sectors = [...new Set(top120.map((r) => r.sector).filter(Boolean))];
+    window.Plotly.react($("#mkt-heat", hc), [{
+      type: "treemap",
+      labels: [...sectors, ...top120.map((r) => r.ticker)],
+      parents: [...sectors.map(() => ""), ...top120.map((r) => r.sector || "")],
+      values: [...sectors.map(() => 0), ...top120.map((r) => r.vol)],
+      text: [...sectors.map(() => ""), ...top120.map((r) => F.pctSigned(r.chg * 100))],
+      texttemplate: "%{label}<br>%{text}",
+      hovertemplate: "%{label} %{text}<extra></extra>",
+      branchvalues: "remainder",
+      marker: {
+        colors: [...sectors.map(() => 0), ...top120.map((r) => Math.max(-0.07, Math.min(0.07, r.chg)))],
+        colorscale: [[0, "#b91c1c"], [0.5, "#f1f5f9"], [1, "#15803d"]],
+        cmin: -0.07, cmax: 0.07, line: { width: 1, color: "#fff" },
+      },
+      tiling: { pad: 2 },
+    }], {
+      height: 540, margin: { l: 0, r: 0, t: 0, b: 0 },
+      paper_bgcolor: "rgba(0,0,0,0)",
+      font: { family: "Fira Code, monospace", size: 10, color: "#0a121d" },
+    }, { displayModeBar: false, responsive: true });
+  }
 }
 
 // ── macro view ──────────────────────────────────────────────────────

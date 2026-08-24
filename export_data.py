@@ -339,6 +339,18 @@ def main() -> None:
     _write(OUT / "screener.json", _records(screener))
     print(f"  wrote screener.json ({len(screener)} rows)")
 
+    # ---- market.json (index series + market-wide foreign flow) ---------
+    # The VNINDEX series is already in hand from the beta calculation; the
+    # market view needs it as a chart, and "VNINDEX" is also a valid code for
+    # the VNDirect foreign endpoint (whole-HOSE net flow).
+    market = {"vnindex": [], "foreign": fetch_foreign("VNINDEX", sessions=30)}
+    if vni is not None:
+        market["vnindex"] = [{"date": str(d), "close": _clean(float(v))}
+                             for d, v in vni.items() if v == v]
+    _write(OUT / "market.json", market)
+    print(f"  wrote market.json (index {len(market['vnindex'])} pts, "
+          f"foreign {len(market['foreign'])} sessions)")
+
     # ---- macro.json (curated headline indicators) ----------------------
     _MACRO_KEYS = ["gdp_growth", "cpi_yoy", "credit_growth_total", "exchange_rate",
                    "lending_rate", "deposit_rate", "trade_balance", "fdi",
