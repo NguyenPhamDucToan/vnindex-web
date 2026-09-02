@@ -749,7 +749,7 @@ function screenerAnalytics(root, rows) {
   if (ups.length > 10) {
     const hc = card("Phân bố Avg Upside", "sc-hist");
     pend.push(() => window.Plotly.react(hc.querySelector("#sc-hist"), [{
-      type: "histogram", x: ups, nbinsx: 40, marker: { color: "#2563eb" },
+      type: "histogram", x: ups, nbinsx: 40, marker: { color: "#5b9bd5" },
       hovertemplate: "%{x}%: %{y} mã<extra></extra>",
     }], {
       height: 320, dragmode: false, margin: { l: 50, r: 14, t: 12, b: 36 },
@@ -928,7 +928,7 @@ async function renderSector() {
         const vals = data.map((d) => d[key]);
         const med = vals[Math.floor(vals.length / 2)];
         const good = lowerBetter ? s[key] <= med : s[key] >= med;
-        return good ? "#15803d" : "#b91c1c";
+        return good ? "#70ad47" : "#c00000";
       }) },
       hovertemplate: "%{y}: %{x:.2f}" + (isPct ? "%" : "×") + "<extra></extra>",
     }], {
@@ -1210,10 +1210,10 @@ async function renderMarket() {
     const x = hist.map((d) => d.quarter);
     window.Plotly.react($("#mkt-hist", c), [
       { type: "scatter", mode: "lines+markers", name: "P/E", x, y: hist.map((d) => d.pe),
-        line: { color: "#2563eb", width: 1.8 }, marker: { size: 5 },
+        line: { color: "#2ca02c", width: 1.8 }, marker: { size: 5 },
         hovertemplate: "%{x}: P/E %{y:.1f}×<extra></extra>" },
       { type: "scatter", mode: "lines+markers", name: "P/B", x, y: hist.map((d) => d.pb),
-        yaxis: "y2", line: { color: "#ea580c", width: 1.8 }, marker: { size: 5 },
+        yaxis: "y2", line: { color: "#ff7f0e", width: 1.8 }, marker: { size: 5 },
         hovertemplate: "%{x}: P/B %{y:.2f}×<extra></extra>" },
     ], {
       height: 320, dragmode: false, margin: { l: 52, r: 52, t: 26, b: 40 },

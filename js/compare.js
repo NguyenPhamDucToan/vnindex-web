@@ -12,7 +12,8 @@ const el = (h) => { const t = document.createElement("template"); t.innerHTML = 
 const FONT = { family: "Fira Code, monospace", size: 10, color: "#0a121d" };
 // Palette for the per-ticker series; distinct hues rather than a gradient so
 // six overlapping lines stay tellable apart.
-const SERIES = ["#2563eb", "#ea580c", "#15803d", "#7c3aed", "#0e7490", "#b91c1c"];
+// Same Excel-ish series palette the original uses for multi-ticker charts.
+const SERIES = ["#5b9bd5", "#f0ad4e", "#70ad47", "#7030a0", "#5bc0de", "#c00000"];
 
 const RADAR = [
   { label: "ROE", key: "roe", max: 0.30, pct: true },
