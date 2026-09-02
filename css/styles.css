@@ -207,43 +207,29 @@ b, strong { font-weight: 600; }
 .vp-prow { display: flex; justify-content: space-between; font-size: 12.5px; padding: 3px 0; color: var(--neutral); }
 .vp-prow b { font-family: var(--mono); color: var(--ink); font-weight: 600; }
 
-/* technical analysis */
+/* technical analysis — structure copied from the original: verdict line, a
+   Mua/Bán tally beside the gauge, pivot table, indicator table, MA table. */
 .ta-sub { color: var(--muted); font-size: 13px; font-weight: 400; }
-.ta-verdict { border: 1px solid var(--rule); border-radius: 4px; padding: 11px 13px; text-align: center; margin-bottom: 10px; }
-.ta-verdict-v { font-family: var(--mono); font-size: 20px; font-weight: 800; letter-spacing: .5px; }
-.ta-verdict-s { font-size: 11px; color: var(--muted); margin-top: 3px; }
+.ta-head { font-family: var(--mono); font-size: 17px; font-weight: 800; letter-spacing: .3px; margin-bottom: 8px; }
+.ta-top { display: grid; grid-template-columns: 1fr 150px; gap: 8px; align-items: center; }
+.ta-top > div { min-width: 0; overflow: hidden; }
+.ta-h2 { font-size: 13px; font-weight: 700; color: var(--ink); margin: 14px 0 6px; }
+.ta-note { font-size: 11px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+.ta-scroll { overflow-x: auto; }
 .ta-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.ta-table th { font-size: 10.5px; color: var(--muted); font-weight: 600; text-align: right; padding: 4px 6px; border-bottom: 1px solid var(--rule); }
+.ta-table th:first-child { text-align: left; }
 .ta-table td { padding: 5px 6px; border-bottom: 1px solid var(--rule); }
-.ta-table td.num { font-family: var(--mono); text-align: right; }
+.ta-table td.num { font-family: var(--mono); text-align: right; white-space: nowrap; }
 .ta-table td.sig { text-align: right; font-weight: 600; white-space: nowrap; }
-.ta-mah { font-size: 10.5px; font-weight: 700; letter-spacing: 1px; color: var(--muted); text-transform: uppercase; margin: 12px 0 5px; }
-
-/* ── DuPont ───────────────────────────────────────────────── */
-.dp-row { display: flex; align-items: stretch; gap: 3px; }
-.dp-card { flex: 1; min-width: 0; text-align: center; background: var(--paper); border: 1px solid #e2e8f0; box-shadow: 0 1px 4px rgba(0,0,0,0.07); border-radius: 4px; padding: 14px 10px 12px; }
-.dp-k { font-size: 11px; color: var(--muted); margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.dp-v { font-family: var(--mono); font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
-.dp-h { font-size: 10px; color: var(--neutral); margin-top: 4px; }
-.dp-op { font-size: 18px; color: var(--neutral); align-self: center; padding: 0 2px; }
-.dp-badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-.dp-badge { padding: 2px 9px; border-radius: 5px; border: 1px solid; font-weight: 600; font-size: 12px; white-space: nowrap; }
-.dp-comment { font-size: 13px; color: var(--neutral); margin-top: 10px; line-height: 1.6; }
-
-/* ── ROIC vs WACC ─────────────────────────────────────────── */
-.rw-row { display: flex; gap: 12px; flex-wrap: wrap; }
-.rw-card { flex: 1; min-width: 150px; border: 1px solid var(--rule); border-radius: 4px; padding: 13px 15px; background: var(--paper); }
-.rw-k { font-size: 11px; color: var(--muted); margin-bottom: 5px; }
-.rw-v { font-family: var(--mono); font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
-.rw-years { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; color: var(--muted); }
-.rw-yr { display: flex; gap: 6px; align-items: baseline; }
-.rw-yr b { font-family: var(--mono); font-size: 13px; }
-
-/* ── peer comparison ──────────────────────────────────────── */
-.pr-row { display: flex; gap: 12px; flex-wrap: wrap; }
-.pr-card { flex: 1; min-width: 140px; border: 1px solid var(--rule); border-radius: 4px; padding: 12px 14px; background: var(--paper); }
-.pr-k { font-size: 11px; color: var(--muted); }
-.pr-v { font-family: var(--mono); font-size: 21px; font-weight: 700; margin-top: 3px; }
-.pr-d { font-size: 11.5px; font-weight: 600; margin-top: 3px; }
+.ta-count td:first-child { color: var(--neutral); }
+.ta-pivot { min-width: 460px; font-size: 11.5px; }
+.ta-pivot td.sup { color: #4ade80; }
+.ta-pivot td.res { color: #f87171; }
+.ta-pivot td.piv { color: #ca8a04; font-weight: 700; }
+/* Negative side margins let the gauge poke 6px past the card; only the
+   vertical tightening is wanted. */
+#ta-gauge { margin: -8px 0 -14px; min-width: 0; }
 
 /* ── chart grid ───────────────────────────────────────────── */
 .qgrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-md); }
@@ -376,4 +362,4 @@ table.screen tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--pri
 .fin-tabs { flex-wrap: wrap; margin-bottom: var(--space-md); }
 
 /* technical-analysis gauge sits above the verdict box */
-#ta-gauge { margin-bottom: -6px; }
+
