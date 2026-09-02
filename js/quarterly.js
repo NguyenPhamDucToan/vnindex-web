@@ -45,12 +45,14 @@ const FONT = { family: "'Fira Code', ui-monospace, monospace", size: 10, color: 
 const isN = (v) => typeof v === "number" && isFinite(v);
 const label = (p) => String(p).replace(/^(\d{4})-Q(\d)$/, "Q$2/$1");
 
-function base(height = 260) {
+function base(height = 300) {
   return {
-    dragmode: false, height, margin: { l: 46, r: 44, t: 26, b: 30 },
+    dragmode: false, height, margin: { l: 46, r: 44, t: 36, b: 30 },
     paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: FONT,
     barmode: "group", bargap: 0.25,
-    legend: { orientation: "h", y: 1.14, x: 0, font: { ...FONT, size: 9 } },
+    // The original puts the legend under the plot (y=-0.25, size 11); at the
+    // top it wraps onto two lines and eats the plot area.
+    legend: { orientation: "h", y: -0.25, x: 0, yanchor: "top", font: { ...FONT, size: 11 } },
     xaxis: { type: "category", tickfont: { ...FONT, size: 9 }, showgrid: false },
     yaxis: { gridcolor: RULE, tickfont: { ...FONT, size: 9 }, zeroline: true, zerolinecolor: RULE },
     hovermode: "x unified",
@@ -227,22 +229,7 @@ export function quarterlyCharts(parent, co, financials, detail, prices, valHisto
     { type: "bar", name: "Khấu hao", x, y: qs.map((q) => (isN(q.depreciation) ? Math.abs(q.depreciation) : null)), marker: { color: AMBER} },
   ], base());
 
-  // ── Row 3 — financial income / expense / provisions ─────────────
-  if (finInc) {
-    add("Doanh thu tài chính", [
-      { type: "bar", name: "Doanh thu tài chính", x, y: finInc, marker: { color: FIN_BLUE} },
-      { type: "scatter", mode: "lines+markers", name: "Tăng trưởng YoY", x, y: dYoY("income", "financial_income"), yaxis: "y2", line: { color: GOLD, width: 1.5 }, marker: { size: 4 } },
-    ], pctAxis(base()));
-  }
-  if (finExp) {
-    const absExp = finExp.map((v) => (isN(v) ? Math.abs(v) : null));
-    const intExp = dSeries("income", "interest_expense");
-    add("Chi phí tài chính", [
-      { type: "bar", name: "Chi phí tài chính", x, y: absExp, marker: { color: DRED} },
-      ...(intExp ? [{ type: "bar", name: "Trong đó: lãi vay", x, y: intExp.map((v) => (isN(v) ? Math.abs(v) : null)), marker: { color: AMBER} }] : []),
-    ], base());
-  }
-
+  // ── Row 3 — provisions / financial income / financial expense ───
   if (isBank) {
     add("Chi phí tín dụng & dự phòng", [
       { type: "bar", name: "Chi phí dự phòng", x, y: qs.map((q) => (isN(q.cogs) ? Math.abs(q.cogs) : null)), marker: { color: RED} },
@@ -259,6 +246,21 @@ export function quarterlyCharts(parent, co, financials, detail, prices, valHisto
         ...(provDbt ? [{ type: "bar", name: "DP phải thu khó đòi", x, y: provDbt.map((v) => (isN(v) ? Math.abs(v) : null)), marker: { color: RED} }] : []),
       ], Object.assign(base(), { barmode: "stack" }));
     }
+  }
+
+  if (finInc) {
+    add("Doanh thu tài chính", [
+      { type: "bar", name: "Doanh thu tài chính", x, y: finInc, marker: { color: FIN_BLUE} },
+      { type: "scatter", mode: "lines+markers", name: "Tăng trưởng YoY", x, y: dYoY("income", "financial_income"), yaxis: "y2", line: { color: GOLD, width: 1.5 }, marker: { size: 4 } },
+    ], pctAxis(base()));
+  }
+  if (finExp) {
+    const absExp = finExp.map((v) => (isN(v) ? Math.abs(v) : null));
+    const intExp = dSeries("income", "interest_expense");
+    add("Chi phí tài chính", [
+      { type: "bar", name: "Chi phí tài chính", x, y: absExp, marker: { color: DRED} },
+      ...(intExp ? [{ type: "bar", name: "Trong đó: lãi vay", x, y: intExp.map((v) => (isN(v) ? Math.abs(v) : null)), marker: { color: AMBER} }] : []),
+    ], base());
   }
 
   // ── Cân đối KT ───────────────────────────────────────────────

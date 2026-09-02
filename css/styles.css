@@ -262,7 +262,9 @@ b, strong { font-weight: 600; }
 .pr-d { font-size: 11.5px; font-weight: 600; margin-top: 3px; }
 
 /* ── chart grid ───────────────────────────────────────────── */
-.qgrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-md); }
+/* The original lays the report out as st.columns(3) on every row, so nine
+   charts fill three rows exactly instead of leaving an orphan. */
+.qgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-md); }
 .qchart { border: 1px solid var(--rule); border-radius: var(--radius-sm); padding: 10px 12px 6px; min-width: 0; background: var(--paper); }
 .qtitle { font-size: 10.5px; font-weight: 700; letter-spacing: .7px; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
 
@@ -322,6 +324,9 @@ table.screen tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--pri
 @media (max-width: 1200px) and (min-width: 821px) {
   .split { grid-template-columns: 3fr 2fr; }
   .vp-grid { grid-template-columns: 1fr; }
+  /* Three plots side by side stop being readable below ~1200px: axis labels
+     and legends start colliding. Step down to two rather than straight to one. */
+  .qgrid { grid-template-columns: repeat(2, 1fr); }
 }
 
 /* self-relative valuation band */
