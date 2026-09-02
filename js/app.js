@@ -1,9 +1,9 @@
 import { loadCompanies, loadScreener, loadTicker, loadMeta } from "./data.js";
-import { priceChart, priceVsValueChart } from "./charts.js";
+import { priceChart } from "./charts.js";
 import { computeQualityScore, classifySignal, SIGNAL_VI, SIGNAL_COLOR, SIGNAL_ORDER } from "./signals.js";
 import { ratingColor } from "./ratings.js";
 import { computeTTM } from "./ttm.js";
-import { quarterlyCharts, extraCharts, foreignSection } from "./quarterly.js";
+import { quarterlyCharts, foreignSection } from "./quarterly.js";
 import { valuationPanel, technicalPanel } from "./valuation-panel.js";
 import { dupontSection, roicSection, peerSection, valuationBandSection } from "./sections.js";
 import { renderCompare } from "./compare.js";
@@ -137,7 +137,11 @@ async function renderStock(t) {
   foreignSection(left, d.foreign || []);
   valuationBandSection(left, d.financials || [], prices);
 
-  // Full width from the TTM scorecard down, as in the original.
+  // Order matches the original: the financial-report tabs come BEFORE the TTM
+  // scorecard, and the projection / price-vs-value charts live inside the
+  // report's third tab rather than as separate cards at the end.
+  quarterlyCharts(root, co, d.financials || [], d.detail, prices, d.valuation_history);
+
   const ttm = computeTTM(d.financials || []);
   root.appendChild(scorecard(co, v, ttm));
 
@@ -147,17 +151,65 @@ async function renderStock(t) {
   if (rw) root.appendChild(rw);
 
   root.appendChild(valuationSummary(co, v, d.model || {}, d.analyst, last));
+  newsEventsSection(root, d.news_events);
+}
 
-  // Quarterly analysis charts (the "meat" rows) from the exported financials.
-  // Appends itself to root, then renders (Plotly needs an attached node).
-  quarterlyCharts(root, co, d.financials || [], d.detail, prices);
-  extraCharts(root, co, d.financials || []);
+// "Tin tức & Sự kiện" — the original's last section on this view, a two-way
+// selector over company news and corporate events. Both come from the VCI
+// company endpoint, exported alongside the detailed financials.
+function newsEventsSection(parent, ne) {
+  const news = (ne && ne.news) || [], events = (ne && ne.events) || [];
+  if (!news.length && !events.length) return null;
 
-  if ((d.valuation_history || []).length > 2) {
-    const pv = el(`<div class="card"><h2 class="sec-h">Giá thị trường vs Định giá</h2><div id="pv-chart"></div></div>`);
-    root.appendChild(pv);
-    priceVsValueChart($("#pv-chart", pv), prices, d.valuation_history);
+  const relDate = (iso) => {
+    const d = new Date(String(iso).slice(0, 10));
+    if (isNaN(d)) return String(iso).slice(0, 10);
+    const days = Math.floor((Date.now() - d.getTime()) / 86400000);
+    const stamp = String(iso).slice(8, 10) + "/" + String(iso).slice(5, 7) + "/" + String(iso).slice(0, 4);
+    if (days <= 0) return `Hôm nay · ${stamp}`;
+    if (days === 1) return `Hôm qua · ${stamp}`;
+    if (days < 30) return `${days} ngày trước · ${stamp}`;
+    if (days < 365) return `${Math.floor(days / 30)} tháng trước · ${stamp}`;
+    return stamp;
+  };
+
+  const card = el(`<div class="card"><h2 class="sec-h">Tin tức &amp; Sự kiện</h2>
+    <div class="range-row ne-tabs"></div><div class="ne-list"></div></div>`);
+  parent.appendChild(card);
+  const list = card.querySelector(".ne-list");
+  const tabs = card.querySelector(".ne-tabs");
+  let active = news.length ? "news" : "events";
+
+  const draw = () => {
+    list.innerHTML = "";
+    const items = active === "news" ? news : events;
+    if (!items.length) {
+      list.innerHTML = `<div class="vb-note">${active === "news" ? "Không có tin tức gần đây." : "Không có sự kiện gần đây."}</div>`;
+      return;
+    }
+    for (const it of items) {
+      const title = F.escapeHtml(it.title || it.name || "");
+      const sub = active === "news"
+        ? [relDate(it.date), F.escapeHtml(it.source || "")].filter(Boolean).join(" · ")
+        : [relDate(it.date), F.escapeHtml(it.name || "")].filter(Boolean).join(" · ");
+      const body = it.link
+        ? `<a href="${F.escapeHtml(it.link)}" target="_blank" rel="noopener">${title}</a>`
+        : title;
+      list.appendChild(el(`<div class="ne-item"><div class="ne-t">${body}</div><div class="ne-d">${sub}</div></div>`));
+    }
+  };
+  for (const [key, label] of [["news", "📰 Tin tức"], ["events", "📅 Sự kiện công ty"]]) {
+    const b = el(`<button class="range-btn ${key === active ? "active" : ""}">${label}</button>`);
+    b.onclick = () => {
+      active = key;
+      tabs.querySelectorAll(".range-btn").forEach((x) => x.classList.remove("active"));
+      b.classList.add("active");
+      draw();
+    };
+    tabs.appendChild(b);
   }
+  draw();
+  return card;
 }
 
 // Price-header colour has FIVE states in the original, not three: a ceiling

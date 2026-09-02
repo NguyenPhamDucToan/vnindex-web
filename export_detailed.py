@@ -27,7 +27,7 @@ if _SIBLING.exists():
     sys.path.insert(0, str(_SIBLING))
 
 TICKER_DIR = Path(__file__).resolve().parent / "data" / "ticker"
-THROTTLE_S = 9.5          # 3 reports per ticker => ~19 requests/minute
+THROTTLE_S = 6.0          # 5 calls/ticker with inline sleeps => ~19 req/min
 
 # Only the line items the charts actually plot, so the JSON stays small. Keys
 # are our own names; values are the VCI item_ids to try in order (the API's
@@ -63,6 +63,44 @@ BALANCE_ITEMS = {
     "current_liabilities": ["current_liabilities"],
     "equity":             ["owners_equity", "equity"],
 }
+
+
+def fetch_news_events(ticker: str) -> dict:
+    """Latest news items and corporate events for the ticker, from VCI."""
+    import warnings
+    out = {"news": [], "events": []}
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            from vnstock import Company
+            co = Company(symbol=ticker, source="VCI")
+            try:
+                df = co.news()
+                if df is not None and not df.empty:
+                    for _, r in df.head(20).iterrows():
+                        out["news"].append({
+                            "title": str(r.get("news_title") or "")[:300],
+                            "source": str(r.get("news_source") or ""),
+                            "link": str(r.get("news_source_link") or ""),
+                            "date": str(r.get("public_date") or "")[:19],
+                        })
+            except Exception:
+                pass
+            time.sleep(2.0)
+            try:
+                df = co.events()
+                if df is not None and not df.empty:
+                    for _, r in df.head(20).iterrows():
+                        out["events"].append({
+                            "name": str(r.get("event_name_vi") or r.get("event_code") or "")[:200],
+                            "title": str(r.get("event_title_vi") or "")[:300],
+                            "date": str(r.get("display_date1") or "")[:19],
+                        })
+            except Exception:
+                pass
+    except (Exception, SystemExit):
+        pass
+    return out
 
 
 def _client(ticker: str):
@@ -165,6 +203,10 @@ def main() -> None:
             continue
         d = fetch_detail(f.stem)
         obj["detail"] = d
+        # News + events ride along on the same throttled pass rather than
+        # costing a second full sweep of the universe.
+        time.sleep(2.0)
+        obj["news_events"] = fetch_news_events(f.stem)
         f.write_text(json.dumps(obj, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
         done += 1
         if d is None:

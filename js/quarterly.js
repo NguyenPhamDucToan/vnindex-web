@@ -61,7 +61,7 @@ function yoy(vals) {
 
 // Appends the card to `parent` FIRST, then renders -- Plotly throws
 // (namespaceURI of null) if asked to draw into a detached node.
-export function quarterlyCharts(parent, co, financials, detail, prices) {
+export function quarterlyCharts(parent, co, financials, detail, prices, valHistory) {
   const all = quarters(financials);
   const qs = all.slice(-12);
   if (qs.length < 2) return null;
@@ -404,6 +404,49 @@ export function quarterlyCharts(parent, co, financials, detail, prices) {
         { type: "scatter", mode: "lines+markers", name: "P/B", x: x.slice(firstOk), y: pb.slice(firstOk), yaxis: "y2", line: { color: ORANGE, width: 1.6 }, marker: { size: 4 } },
       ], numAxis(base()));
     }
+  }
+
+  // The original's third tab also carries the projection and the price-vs-
+  // intrinsic-value chart; they are not separate cards at the end of the page.
+  const annual = (financials || []).filter((f) => f.period_type === "Y")
+    .sort((a, b) => String(a.period).localeCompare(String(b.period)));
+  if (annual.length >= 3) {
+    const yrs = annual.slice(-6);
+    const years = yrs.map((r) => String(r.period).slice(0, 4));
+    const rev = yrs.map((r) => (isN(r.revenue) ? r.revenue : null));
+    const ni = yrs.map((r) => (isN(r.net_income) ? r.net_income : null));
+    const cagr = (arr) => {
+      const v = arr.filter(isN);
+      if (v.length < 2) return 0;
+      const a = v[Math.max(0, v.length - 3)], b = v[v.length - 1], n = Math.min(3, v.length) - 1;
+      return (a > 0 && b > 0 && n > 0) ? Math.pow(b / a, 1 / n) - 1 : 0;
+    };
+    const gR = cagr(rev), gN = cagr(ni);
+    const pYears = [], pRev = [], pNi = [];
+    let lr = rev.filter(isN).slice(-1)[0] ?? 0, ln = ni.filter(isN).slice(-1)[0] ?? 0;
+    const lastY = parseInt(years[years.length - 1]) || new Date().getFullYear();
+    for (let i = 1; i <= 3; i++) { lr *= 1 + gR; ln *= 1 + gN; pYears.push(String(lastY + i)); pRev.push(lr); pNi.push(ln); }
+    const allY = [...years, ...pYears];
+    const pad = (a, before) => before ? [...a, ...new Array(3).fill(null)]
+                                      : [...new Array(years.length).fill(null), ...a];
+    add(`Dự báo kinh doanh (CAGR ${(gR * 100).toFixed(0)}%)`, [
+      { type: "bar", name: "Doanh thu", x: allY, y: pad(rev, true), marker: { color: BLUE } },
+      { type: "bar", name: "Lãi ròng", x: allY, y: pad(ni, true), marker: { color: LBLUE } },
+      { type: "bar", name: "DT dự phóng", x: allY, y: pad(pRev, false), marker: { color: BLUE, pattern: { shape: "/" } } },
+      { type: "bar", name: "LN dự phóng", x: allY, y: pad(pNi, false), marker: { color: LBLUE, pattern: { shape: "/" } } },
+    ], Object.assign(base(), { barmode: "group", xaxis: { type: "category", tickfont: { ...FONT, size: 9 }, showgrid: false } }));
+  }
+
+  if ((valHistory || []).length > 2 && (prices || []).length) {
+    const px = prices.slice(-500);
+    add("Giá so với giá trị nội tại", [
+      { type: "scatter", mode: "lines", name: "Giá thị trường",
+        x: px.map((r) => r.date), y: px.map((r) => r.close * 1000),
+        line: { color: BLUE, width: 1.5 }, fill: "tozeroy", fillcolor: "rgba(37,99,235,0.06)" },
+      { type: "scatter", mode: "lines", name: "DCF", connectgaps: true,
+        x: valHistory.map((r) => r.calc_date), y: valHistory.map((r) => r.dcf_estimate),
+        line: { color: RED, width: 1.5, dash: "dash" } },
+    ], Object.assign(base(), { xaxis: { tickfont: { ...FONT, size: 9 }, showgrid: false } }));
   }
 
   draw();
