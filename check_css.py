@@ -15,7 +15,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 # Structural / modifier classes that legitimately carry no rules of their own.
 ALLOWED = {"ff-cell", "fin-grid", "sh-left", "ta", "ta-ind", "ta-ma", "vpanel",
-           "hidden", "view", "card", "num", "sig", "dim", "gain", "loss", "flat"}
+           "ne-list", "hidden", "view", "card", "num", "sig", "dim", "gain",
+           "loss", "flat"}
 
 css = (ROOT / "css" / "styles.css").read_text(encoding="utf-8")
 defined = set(re.findall(r"\.([a-z][\w-]*)", css))
