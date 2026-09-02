@@ -93,6 +93,7 @@ def fetch_news_events(ticker: str) -> dict:
                     for _, r in df.head(20).iterrows():
                         out["events"].append({
                             "name": str(r.get("event_name_vi") or r.get("event_code") or "")[:200],
+                            "code": str(r.get("event_code") or ""),
                             "title": str(r.get("event_title_vi") or "")[:300],
                             "date": str(r.get("display_date1") or "")[:19],
                         })

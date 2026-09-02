@@ -26,6 +26,14 @@ class Handler(SimpleHTTPRequestHandler):
     def log_message(self, fmt, *args):      # keep the console quiet
         pass
 
+    def end_headers(self):
+        # The exported JSON is rewritten while background backfills run, so a
+        # cached copy shows stale (or missing) data long after it has landed.
+        # Browsers heuristically cache files served without any cache header.
+        if self.path.startswith("/data/") or self.path.endswith((".js", ".css")):
+            self.send_header("Cache-Control", "no-cache, must-revalidate")
+        super().end_headers()
+
 
 if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8777

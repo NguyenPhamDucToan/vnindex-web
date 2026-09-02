@@ -154,12 +154,65 @@ async function renderStock(t) {
   newsEventsSection(root, d.news_events);
 }
 
-// "Tin tức & Sự kiện" — the original's last section on this view, a two-way
-// selector over company news and corporate events. Both come from the VCI
-// company endpoint, exported alongside the detailed financials.
+// "Tin tức & Sự kiện" — the original's last section on this view. Both the
+// category badges and the left-border colours are the original's: a news item is
+// classified by keywords in its title, an event by its VCI category code, and
+// the border encodes recency so today's filings stand out from last month's.
+const NEWS_CATS = [
+  [["CỔ TỨC", "DIVIDEND", "CHI TRẢ", "CHỐT DANH SÁCH"], "Cổ tức", "#065f46", "#6ee7b7"],
+  [["ĐHCĐ", "ĐẠI HỘI", "HỌP", "NGHỊ QUYẾT", "BIÊN BẢN"], "ĐHCĐ", "#4c1d95", "#c4b5fd"],
+  [["GIAO DỊCH", "ĐĂNG KÝ MUA", "ĐĂNG KÝ BÁN", "NỘI BỘ", "CỔ ĐÔNG LỚN"], "Giao dịch", "#1e3a5f", "#60a5fa"],
+  [["BÁO CÁO", "BCTC", "TÀI CHÍNH", "KIỂM TOÁN", "KẾT QUẢ KD", "DOANH THU", "LỢI NHUẬN"], "BCTC", "#422006", "#fcd34d"],
+  [["PHÁT HÀNH", "TĂNG VỐN", "CHÀO BÁN", "ESOP"], "Phát hành", "#4a1942", "#f0abfc"],
+  [["THÔNG BÁO", "ĐIỀU LỆ", "ĐĂNG KÝ KINH DOANH", "THAY ĐỔI"], "Thông báo", "#1c2f3c", "#94a3b8"],
+];
+const EVENT_CATS = {
+  DIVIDEND:                  ["Cổ tức", "#fef3c7", "#92400e", "#f59e0b"],
+  MAJOR_SHAREHOLDER_TRADING: ["Giao dịch NB", "#dbeafe", "#1d4ed8", "#3b82f6"],
+  STOCK_ISSUANCE:            ["Phát hành", "#f5f3ff", "#6d28d9", "#a78bfa"],
+  BONUS_SHARE:               ["Thưởng CP", "#fff7ed", "#c2410c", "#fb923c"],
+  STOCK_LISTING:             ["Niêm yết", "#ecfdf5", "#065f46", "#10b981"],
+  SHAREHOLDER_MEETING:       ["Họp ĐHCĐ", "#eef2ff", "#4338ca", "#818cf8"],
+};
+
+function newsBadge(title) {
+  const t = (title || "").toUpperCase();
+  for (const [keys, label, bg, fg] of NEWS_CATS) {
+    if (keys.some((k) => t.includes(k))) return { label, bg, fg, border: fg };
+  }
+  return { label: null, bg: "#374151", fg: "#94a3b8", border: "#374151" };
+}
+
+function eventBadge(ev) {
+  const byCode = EVENT_CATS[(ev.code || "").toUpperCase()];
+  const cfg = byCode || (() => {
+    // Older exports carry no code; fall back to the Vietnamese event name.
+    const n = ((ev.name || "") + " " + (ev.title || "")).toUpperCase();
+    const HINT = { DIVIDEND: "CỔ TỨC", MAJOR_SHAREHOLDER_TRADING: "GIAO DỊCH",
+                   STOCK_ISSUANCE: "PHÁT HÀNH", BONUS_SHARE: "THƯỞNG",
+                   STOCK_LISTING: "NIÊM YẾT", SHAREHOLDER_MEETING: "ĐẠI HỘI" };
+    for (const [code, c] of Object.entries(EVENT_CATS)) {
+      if (n.includes(HINT[code])) return c;
+    }
+    return ["Sự kiện", "#f1f5f9", "#475569", "#94a3b8"];
+  })();
+  return { label: cfg[0], bg: cfg[1], fg: cfg[2], border: cfg[3] };
+}
+
+// Recency wins over category for the border: today red, this week orange/blue,
+// anything older keeps its category hue.
+function recencyBorder(iso, fallback) {
+  const d = new Date(String(iso).slice(0, 10));
+  if (isNaN(d)) return fallback;
+  const days = Math.floor((Date.now() - d.getTime()) / 86400000);
+  if (days <= 0) return "#ef4444";
+  if (days <= 3) return "#f97316";
+  if (days <= 7) return "#3b82f6";
+  return fallback;
+}
+
 function newsEventsSection(parent, ne) {
   const news = (ne && ne.news) || [], events = (ne && ne.events) || [];
-  if (!news.length && !events.length) return null;
 
   const relDate = (iso) => {
     const d = new Date(String(iso).slice(0, 10));
@@ -168,8 +221,7 @@ function newsEventsSection(parent, ne) {
     const stamp = String(iso).slice(8, 10) + "/" + String(iso).slice(5, 7) + "/" + String(iso).slice(0, 4);
     if (days <= 0) return `Hôm nay · ${stamp}`;
     if (days === 1) return `Hôm qua · ${stamp}`;
-    if (days < 30) return `${days} ngày trước · ${stamp}`;
-    if (days < 365) return `${Math.floor(days / 30)} tháng trước · ${stamp}`;
+    if (days <= 7) return `${days} ngày trước · ${stamp}`;
     return stamp;
   };
 
@@ -178,7 +230,7 @@ function newsEventsSection(parent, ne) {
   parent.appendChild(card);
   const list = card.querySelector(".ne-list");
   const tabs = card.querySelector(".ne-tabs");
-  let active = news.length ? "news" : "events";
+  let active = (!news.length && events.length) ? "events" : "news";
 
   const draw = () => {
     list.innerHTML = "";
@@ -188,25 +240,29 @@ function newsEventsSection(parent, ne) {
       return;
     }
     for (const it of items) {
+      const b = active === "news" ? newsBadge(it.title) : eventBadge(it);
+      const border = recencyBorder(it.date, b.border);
       const title = F.escapeHtml(it.title || it.name || "");
-      const sub = active === "news"
+      const body = it.link
+        ? `<a href="${F.escapeHtml(it.link)}" target="_blank" rel="noopener">${title}</a>` : title;
+      const badge = b.label
+        ? `<span class="ne-badge" style="background:${b.bg};color:${b.fg}">${b.label}</span>` : "";
+      const meta = active === "news"
         ? [relDate(it.date), F.escapeHtml(it.source || "")].filter(Boolean).join(" · ")
         : [relDate(it.date), F.escapeHtml(it.name || "")].filter(Boolean).join(" · ");
-      const body = it.link
-        ? `<a href="${F.escapeHtml(it.link)}" target="_blank" rel="noopener">${title}</a>`
-        : title;
-      list.appendChild(el(`<div class="ne-item"><div class="ne-t">${body}</div><div class="ne-d">${sub}</div></div>`));
+      list.appendChild(el(`<div class="ne-item" style="border-left-color:${border}">
+        <div class="ne-t">${badge}${body}</div><div class="ne-d">${meta}</div></div>`));
     }
   };
   for (const [key, label] of [["news", "📰 Tin tức"], ["events", "📅 Sự kiện công ty"]]) {
-    const b = el(`<button class="range-btn ${key === active ? "active" : ""}">${label}</button>`);
-    b.onclick = () => {
+    const btn = el(`<button class="range-btn ${key === active ? "active" : ""}">${label}</button>`);
+    btn.onclick = () => {
       active = key;
       tabs.querySelectorAll(".range-btn").forEach((x) => x.classList.remove("active"));
-      b.classList.add("active");
+      btn.classList.add("active");
       draw();
     };
-    tabs.appendChild(b);
+    tabs.appendChild(btn);
   }
   draw();
   return card;
