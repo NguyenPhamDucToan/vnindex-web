@@ -84,7 +84,7 @@ function yoy(vals) {
 
 // Appends the card to `parent` FIRST, then renders -- Plotly throws
 // (namespaceURI of null) if asked to draw into a detached node.
-export function quarterlyCharts(parent, co, financials, detail, prices, valHistory, model, lastClose) {
+export function quarterlyCharts(parent, co, financials, detail, prices, valHistory, model, lastClose, commodities) {
   const all = quarters(financials);
   const qs = all.slice(-12);
   if (qs.length < 2) return null;
@@ -552,9 +552,29 @@ export function quarterlyCharts(parent, co, financials, detail, prices, valHisto
     ["epv", "Earnings Power Value"], ["ps", "P/Sales"], ["ri", "Residual Income"],
     ["pocf", "Price/OCF"],
   ];
+  const commDef = commodities && commodities.sectors && commodities.sectors[co.sector];
+  const commSeries = (commodities && commodities.series) || {};
+  const commRows = commDef
+    ? [...commDef.input.map((t) => [...t, true]), ...commDef.output.map((t) => [...t, false])]
+        .filter(([sym]) => commSeries[sym])
+    : [];
+
   const vmM = (model && model.methods) || {};
   const vmPairs = VM_LABELS.filter(([k]) => isN(vmM[k]) && vmM[k] > 0);
-  if (vmPairs.length) {
+  if (commRows.length) {
+    // Each series is rebased to 100 at the start of the window, so the lines
+    // compare rate of change rather than absolute price. Inputs are dashed.
+    add(commDef.title, commRows.map(([sym, name, color, isInput]) => ({
+      type: "scatter", mode: "lines", name,
+      x: commodities.dates, y: commSeries[sym],
+      line: { color, width: 2, dash: isInput ? "dash" : "solid" },
+      hovertemplate: `${name}: %{y:.1f}<extra></extra>`,
+    })), Object.assign(base(), {
+      xaxis: { type: "category", tickangle: -45, nticks: 8, tickfont: { ...FONT, size: 9 } },
+      yaxis: { gridcolor: RULE, tickfont: { ...FONT, size: 9 },
+               title: { text: "Chỉ số (gốc=100)", font: { ...FONT, size: 10 } } },
+    }));
+  } else if (vmPairs.length) {
     const names = vmPairs.map(([, lab]) => lab);
     const vals = vmPairs.map(([k]) => vmM[k]);
     // Closes are stored in thousands VND; the methods return raw VND.

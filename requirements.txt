@@ -4,3 +4,5 @@
 pandas>=2.0
 SQLAlchemy>=2.0
 psycopg2-binary>=2.9
+# export_commodities.py only (Yahoo Finance futures for the chart-21 branch).
+yfinance>=0.2

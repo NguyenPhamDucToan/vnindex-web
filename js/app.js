@@ -1,4 +1,4 @@
-import { loadCompanies, loadScreener, loadTicker, loadMeta } from "./data.js";
+import { loadCompanies, loadScreener, loadTicker, loadMeta, loadCommodities } from "./data.js";
 import { priceChart } from "./charts.js";
 import { computeQualityScore, classifySignal, SIGNAL_VI, SIGNAL_COLOR, SIGNAL_ORDER } from "./signals.js";
 import { ratingColor } from "./ratings.js";
@@ -97,6 +97,8 @@ async function renderStock(t) {
   let d;
   try { d = await loadTicker(t); }
   catch { root.innerHTML = `<div class="loading">Không có dữ liệu cho ${t}.</div>`; return; }
+  // Optional dataset: the commodity chart is skipped, not fatal, when absent.
+  const commodities = await loadCommodities();
 
   const co = d.company, v = d.valuation || {}, prices = d.prices || [];
   const q = latestQ(d.financials || []);
@@ -141,7 +143,8 @@ async function renderStock(t) {
   // scorecard, and the projection / price-vs-value charts live inside the
   // report's third tab rather than as separate cards at the end.
   quarterlyCharts(root, co, d.financials || [], d.detail, prices, d.valuation_history,
-                  d.model, (prices && prices.length) ? prices[prices.length - 1].close : null);
+                  d.model, (prices && prices.length) ? prices[prices.length - 1].close : null,
+                  commodities);
 
   const ttm = computeTTM(d.financials || []);
   root.appendChild(scorecard(co, v, ttm));

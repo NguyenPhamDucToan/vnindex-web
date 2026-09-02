@@ -38,6 +38,20 @@ DATABASE_URL=postgresql://...  python export_data.py
 
 This is meant to run in the same GitHub Actions job as the daily refresh.
 
+Three companion exporters fill in data the DB doesn't hold:
+
+```bash
+python export_detailed.py            # 20-quarter income/balance detail + news
+python export_detailed.py --tickers SSI VCI   # ...or just one sector
+python export_commodities.py         # Yahoo Finance futures, rebased to 100
+```
+
+`export_commodities.py` backs the input/output price chart that 13 sectors show
+in the financial report's third tab. The original calls Yahoo live; the browser
+can't (no CORS), so the fetch happens here and lands in `data/commodities.json`.
+Re-run it whenever the data goes stale — the chart is skipped, not broken, when
+the file is missing.
+
 ## Run locally
 
 Browsers block ES modules over `file://`, and Windows' stdlib server mislabels
