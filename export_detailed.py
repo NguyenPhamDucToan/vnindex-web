@@ -96,7 +96,7 @@ def _series(df, ids, periods, scale=1e9):
     return None
 
 
-def _period_cols(df, limit=12):
+def _period_cols(df, limit=20):
     """Quarter columns like '2026-Q1', newest last."""
     if df is None or getattr(df, "empty", True):
         return []

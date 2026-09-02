@@ -23,10 +23,20 @@ function sma(vals, n) {
 
 // prices: [{date, open, high, low, close, volume}], already ascending.
 export function priceChart(el, prices, rangeDays = 365) {
+  // Moving averages need a run-up: computing them on the visible window alone
+  // leaves MA10 blank for 9 bars and MA50 for 49, so both lines visibly start
+  // mid-chart. Compute over a 60-bar lookback buffer, then trim to the window
+  // (the original does the same).
+  const LOOKBACK = 60;
+  const withBuf = prices.slice(-(rangeDays + LOOKBACK));
+  const closeBuf = withBuf.map((r) => r.close);
+  const ma10Buf = sma(closeBuf, 10), ma50Buf = sma(closeBuf, 50);
+
   const p = prices.slice(-rangeDays);
+  const cut = withBuf.length - p.length;
   const x = p.map((r) => r.date);
   const close = p.map((r) => r.close);
-  const ma10 = sma(close, 10), ma50 = sma(close, 50);
+  const ma10 = ma10Buf.slice(cut), ma50 = ma50Buf.slice(cut);
   const volColors = p.map((r) => (r.close >= r.open ? UP : DOWN));
 
   const traces = [

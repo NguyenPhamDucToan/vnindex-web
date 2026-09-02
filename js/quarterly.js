@@ -70,6 +70,10 @@ export function quarterlyCharts(parent, co, financials, detail, prices) {
   const col = (k) => qs.map((q) => (isN(q[k]) ? q[k] : null));
   const ratio = (a, b) => qs.map((q) => (isN(q[a]) && q[b] ? q[a] / q[b] : null));
   const derived = (fn) => qs.map((q) => { const v = fn(q); return isN(v) ? Math.max(0, v) : null; });
+  // YoY needs four quarters of lead-in: computing it on the trimmed window
+  // leaves the first four points null and the line visibly starts mid-chart.
+  // Compute across the full history first, then trim to the same window.
+  const yoyOf = (k) => yoy(all.map((q) => (isN(q[k]) ? q[k] : null))).slice(-qs.length);
 
   // The original groups these rows behind a three-way selector rather than
   // stacking them; same names, same membership, same default.
@@ -85,7 +89,27 @@ export function quarterlyCharts(parent, co, financials, detail, prices) {
   const registry = { "Kết quả KD": [], "Cân đối KT": [], "Dòng tiền & Tỷ số": [] };
   let bucket = TABS[0];
   const tab = (name) => { bucket = name; };
-  const add = (title, traces, layout) => registry[bucket].push({ title, traces, layout });
+  const add = (title, traces, layout) => {
+    // An all-null series draws nothing but still claims a legend entry, so drop
+    // it; if nothing survives, skip the chart entirely.
+    const live = traces.filter((tr) => !Array.isArray(tr.y) || tr.y.some(isN));
+    if (!live.length) return;
+
+    // Trim leading positions where EVERY series is empty -- otherwise a source
+    // that starts one quarter later than the price history leaves a blank
+    // column at the left edge. Positions where only SOME series are null are
+    // kept, so the projection chart's deliberate actual/forecast split stands.
+    const len = Math.max(...live.map((tr) => (Array.isArray(tr.y) ? tr.y.length : 0)));
+    let lead = 0;
+    while (lead < len && live.every((tr) => !Array.isArray(tr.y) || !isN(tr.y[lead]))) lead++;
+    if (lead > 0 && lead < len) {
+      for (const tr of live) {
+        if (Array.isArray(tr.y)) tr.y = tr.y.slice(lead);
+        if (Array.isArray(tr.x)) tr.x = tr.x.slice(lead);
+      }
+    }
+    registry[bucket].push({ title, traces: live, layout });
+  };
 
   let active = TABS[0];
   const draw = () => {
@@ -113,6 +137,15 @@ export function quarterlyCharts(parent, co, financials, detail, prices) {
   // `detail` is keyed by its own period list; align it to the quarters shown.
   const dIdx = detail && detail.periods
     ? qs.map((q) => detail.periods.indexOf(q.period)) : null;
+  const dYoY = (group, key) => {
+    if (!detail || !detail[group] || !detail[group][key] || !detail.periods) return null;
+    const full = yoy(detail[group][key]);
+    const out = qs.map((q) => {
+      const i = detail.periods.indexOf(q.period);
+      return i >= 0 && isN(full[i]) ? full[i] : null;
+    });
+    return out.some(isN) ? out : null;
+  };
   const dSeries = (group, key) => {
     if (!dIdx || !detail[group] || !detail[group][key]) return null;
     const src = detail[group][key];
@@ -123,13 +156,13 @@ export function quarterlyCharts(parent, co, financials, detail, prices) {
   // ── Row 1 — revenue, profit, margins ────────────────────────────
   add(isBank ? "Tổng thu nhập hoạt động" : "Doanh thu", [
     { type: "bar", name: isBank ? "Tổng TN hoạt động" : "Doanh thu", x, y: col("revenue"), marker: { color: BLUE } },
-    { type: "scatter", mode: "lines+markers", name: "Tăng trưởng YoY", x, y: yoy(col("revenue")),
+    { type: "scatter", mode: "lines+markers", name: "Tăng trưởng YoY", x, y: yoyOf("revenue"),
       yaxis: "y2", line: { color: ORANGE, width: 1.5 }, marker: { size: 4 } },
   ], pctAxis(base()));
 
   add("Lợi nhuận sau thuế", [
     { type: "bar", name: "Lợi nhuận sau thuế", x, y: col("net_income"), marker: { color: LBLUE } },
-    { type: "scatter", mode: "lines+markers", name: "Tăng trưởng YoY", x, y: yoy(col("net_income")),
+    { type: "scatter", mode: "lines+markers", name: "Tăng trưởng YoY", x, y: yoyOf("net_income"),
       yaxis: "y2", line: { color: ORANGE, width: 1.5 }, marker: { size: 4 } },
   ], pctAxis(base()));
 
@@ -174,7 +207,7 @@ export function quarterlyCharts(parent, co, financials, detail, prices) {
   if (finInc) {
     add("Doanh thu tài chính", [
       { type: "bar", name: "Doanh thu tài chính", x, y: finInc, marker: { color: GREEN } },
-      { type: "scatter", mode: "lines+markers", name: "Tăng trưởng YoY", x, y: yoy(finInc), yaxis: "y2", line: { color: ORANGE, width: 1.5 }, marker: { size: 4 } },
+      { type: "scatter", mode: "lines+markers", name: "Tăng trưởng YoY", x, y: dYoY("income", "financial_income"), yaxis: "y2", line: { color: ORANGE, width: 1.5 }, marker: { size: 4 } },
     ], pctAxis(base()));
   }
   if (finExp) {
@@ -218,7 +251,7 @@ export function quarterlyCharts(parent, co, financials, detail, prices) {
 
     add("Tiền gửi khách hàng", [
       { type: "bar", name: "Tiền gửi khách hàng", x, y: col("payables"), marker: { color: GREEN } },
-      { type: "scatter", mode: "lines+markers", name: "Tăng trưởng YoY", x, y: yoy(col("payables")), yaxis: "y2", line: { color: ORANGE, width: 1.5 }, marker: { size: 4 } },
+      { type: "scatter", mode: "lines+markers", name: "Tăng trưởng YoY", x, y: yoyOf("payables"), yaxis: "y2", line: { color: ORANGE, width: 1.5 }, marker: { size: 4 } },
     ], pctAxis(base()));
 
     add("Cấu trúc nguồn huy động", [
@@ -248,7 +281,7 @@ export function quarterlyCharts(parent, co, financials, detail, prices) {
 
     add("Dư nợ cho vay", [
       { type: "bar", name: "Dư nợ cho vay", x, y: col("receivables"), marker: { color: BLUE } },
-      { type: "scatter", mode: "lines+markers", name: "Tăng trưởng YoY", x, y: yoy(col("receivables")), yaxis: "y2", line: { color: ORANGE, width: 1.5 }, marker: { size: 4 } },
+      { type: "scatter", mode: "lines+markers", name: "Tăng trưởng YoY", x, y: yoyOf("receivables"), yaxis: "y2", line: { color: ORANGE, width: 1.5 }, marker: { size: 4 } },
     ], pctAxis(base()));
 
     add("Hệ số thanh khoản", [
@@ -361,10 +394,14 @@ export function quarterlyCharts(parent, co, financials, detail, prices) {
       pe.push(price && eps && eps > 0 ? price / eps : null);
       pb.push(price && bvps && bvps > 0 ? price / bvps : null);
     }
-    if (pe.some(isN) || pb.some(isN)) {
+    // The exported price history is ~2 years, so older quarters have no
+    // quarter-end close and would render as a line starting mid-chart. Trim the
+    // window to the quarters that actually have a multiple.
+    const firstOk = pe.findIndex((v, i) => isN(v) || isN(pb[i]));
+    if (firstOk >= 0) {
       add("Định giá (P/E & P/B)", [
-        { type: "scatter", mode: "lines+markers", name: "P/E", x, y: pe, line: { color: BLUE, width: 1.6 }, marker: { size: 4 } },
-        { type: "scatter", mode: "lines+markers", name: "P/B", x, y: pb, yaxis: "y2", line: { color: ORANGE, width: 1.6 }, marker: { size: 4 } },
+        { type: "scatter", mode: "lines+markers", name: "P/E", x: x.slice(firstOk), y: pe.slice(firstOk), line: { color: BLUE, width: 1.6 }, marker: { size: 4 } },
+        { type: "scatter", mode: "lines+markers", name: "P/B", x: x.slice(firstOk), y: pb.slice(firstOk), yaxis: "y2", line: { color: ORANGE, width: 1.6 }, marker: { size: 4 } },
       ], numAxis(base()));
     }
   }
