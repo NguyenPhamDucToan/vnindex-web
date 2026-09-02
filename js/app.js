@@ -125,7 +125,7 @@ async function renderStock(t) {
   const vp = valuationPanel(co, d.model || {}, F.isNum(last.close) ? last.close * 1000 : null);
   if (vp) right.appendChild(vp);
   const tp = technicalPanel(prices);
-  if (tp) right.appendChild(tp);
+  if (tp) { right.appendChild(tp); if (tp.renderGauge) tp.renderGauge(); }
 
   // These three live inside the left column in the original (col_chart), under
   // the price chart -- putting them full-width below the split left a tall gap

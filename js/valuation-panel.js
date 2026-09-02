@@ -163,6 +163,7 @@ export function technicalPanel(prices) {
 
   const card = el(`<div class="vpanel ta">
     <h2 class="sec-h vp-h">Phân tích kỹ thuật <span class="ta-sub">· 1 ngày</span></h2>
+    <div id="ta-gauge"></div>
     <div class="ta-verdict ${verdict[1]}">
       <div class="ta-verdict-v">${verdict[0]}</div>
       <div class="ta-verdict-s">${buys} mua · ${sells} bán trên ${total} tín hiệu</div>
@@ -182,5 +183,31 @@ export function technicalPanel(prices) {
     mb.appendChild(el(`<tr><td>${name}</td><td class="num">${F.isNum(s) ? F.priceVND(s) : "—"}</td>
       <td class="${sc} sig">${st}</td><td class="${ec} sig">${et}</td></tr>`));
   }
+
+  // Half-gauge summarising the signal balance, same bands and colours as the
+  // original's go.Indicator: -1 strong sell .. +1 strong buy.
+  card.renderGauge = () => {
+    window.Plotly.react(card.querySelector("#ta-gauge"), [{
+      type: "indicator", mode: "gauge+number", value: score,
+      number: { valueformat: ".2f", font: { size: 20 } },
+      gauge: {
+        axis: { range: [-1, 1], visible: false },
+        bar: { color: "rgba(0,0,0,0)" },
+        bgcolor: "rgba(0,0,0,0)",
+        steps: [
+          { range: [-1, -0.6], color: "#dc2626" },
+          { range: [-0.6, -0.2], color: "#f97316" },
+          { range: [-0.2, 0.2], color: "#eab308" },
+          { range: [0.2, 0.6], color: "#84cc16" },
+          { range: [0.6, 1], color: "#22c55e" },
+        ],
+        threshold: { line: { color: "white", width: 4 }, thickness: 0.85, value: score },
+      },
+    }], {
+      height: 150, margin: { l: 10, r: 10, t: 10, b: 0 },
+      paper_bgcolor: "rgba(0,0,0,0)",
+      font: { color: "#0f172a", family: "Source Sans 3, sans-serif" },
+    }, { displayModeBar: false, responsive: true });
+  };
   return card;
 }
