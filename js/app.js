@@ -140,7 +140,8 @@ async function renderStock(t) {
   // Order matches the original: the financial-report tabs come BEFORE the TTM
   // scorecard, and the projection / price-vs-value charts live inside the
   // report's third tab rather than as separate cards at the end.
-  quarterlyCharts(root, co, d.financials || [], d.detail, prices, d.valuation_history);
+  quarterlyCharts(root, co, d.financials || [], d.detail, prices, d.valuation_history,
+                  d.model, (prices && prices.length) ? prices[prices.length - 1].close : null);
 
   const ttm = computeTTM(d.financials || []);
   root.appendChild(scorecard(co, v, ttm));

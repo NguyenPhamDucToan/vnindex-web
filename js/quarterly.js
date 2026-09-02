@@ -84,11 +84,12 @@ function yoy(vals) {
 
 // Appends the card to `parent` FIRST, then renders -- Plotly throws
 // (namespaceURI of null) if asked to draw into a detached node.
-export function quarterlyCharts(parent, co, financials, detail, prices, valHistory) {
+export function quarterlyCharts(parent, co, financials, detail, prices, valHistory, model, lastClose) {
   const all = quarters(financials);
   const qs = all.slice(-12);
   if (qs.length < 2) return null;
   const isBank = co.sector === "Ngân hàng";
+  const isSec = co.sector === "Chứng khoán";
   const x = qs.map((q) => label(q.period));
   const col = (k) => qs.map((q) => (isN(q[k]) ? q[k] : null));
   const ratio = (a, b) => qs.map((q) => (isN(q[a]) && q[b] ? q[a] / q[b] : null));
@@ -277,9 +278,12 @@ export function quarterlyCharts(parent, co, financials, detail, prices, valHisto
       { type: "scatter", mode: "lines+markers", name: "Tăng trưởng YoY", x, y: yoyOf("payables"), yaxis: "y2", line: { color: GOLD, width: 1.5 }, marker: { size: 4 } },
     ], pctAxis(base()));
 
+    // Share of total funding, not absolute -- matches the original's fig_b3.
+    const fundTot = qs.map((q) => (q.payables || 0) + (q.debt || 0));
+    const fundPct = (k) => qs.map((q, i) => (fundTot[i] ? (q[k] || 0) / fundTot[i] * 100 : null));
     add("Cấu trúc nguồn huy động", [
-      { type: "bar", name: "Tiền gửi khách hàng", x, y: col("payables"), marker: { color: SKY} },
-      { type: "bar", name: "Vay liên NH & NHNN", x, y: col("debt"), marker: { color: NAVY} },
+      { type: "bar", name: "Tiền gửi khách hàng", x, y: fundPct("payables"), marker: { color: SKY} },
+      { type: "bar", name: "Liên ngân hàng & NHNN", x, y: fundPct("debt"), marker: { color: "#1e3a5f" } },
       { type: "bar", name: "Vốn chủ sở hữu", x, y: col("equity"), marker: { color: GREEN2} },
     ], Object.assign(base(), { barmode: "stack" }));
 
@@ -296,10 +300,19 @@ export function quarterlyCharts(parent, co, financials, detail, prices, valHisto
     ], pctY(base()));
 
     tab("Cân đối KT");
-    add("Cấu trúc tài sản", [
-      { type: "bar", name: "Tiền & TĐ tiền", x, y: col("cash"), marker: { color: CYAN} },
-      { type: "bar", name: "Cho vay khách hàng", x, y: col("receivables"), marker: { color: BLUE} },
-      { type: "bar", name: "Tài sản khác", x, y: derived((q) => q.total_assets - (q.cash || 0) - (q.receivables || 0)), marker: { color: VIOLET} },
+    add("Cơ cấu tài sản", [
+      { type: "bar", name: "Tiền mặt & NHNN", x, y: col("cash"), marker: { color: CYAN} },
+      { type: "bar", name: "Dư nợ cho vay", x, y: col("receivables"), marker: { color: BLUE} },
+      { type: "bar", name: "Chứng khoán & Khác", x, y: derived((q) => Math.max(0, q.total_assets - (q.cash || 0) - (q.receivables || 0))), marker: { color: VIOLET} },
+    ], Object.assign(base(), { barmode: "stack" }));
+
+    // Funding structure in absolute terms (the original's fig11b) -- a separate
+    // chart from the share-of-funding one that sits in the income tab.
+    add("Cơ cấu nguồn vốn", [
+      { type: "bar", name: "Tiền gửi khách hàng", x, y: col("payables"), marker: { color: SKY} },
+      { type: "bar", name: "Liên ngân hàng & NHNN", x, y: col("debt"), marker: { color: NAVY} },
+      { type: "bar", name: "Vốn chủ sở hữu", x, y: col("equity"), marker: { color: GREEN2} },
+      { type: "bar", name: "Nợ phải trả khác", x, y: derived((q) => Math.max(0, q.total_assets - (q.payables || 0) - (q.debt || 0) - (q.equity || 0))), marker: { color: GREY} },
     ], Object.assign(base(), { barmode: "stack" }));
 
     add("Dư nợ cho vay", [
@@ -307,11 +320,32 @@ export function quarterlyCharts(parent, co, financials, detail, prices, valHisto
       { type: "scatter", mode: "lines+markers", name: "Tăng trưởng YoY", x, y: yoyOf("receivables"), yaxis: "y2", line: { color: GOLD, width: 1.5 }, marker: { size: 4 } },
     ], pctAxis(base()));
 
-    add("Hệ số thanh khoản", [
-      { type: "scatter", mode: "lines+markers", name: "Cho vay / Tiền gửi", x, y: ratio("receivables", "payables"), line: { color: BLUE, width: 1.5 }, marker: { size: 4 } },
-      { type: "scatter", mode: "lines+markers", name: "Cho vay / Tổng TS", x, y: ratio("receivables", "total_assets"), line: { color: GREEN, width: 1.5 }, marker: { size: 4 } },
-      { type: "scatter", mode: "lines+markers", name: "Tiền / Tiền gửi", x, y: ratio("cash", "payables"), line: { color: CYAN, width: 1.5 }, marker: { size: 4 } },
+    add("Chỉ số thanh khoản", [
+      { type: "scatter", mode: "lines+markers", name: "LDR % (Vay/Huy động)", x, y: ratio("receivables", "payables"), line: { color: MARGIN, width: 2 }, marker: { size: 5 } },
+      { type: "scatter", mode: "lines+markers", name: "Dư nợ/Tổng tài sản %", x, y: ratio("receivables", "total_assets"), line: { color: SKY, width: 2 }, marker: { size: 5 } },
+      { type: "scatter", mode: "lines+markers", name: "Tiền mặt/Huy động %", x, y: ratio("cash", "payables"), line: { color: GREEN2, width: 2 }, marker: { size: 5 } },
     ], pctY(base()));
+
+    // Provision charge vs release. The original flags releases (negative
+    // provisions) with a star above the bar and colours them green.
+    const provB = qs.map((q) => (isN(q.cogs) ? q.cogs : null));
+    if (provB.some(isN)) {
+      add("Trích lập & hoàn nhập dự phòng", [
+        { type: "bar", name: "Chi phí dự phòng", x, y: provB,
+          marker: { color: provB.map((v) => ((v || 0) < 0 ? GREEN2 : RED)) },
+          text: provB.map((v) => ((v || 0) < 0 ? "★ HOÀN NHẬP" : "")),
+          textposition: "outside", textfont: { ...FONT, size: 10, color: GREEN2 } },
+        { type: "scatter", mode: "lines+markers", name: "Chi phí tín dụng % (năm hóa)", x,
+          y: qs.map((q) => (isN(q.cogs) && q.receivables ? q.cogs * 4 / q.receivables * 100 : null)),
+          yaxis: "y2", line: { color: GOLD, width: 2 }, marker: { size: 5 } },
+      ], Object.assign(pctAxis(base()), {
+        shapes: [{ type: "line", xref: "paper", x0: 0, x1: 1, y0: 0, y1: 0,
+                   line: { color: "#64748b", width: 1, dash: "dot" }, opacity: 0.5 }],
+        annotations: [{ text: "Xanh = Hoàn nhập | Đỏ = Trích lập mới", x: 0, xref: "paper",
+                        y: -0.28, yref: "paper", xanchor: "left", showarrow: false,
+                        font: { ...FONT, size: 10, color: GREY } }],
+      }));
+    }
 
     add("Chỉ số vốn", [
       { type: "scatter", mode: "lines+markers", name: "Vốn chủ / Tổng TS", x, y: ratio("equity", "total_assets"), line: { color: BLUE, width: 1.6 }, marker: { size: 4 } },
@@ -319,30 +353,41 @@ export function quarterlyCharts(parent, co, financials, detail, prices, valHisto
     ], numAxis(pctY(base())));
 
   } else {
-    add("Cơ cấu tài sản", [
-      { type: "bar", name: "Tiền", x, y: col("cash"), marker: { color: CYAN} },
-      { type: "bar", name: "Phải thu", x, y: col("receivables"), marker: { color: SKY} },
-      { type: "bar", name: "Tồn kho", x, y: col("inventory"), marker: { color: ORANGE} },
-      { type: "bar", name: "TS ngắn hạn khác", x, y: derived((q) => q.current_assets - (q.cash || 0) - (q.receivables || 0) - (q.inventory || 0)), marker: { color: LBLUE} },
-      { type: "bar", name: "TS dài hạn", x, y: derived((q) => q.total_assets - q.current_assets), marker: { color: GREY} },
+    add("Cấu trúc tài sản", [
+      { type: "bar", name: "Tiền & tương đương", x, y: col("cash"), marker: { color: CYAN} },
+      { type: "bar", name: "Phải thu", x, y: col("receivables"), marker: { color: ORANGE} },
+      { type: "bar", name: "Hàng tồn kho", x, y: col("inventory"), marker: { color: "#5cb85c" } },
+      { type: "bar", name: "TS ngắn hạn khác", x, y: derived((q) => Math.max(0, q.current_assets - (q.cash || 0) - (q.receivables || 0) - (q.inventory || 0))), marker: { color: "#9b59b6" } },
+      { type: "bar", name: "TS dài hạn", x, y: derived((q) => Math.max(0, q.total_assets - q.current_assets)), marker: { color: "#e74c3c" } },
     ], Object.assign(base(), { barmode: "stack" }));
 
     const stB = dSeries("balance", "st_borrowings"), ltB = dSeries("balance", "lt_borrowings");
-    add("Cơ cấu nguồn vốn", stB || ltB ? [
-      { type: "bar", name: "Vay ngắn hạn", x, y: stB, marker: { color: DRED} },
-      { type: "bar", name: "Vay dài hạn", x, y: ltB, marker: { color: AMBER} },
-      { type: "bar", name: "Phải trả & nợ khác", x, y: derived((q) => q.total_assets - q.equity - (q.debt || 0)), marker: { color: GREY} },
-      { type: "bar", name: "Vốn chủ", x, y: col("equity"), marker: { color: BLUE} },
+    const payT = dSeries("balance", "payables");
+    const otherLiab = qs.map((q, i) => {
+      const known = ((stB && stB[i]) || 0) + ((ltB && ltB[i]) || 0) + ((payT && payT[i]) || 0);
+      return isN(q.total_assets) && isN(q.equity)
+        ? Math.max(0, q.total_assets - q.equity - known) : null;
+    });
+    add("Cấu trúc nguồn vốn", stB || ltB ? [
+      { type: "bar", name: "Vốn chủ sở hữu", x, y: col("equity"), marker: { color: PE_GREEN} },
+      { type: "bar", name: "Vay dài hạn", x, y: ltB, marker: { color: "#d62728" } },
+      { type: "bar", name: "Vay ngắn hạn", x, y: stB, marker: { color: PB_ORANGE} },
+      ...(payT ? [{ type: "bar", name: "Phải trả người bán", x, y: payT, marker: { color: PRICE_BLUE} }] : []),
+      { type: "bar", name: "Nợ phải trả khác", x, y: otherLiab, marker: { color: VIOLET} },
     ] : [
       { type: "bar", name: "Nợ vay", x, y: col("debt"), marker: { color: DRED} },
       { type: "bar", name: "Nợ khác", x, y: derived((q) => q.total_assets - q.equity - (q.debt || 0)), marker: { color: AMBER} },
       { type: "bar", name: "Vốn chủ", x, y: col("equity"), marker: { color: BLUE} },
     ], Object.assign(base(), { barmode: "stack" }));
 
-    add("Chỉ số thanh khoản", [
-      { type: "scatter", mode: "lines+markers", name: "Current ratio", x, y: ratio("current_assets", "current_liabilities"), line: { color: BLUE, width: 1.5 }, marker: { size: 4 } },
-      { type: "scatter", mode: "lines+markers", name: "Quick ratio", x, y: qs.map((q) => (isN(q.current_assets) && q.current_liabilities ? (q.current_assets - (q.inventory || 0)) / q.current_liabilities : null)), line: { color: GREEN, width: 1.5 }, marker: { size: 4 } },
-    ], Object.assign(base(), { yaxis: { gridcolor: RULE, tickfont: { ...FONT, size: 9 }, tickformat: ".1f" } }));
+    add("Hệ số thanh khoản", [
+      { type: "scatter", mode: "lines+markers", name: "Current ratio", x, y: ratio("current_assets", "current_liabilities"), line: { color: GREEN2, width: 2 }, marker: { size: 5 } },
+      { type: "scatter", mode: "lines+markers", name: "Quick ratio", x, y: qs.map((q) => (isN(q.current_assets) && q.current_liabilities ? (q.current_assets - (q.inventory || 0)) / q.current_liabilities : null)), line: { color: MARGIN, width: 2 }, marker: { size: 5 } },
+      { type: "scatter", mode: "lines+markers", name: "Cash ratio", x, y: ratio("cash", "current_liabilities"), line: { color: SKY, width: 2 }, marker: { size: 5 } },
+    ], Object.assign(base(), {
+      yaxis: { gridcolor: RULE, tickfont: { ...FONT, size: 9 }, tickformat: ".1f", title: { text: "lần (x)", font: { ...FONT, size: 10 } } },
+      shapes: [{ type: "line", xref: "paper", x0: 0, x1: 1, y0: 1, y1: 1, line: { color: "#64748b", width: 1, dash: "dot" }, opacity: 0.5 }],
+    }));
 
     // ── Row 5 — receivables, inventory, leverage ──────────────────
     const recTrade = dSeries("balance", "receivables_trade");
@@ -357,6 +402,17 @@ export function quarterlyCharts(parent, co, financials, detail, prices, valHisto
       { type: "bar", name: "Phải thu", x, y: col("receivables"), marker: { color: SKY} },
       { type: "scatter", mode: "lines+markers", name: "% Tổng TS", x, y: ratio("receivables", "total_assets"), yaxis: "y2", line: { color: DRED, width: 1.5 }, marker: { size: 4 } },
     ], pctAxis(Object.assign(base(), { barmode: "relative" })));
+
+    const fvtpl = dSeries("balance", "fvtpl");
+    if (isSec && fvtpl) {
+      // QoQ, not YoY -- a trading book turns over far faster than inventory.
+      const qoq = fvtpl.map((v, i) => (i && isN(v) && fvtpl[i - 1] ? (v / fvtpl[i - 1] - 1) * 100 : null));
+      add("Danh mục tài sản tài chính", [
+        { type: "bar", name: "Tài sản tài chính (FVTPL/AFS)", x, y: fvtpl, marker: { color: BLUE} },
+        { type: "scatter", mode: "lines+markers", name: "Tăng trưởng QoQ %", x, y: qoq,
+          yaxis: "y2", line: { color: GOLD, width: 2 }, marker: { size: 5 } },
+      ], pctAxis(base()));
+    }
 
     const invGross = dSeries("balance", "inventory_gross"), provInv = dSeries("balance", "prov_inventory");
     add("Hàng tồn kho", invGross ? [
@@ -452,11 +508,20 @@ export function quarterlyCharts(parent, co, financials, detail, prices, valHisto
     const allY = [...years, ...pYears];
     const pad = (a, before) => before ? [...a, ...new Array(3).fill(null)]
                                       : [...new Array(years.length).fill(null), ...a];
-    add(`Dự báo kinh doanh (CAGR ${(gR * 100).toFixed(0)}%)`, [
-      { type: "bar", name: "Doanh thu", x: allY, y: pad(rev, true), marker: { color: PRICE_BLUE } },
-      { type: "bar", name: "Lợi nhuận sau thuế", x: allY, y: pad(ni, true), marker: { color: LBLUE } },
-      { type: "bar", name: "Doanh thu (DB)", x: allY, y: pad(pRev, false), marker: { color: PRICE_BLUE, pattern: { shape: "/" } } },
-      { type: "bar", name: "LNST (DB)", x: allY, y: pad(pNi, false), marker: { color: LBLUE, pattern: { shape: "/" } } },
+    // CAGR belongs in the hover, not the title -- the original titles this
+    // chart plainly and reports both growth rates on the projected bars.
+    const cr = (gR * 100).toFixed(1), cn = (gN * 100).toFixed(1);
+    add("Dự báo kinh doanh", [
+      { type: "bar", name: "Doanh thu", x: allY, y: pad(rev, true), marker: { color: PRICE_BLUE },
+        hovertemplate: "%{x}: %{y:,.0f} tỷ<extra></extra>" },
+      { type: "bar", name: "Lợi nhuận sau thuế", x: allY, y: pad(ni, true), marker: { color: LBLUE },
+        hovertemplate: "%{x}: %{y:,.0f} tỷ<extra></extra>" },
+      { type: "bar", name: "Doanh thu (DB)", x: allY, y: pad(pRev, false), showlegend: false,
+        marker: { color: PRICE_BLUE, opacity: 0.7, pattern: { shape: "/", size: 6, solidity: 0.4 } },
+        hovertemplate: `%{x}: %{y:,.0f} tỷ (CAGR ${cr}%)<extra></extra>` },
+      { type: "bar", name: "LNST (DB)", x: allY, y: pad(pNi, false), showlegend: false,
+        marker: { color: LBLUE, opacity: 0.7, pattern: { shape: "/", size: 6, solidity: 0.4 } },
+        hovertemplate: `%{x}: %{y:,.0f} tỷ (CAGR ${cn}%)<extra></extra>` },
       { type: "scatter", mode: "lines+markers", name: "Biên lợi nhuận thuần %", x: allY,
         y: [...years.map((_, k) => (isN(rev[k]) && rev[k] && isN(ni[k]) ? ni[k] / rev[k] : null)), null, null, null],
         yaxis: "y2", line: { color: MARGIN, width: 1.6 }, marker: { size: 4 } },
@@ -476,6 +541,44 @@ export function quarterlyCharts(parent, co, financials, detail, prices, valHisto
         x: valHistory.map((r) => r.calc_date), y: valHistory.map((r) => r.dcf_estimate),
         line: { color: DRED, width: 1.5, dash: "dash" } },
     ], Object.assign(base(), { xaxis: { tickfont: { ...FONT, size: 9 }, showgrid: false } }));
+  }
+
+  // The original's chart 21: every valuation method as a bar against the
+  // market price and the average estimate. (Its other branch, a commodity
+  // price index for ten input/output-driven sectors, needs a live feed.)
+  const VM_LABELS = [
+    ["dcf", "DCF / FCFF"], ["fcfe", "Cash Flow to Equity"], ["graham", "Graham Number"],
+    ["pe", "P/E Implied"], ["pb", "P/B Implied"], ["ev_ebitda", "EV/EBITDA"],
+    ["epv", "Earnings Power Value"], ["ps", "P/Sales"], ["ri", "Residual Income"],
+    ["pocf", "Price/OCF"],
+  ];
+  const vmM = (model && model.methods) || {};
+  const vmPairs = VM_LABELS.filter(([k]) => isN(vmM[k]) && vmM[k] > 0);
+  if (vmPairs.length) {
+    const names = vmPairs.map(([, lab]) => lab);
+    const vals = vmPairs.map(([k]) => vmM[k]);
+    // Closes are stored in thousands VND; the methods return raw VND.
+    const px = isN(lastClose) ? lastClose * 1000 : null;
+    const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+    const pct = (v) => (px ? `${v > px ? "+" : ""}${((v - px) / px * 100).toFixed(1)}%` : "");
+    const rule = (y, color, dash, label) => ({
+      type: "scatter", mode: "lines", x: names, y: names.map(() => y),
+      line: { color, width: 2, dash }, name: label,
+      hovertemplate: `${label}<extra></extra>`,
+    });
+    add("Các phương pháp định giá so với thị giá", [
+      { type: "bar", x: names, y: vals, name: "Định giá",
+        marker: { color: vals.map((v) => (px && v > px ? GREEN2 : RED)) },
+        text: vals.map(pct), textposition: "outside", textfont: { ...FONT, size: 11 },
+        hovertemplate: "%{x}: %{y:,.0f} VND<extra></extra>" },
+      ...(px ? [rule(px, MARGIN, "dash", `Thị giá ${Math.round(px).toLocaleString("en-US")}`)] : []),
+      rule(avg, "#f87171", "dot", `TB ước tính ${Math.round(avg).toLocaleString("en-US")}`),
+    ], Object.assign(base(), {
+      showlegend: false,
+      xaxis: { tickangle: -30, tickfont: { ...FONT, size: 9 } },
+      yaxis: { gridcolor: RULE, tickfont: { ...FONT, size: 9 },
+               title: { text: "VND", font: { ...FONT, size: 10 } } },
+    }));
   }
 
   draw();

@@ -59,7 +59,12 @@ BALANCE_ITEMS = {
     "total_assets":       ["total_assets"],
     "st_borrowings":      ["short_term_borrowings"],
     "lt_borrowings":      ["long_term_borrowings"],
-    "payables":           ["short_term_trade_payables", "payables"],
+    "payables":           ["trade_accounts_payable", "short_term_trade_payables", "payables"],
+    # Securities firms hold a trading book instead of inventory; the original
+    # charts it as "Danh mục tai san tai chinh" (FVTPL / AFS / trading book).
+    "fvtpl":              ["financial_assets_at_fair_value_through_profit_or_loss_fvtpl",
+                           "trading_securities", "trading_securities_2",
+                           "available_for_sale_financial_assets_afs"],
     "current_liabilities": ["current_liabilities"],
     "equity":             ["owners_equity", "equity"],
 }
@@ -193,6 +198,13 @@ def main() -> None:
     except Exception:
         pass
     files = sorted(TICKER_DIR.glob("*.json"), key=lambda f: (order.get(f.stem, 1), f.stem))
+    # --tickers A B C limits the run to those symbols (used to backfill a single
+    # sector after adding a field, instead of re-sweeping the whole universe).
+    if "--tickers" in sys.argv:
+        want = {t.upper() for t in sys.argv[sys.argv.index("--tickers") + 1:]
+                if not t.startswith("--")}
+        files = [f for f in files if f.stem.upper() in want]
+        refetch_all = True
     done = skipped = failed = 0
     for i, f in enumerate(files, 1):
         obj = json.loads(f.read_text(encoding="utf-8"))
