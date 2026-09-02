@@ -352,9 +352,33 @@ def main() -> None:
           f"foreign {len(market['foreign'])} sessions)")
 
     # ---- macro.json (curated headline indicators) ----------------------
-    _MACRO_KEYS = ["gdp_growth", "cpi_yoy", "credit_growth_total", "exchange_rate",
-                   "lending_rate", "deposit_rate", "trade_balance", "fdi",
-                   "retail_sales_growth", "unemployment_rate"]
+    # Every indicator the nine macro groups reference. Kept as one flat export;
+    # the front-end slices it into the same groups the original tabs use.
+    _MACRO_KEYS = [
+        # Tổng quan kinh tế
+        "gdp_growth", "cpi_yoy", "cpi_mom", "trade_balance", "retail_sales_growth", "fdi",
+        # Tăng trưởng kinh tế
+        "gdp_sector_agri", "gdp_sector_industry", "gdp_sector_services",
+        "wb_gdp_usd", "wb_gdp_per_capita", "wb_gdp_growth", "investment_growth",
+        "gdp_nominal_usd", "gdp_per_capita_usd",
+        # Giá cả & Lạm phát
+        "core_inflation_yoy", "cpi_food", "cpi_transport", "ppi_yoy",
+        # Đầu tư & Tiết kiệm
+        "wb_capital_formation", "wb_gross_savings", "wb_fdi",
+        # Xuất nhập khẩu
+        "exports", "imports", "wb_current_account_gdp", "wb_trade_pct_gdp",
+        # Lao động & Việc làm
+        "unemployment_rate", "underemployment_rate", "avg_income", "labor_force",
+        "wb_labor_participation", "wb_employment_ratio",
+        # Tiền tệ & Tỷ giá
+        "exchange_rate", "credit_growth_total", "credit_growth_industry",
+        "credit_growth_construction", "credit_growth_commerce",
+        "credit_growth_agri", "credit_growth_transport", "wb_broad_money_growth",
+        # Tiêu dùng
+        "wb_consumption_growth", "wb_consumption_gdp",
+        # Lãi suất
+        "lending_rate", "deposit_rate", "wb_real_interest_rate",
+    ]
     with engine.connect() as conn:
         macro = pd.read_sql(text(
             "SELECT indicator, period, value FROM macro_indicators "

@@ -1,4 +1,4 @@
-import { loadCompanies, loadScreener, loadTicker, loadMeta, loadMacro } from "./data.js";
+import { loadCompanies, loadScreener, loadTicker, loadMeta } from "./data.js";
 import { priceChart, priceVsValueChart } from "./charts.js";
 import { computeQualityScore, classifySignal, SIGNAL_VI, SIGNAL_COLOR, SIGNAL_ORDER } from "./signals.js";
 import { ratingColor } from "./ratings.js";
@@ -6,6 +6,8 @@ import { computeTTM } from "./ttm.js";
 import { quarterlyCharts, extraCharts, foreignSection } from "./quarterly.js";
 import { valuationPanel, technicalPanel } from "./valuation-panel.js";
 import { dupontSection, roicSection, peerSection, valuationBandSection } from "./sections.js";
+import { renderCompare } from "./compare.js";
+import { renderMacro } from "./macro.js";
 import * as F from "./format.js";
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -32,8 +34,11 @@ async function boot() {
 
 function buildNav() {
   const nav = $("#nav");
-  const views = [["stock", "Phân tích cổ phiếu"], ["screen", "Sàng lọc"], ["sector", "Phân tích ngành"],
-    ["market", "Tổng quan thị trường"], ["macro", "Vĩ mô"], ["portfolio", "Danh mục"]];
+  // The original ships five views; "Vĩ mô" is a sub-tab of Tổng quan Thị
+  // trường there, not a top-level entry. Danh mục is our own addition.
+  const views = [["stock", "Phân tích cổ phiếu"], ["screen", "Sàng lọc"],
+    ["compare", "So sánh cổ phiếu"], ["sector", "Phân tích ngành"],
+    ["market", "Tổng quan thị trường"], ["portfolio", "Danh mục"]];
   for (const [id, label] of views) {
     const a = el(`<button class="nav-item" data-view="${id}">${label}</button>`);
     a.onclick = () => showView(id);
@@ -49,7 +54,7 @@ function showView(id) {
   if (id === "sector") renderSector();
   if (id === "portfolio") renderPortfolio();
   if (id === "market") renderMarket();
-  if (id === "macro") renderMacro();
+  if (id === "compare") renderCompareView();
 }
 
 // ── ticker picker ───────────────────────────────────────────────────
@@ -760,8 +765,8 @@ let marketBuilt = false;
 async function renderMarket() {
   if (marketBuilt) return;
   marketBuilt = true;
-  const root = $("#view-market");
-  root.innerHTML = `<div class="loading">Đang tải…</div>`;
+  const view = $("#view-market");
+  view.innerHTML = `<div class="loading">Đang tải…</div>`;
   const [rows, market] = await Promise.all([
     loadScreener(),
     fetch("data/market.json").then((r) => r.json()).catch(() => ({ vnindex: [], foreign: [] })),
@@ -773,7 +778,30 @@ async function renderMarket() {
   const flat = withChg.length - up - down;
   const total = withChg.length || 1;
 
-  root.innerHTML = "";
+  view.innerHTML = "";
+
+  // The original splits this view into "Thị trường" and "Vĩ mô" sub-tabs.
+  const subtabs = el(`<div class="range-row mo-tabs">
+    <button class="range-btn active" data-sub="market">📊 Thị trường</button>
+    <button class="range-btn" data-sub="macro">📈 Vĩ mô</button></div>`);
+  view.appendChild(subtabs);
+  const mktPane = el(`<div id="mo-market"></div>`);
+  const macroPane = el(`<div id="mo-macro" class="hidden"></div>`);
+  view.appendChild(mktPane); view.appendChild(macroPane);
+  let macroLoaded = false;
+  subtabs.querySelectorAll(".range-btn").forEach((b) => {
+    b.onclick = async () => {
+      subtabs.querySelectorAll(".range-btn").forEach((x) => x.classList.remove("active"));
+      b.classList.add("active");
+      const isMacro = b.dataset.sub === "macro";
+      mktPane.classList.toggle("hidden", isMacro);
+      macroPane.classList.toggle("hidden", !isMacro);
+      // Lazy: the macro pane builds ~30 charts, so only on first open.
+      if (isMacro && !macroLoaded) { macroLoaded = true; await renderMacro(macroPane); }
+    };
+  });
+  // Market sections render into the first pane; `view` stays the shell.
+  const root = mktPane;
 
   // ── 1. VN-Index chart + advance/decline panel (3:1, as in the original) ──
   const top = el(`<div class="card split-31">
@@ -979,47 +1007,16 @@ async function renderMarket() {
   }
 }
 
-// ── macro view ──────────────────────────────────────────────────────
-const MACRO_LABELS = {
-  gdp_growth: "Tăng trưởng GDP (%)", cpi_yoy: "Lạm phát CPI (% YoY)",
-  credit_growth_total: "Tăng trưởng tín dụng (%)", exchange_rate: "Tỷ giá USD/VND",
-  lending_rate: "Lãi suất cho vay (%)", deposit_rate: "Lãi suất tiền gửi (%)",
-  trade_balance: "Cán cân thương mại (tr USD)", fdi: "FDI (tr USD)",
-  retail_sales_growth: "Tăng trưởng bán lẻ (%)", unemployment_rate: "Thất nghiệp (%)",
-};
-let macroBuilt = false;
-async function renderMacro() {
-  if (macroBuilt) return;
-  macroBuilt = true;
-  const root = $("#view-macro");
-  root.innerHTML = `<div class="loading">Đang tải…</div>`;
-  const macro = await loadMacro();
-  root.innerHTML = "";
-  const card = el(`<div class="card"><h2 class="sec-h">Kinh tế vĩ mô</h2><div class="qgrid"></div></div>`);
-  const grid = $(".qgrid", card);
-  root.appendChild(card);
-  const pending = [];
-  for (const key of Object.keys(MACRO_LABELS)) {
-    const series = (macro[key] || []).filter((d) => F.isNum(d.value));
-    if (series.length < 2) continue;
-    const box = el(`<div class="qchart"><div class="qtitle">${MACRO_LABELS[key]}</div><div></div></div>`);
-    grid.appendChild(box);
-    const canvas = box.lastElementChild;
-    const x = series.map((d) => String(d.period).slice(0, 10));
-    const y = series.map((d) => d.value);
-    pending.push(() => window.Plotly.react(canvas, [{
-      type: "scatter", mode: "lines", x, y, line: { color: "#2563eb", width: 1.5 },
-      fill: "tozeroy", fillcolor: "rgba(37,99,235,0.06)",
-      hovertemplate: "%{x}: %{y:,.2f}<extra></extra>",
-    }], {
-      height: 200, margin: { l: 48, r: 12, t: 8, b: 26 },
-      paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
-      font: { family: "'Fira Code', monospace", size: 9, color: "#0a121d" },
-      xaxis: { tickfont: { size: 8 }, nticks: 5, showgrid: false },
-      yaxis: { gridcolor: "rgba(148,163,184,0.22)", tickfont: { size: 8 } }, dragmode: false,
-    }, { displayModeBar: false, responsive: true }));
-  }
-  pending.forEach((fn) => fn());
+// ── stock comparison view ───────────────────────────────────────────
+let compareBuilt = false;
+async function renderCompareView() {
+  if (compareBuilt) return;
+  compareBuilt = true;
+  await renderCompare($("#view-compare"), selectTicker);
 }
+
+
+
+
 
 boot();
