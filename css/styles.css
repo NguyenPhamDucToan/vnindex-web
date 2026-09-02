@@ -331,3 +331,7 @@ table.screen tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--pri
    inheriting .qgrid's two columns left the chart at half width with dead space
    beside it. */
 .ff-grid { grid-template-columns: 1fr; }
+
+/* Price change badge — the original wraps the change in a tinted pill whose
+   hue encodes ceiling / up / flat / floor / down. */
+.sh-chgbadge { display: inline-block; padding: 3px 9px; border-radius: 4px; font-weight: 600; }

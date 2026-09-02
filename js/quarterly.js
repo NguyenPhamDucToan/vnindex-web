@@ -7,6 +7,9 @@ import { quarters } from "./ttm.js";
 const INK = "#0a121d", MUTED = "#5b6675", RULE = "rgba(148,163,184,0.22)";
 const BLUE = "#2563eb", LBLUE = "#7da7f5", ORANGE = "#ea580c", GREEN = "#15803d",
       RED = "#b91c1c", GREY = "#94a3b8";
+// Bright pair for marks that encode up/down (net-flow bars), matching the
+// original; GREEN/RED above stay for series fills and text.
+const MARK_UP = "#22c55e", MARK_DOWN = "#ef4444";
 const FONT = { family: "'Fira Code', ui-monospace, monospace", size: 10, color: INK };
 
 const isN = (v) => typeof v === "number" && isFinite(v);
@@ -253,7 +256,7 @@ export function foreignSection(parent, foreign) {
   const x = fx.map((d) => String(d.date).slice(5, 10).split("-").reverse().join("/"));
   const y = fx.map((d) => (isN(d.net_val) ? d.net_val / 1e9 : null));   // -> tỷ VND
   add("Khối ngoại mua/bán ròng (tỷ ₫) · 20 phiên", [
-    { type: "bar", x, y, marker: { color: y.map((v) => (v >= 0 ? GREEN : RED)) },
+    { type: "bar", x, y, marker: { color: y.map((v) => (v >= 0 ? MARK_UP : MARK_DOWN)) },
       hovertemplate: "%{x}: %{y:.2f} tỷ<extra></extra>" },
   ], Object.assign(base(), { yaxis: { gridcolor: RULE, tickfont: { ...FONT, size: 9 }, zeroline: true, zerolinecolor: MUTED } }));
 

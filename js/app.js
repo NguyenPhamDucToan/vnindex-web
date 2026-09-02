@@ -146,7 +146,7 @@ async function renderStock(t) {
   // Quarterly analysis charts (the "meat" rows) from the exported financials.
   // Appends itself to root, then renders (Plotly needs an attached node).
   quarterlyCharts(root, co, d.financials || []);
-  extraCharts(root, co, d.financials || [], d.foreign || []);
+  extraCharts(root, co, d.financials || []);
 
   if ((d.valuation_history || []).length > 2) {
     const pv = el(`<div class="card"><h2 class="sec-h">Giá thị trường vs Định giá</h2><div id="pv-chart"></div></div>`);
@@ -155,9 +155,33 @@ async function renderStock(t) {
   }
 }
 
+// Price-header colour has FIVE states in the original, not three: a ceiling
+// (tăng trần) and floor (sàn) print get their own hue, because on HOSE hitting
+// the band is a materially different event from an ordinary up/down day. The
+// band width is exchange-specific: HOSE 7%, HNX 10%, UPCOM 15%.
+const PRICE_STATES = {
+  ceiling: { c: "#7c3aed", bg: "#ede9fe", arrow: "▲" },
+  up:      { c: "#16a34a", bg: "#dcfce7", arrow: "▲" },
+  flat:    { c: "#b45309", bg: "#fef3c7", arrow: "—" },
+  floor:   { c: "#0e7490", bg: "#ecfeff", arrow: "▼" },
+  down:    { c: "#dc2626", bg: "#fee2e2", arrow: "▼" },
+};
+
+function priceState(exchange, close, prevClose) {
+  if (!F.isNum(close) || !F.isNum(prevClose) || !prevClose) return PRICE_STATES.flat;
+  const ex = String(exchange || "").toUpperCase();
+  const band = ex.includes("HNX") ? 0.10 : (ex.includes("UPCOM") || ex.includes("UPC")) ? 0.15 : 0.07;
+  const chg = close - prevClose;
+  if (close >= prevClose * (1 + band) * 0.9995) return PRICE_STATES.ceiling;
+  if (chg > 0) return PRICE_STATES.up;
+  if (chg === 0) return PRICE_STATES.flat;
+  if (close <= prevClose * (1 - band) * 1.0005) return PRICE_STATES.floor;
+  return PRICE_STATES.down;
+}
+
 function header(co, last, prev, chg, chgPct) {
-  const up = chg == null ? 0 : chg;
-  const cls = up > 0 ? "gain" : up < 0 ? "loss" : "flat";
+  const st = priceState(co.exchange, last.close, prev.close);
+  const cls = (chg ?? 0) > 0 ? "gain" : (chg ?? 0) < 0 ? "loss" : "flat";
   const rangePos = (F.isNum(last.low) && F.isNum(last.high) && last.high > last.low)
     ? ((last.close - last.low) / (last.high - last.low)) * 100 : 50;
   return el(`
@@ -168,8 +192,10 @@ function header(co, last, prev, chg, chgPct) {
         <div class="sh-sector">${F.escapeHtml(co.sector || "")}</div>
       </div>
       <div class="sh-right">
-        <div class="sh-price ${cls}">${F.priceVND(last.close)}</div>
-        <div class="sh-chg ${cls}">${chg == null ? "" : (chg >= 0 ? "▲" : "▼") + " " + F.priceVND(Math.abs(chg)) + " (" + F.pct(chgPct) + ")"}</div>
+        <div class="sh-price" style="color:${st.c}">${F.priceVND(last.close)}</div>
+        <div class="sh-chg">${chg == null ? "" :
+          `<span class="sh-chgbadge" style="color:${st.c};background:${st.bg}">` +
+          `${st.arrow} ${F.priceVND(Math.abs(chg))} (${F.pct(chgPct)})</span>`}</div>
         <div class="sh-range">
           <span>${F.priceVND(last.low)}</span>
           <div class="bar"><div class="fill ${cls}" style="width:${rangePos}%"></div><div class="dot" style="left:${rangePos}%"></div></div>
@@ -851,7 +877,7 @@ async function renderMarket() {
     window.Plotly.react($("#ff-mkt", c), [{
       type: "bar",
       x: ff.map((d) => String(d.date).slice(5).split("-").reverse().join("/")), y,
-      marker: { color: y.map((v) => (v >= 0 ? "#15803d" : "#b91c1c")) },
+      marker: { color: y.map((v) => (v >= 0 ? "#22c55e" : "#ef4444")) },
       hovertemplate: "%{x}: %{y:,.0f} tỷ<extra></extra>",
     }], {
       height: 300, dragmode: false, margin: { l: 60, r: 12, t: 8, b: 30 },
@@ -907,7 +933,7 @@ async function renderMarket() {
   window.Plotly.react($("#perf-chart", perfCard), [{
     type: "bar", orientation: "h",
     x: perf.map((p) => p[1]).reverse(), y: perf.map((p) => p[0]).reverse(),
-    marker: { color: perf.map((p) => (p[1] >= 0 ? "#15803d" : "#b91c1c")).reverse() },
+    marker: { color: perf.map((p) => (p[1] >= 0 ? "#22c55e" : "#ef4444")).reverse() },
     hovertemplate: "%{y}: %{x:.2%}<extra></extra>",
   }], {
     height: Math.max(320, perf.length * 20), dragmode: false,
@@ -941,7 +967,7 @@ async function renderMarket() {
       branchvalues: "remainder",
       marker: {
         colors: [...sectors.map(() => 0), ...top120.map((r) => Math.max(-0.07, Math.min(0.07, r.chg)))],
-        colorscale: [[0, "#b91c1c"], [0.5, "#f1f5f9"], [1, "#15803d"]],
+        colorscale: [[0, "#ef4444"], [0.5, "#f1f5f9"], [1, "#22c55e"]],
         cmin: -0.07, cmax: 0.07, line: { width: 1, color: "#fff" },
       },
       tiling: { pad: 2 },

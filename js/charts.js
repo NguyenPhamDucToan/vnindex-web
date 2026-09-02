@@ -3,7 +3,11 @@
 // pane, with categorical dates so weekends/holidays don't leave gaps.
 
 const INK = "#0a121d", MUTED = "#5b6675", RULE = "rgba(148,163,184,0.25)";
-const UP = "#15803d", DOWN = "#b91c1c";
+// Two-tier convention copied from the original: chart MARKS use the bright
+// pair, gain/loss TEXT uses the darker WCAG-safe pair. Mixing them up is what
+// made the candles read dull next to the original.
+const UP = "#22c55e", DOWN = "#ef4444";
+const MA10 = "#60a5fa", MA50 = "#fb923c";
 const FONT = { family: "'Fira Code', ui-monospace, monospace", size: 11, color: INK };
 
 function sma(vals, n) {
@@ -23,19 +27,21 @@ export function priceChart(el, prices, rangeDays = 365) {
   const x = p.map((r) => r.date);
   const close = p.map((r) => r.close);
   const ma10 = sma(close, 10), ma50 = sma(close, 50);
-  const volColors = p.map((r) => (r.close >= r.open ? "rgba(21,128,61,0.45)" : "rgba(185,28,28,0.45)"));
+  const volColors = p.map((r) => (r.close >= r.open ? UP : DOWN));
 
   const traces = [
     {
       type: "candlestick", x,
       open: p.map((r) => r.open), high: p.map((r) => r.high),
       low: p.map((r) => r.low), close,
-      increasing: { line: { color: UP } }, decreasing: { line: { color: DOWN } },
+      // Rising candles are filled; falling candles are hollow, as in the original.
+      increasing: { line: { color: UP }, fillcolor: UP },
+      decreasing: { line: { color: DOWN }, fillcolor: "rgba(0,0,0,0)" },
       name: "Giá", yaxis: "y", xaxis: "x",
       hoverlabel: { font: FONT },
     },
-    { type: "scatter", mode: "lines", x, y: ma10, line: { color: "#2563eb", width: 1 }, name: "MA10", yaxis: "y" },
-    { type: "scatter", mode: "lines", x, y: ma50, line: { color: "#ea580c", width: 1 }, name: "MA50", yaxis: "y" },
+    { type: "scatter", mode: "lines", x, y: ma10, line: { color: MA10, width: 1.5 }, name: "MA10", yaxis: "y" },
+    { type: "scatter", mode: "lines", x, y: ma50, line: { color: MA50, width: 1.5 }, name: "MA50", yaxis: "y" },
     { type: "bar", x, y: p.map((r) => r.volume), marker: { color: volColors }, name: "KL", yaxis: "y2", hoverinfo: "skip" },
   ];
 
