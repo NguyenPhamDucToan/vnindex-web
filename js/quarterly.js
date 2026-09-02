@@ -71,22 +71,51 @@ export function quarterlyCharts(parent, co, financials, detail, prices) {
   const ratio = (a, b) => qs.map((q) => (isN(q[a]) && q[b] ? q[a] / q[b] : null));
   const derived = (fn) => qs.map((q) => { const v = fn(q); return isN(v) ? Math.max(0, v) : null; });
 
-  const card = el(`<div class="card"><h2 class="sec-h">Phân tích theo quý</h2><div class="qgrid"></div></div>`);
-  const grid = card.querySelector(".qgrid");
+  // The original groups these rows behind a three-way selector rather than
+  // stacking them; same names, same membership, same default.
+  const TABS = ["Kết quả KD", "Cân đối KT", "Dòng tiền & Tỷ số"];
+  const card = el(`<div class="card"><h2 class="sec-h">Báo cáo tài chính</h2>
+    <div class="range-row fin-tabs"></div>
+    <div class="qgrid fin-grid"></div></div>`);
+  const tabRow = card.querySelector(".fin-tabs");
+  const grid = card.querySelector(".fin-grid");
   parent.appendChild(card);
-  const pending = [];
-  const add = (title, traces, layout) => {
-    const { box, canvas } = chartBox(title);
-    grid.appendChild(box);
-    pending.push(() => window.Plotly.react(canvas, traces, layout, { displayModeBar: false, responsive: true }));
+
+  // Charts register which tab they belong to; only the active tab is drawn.
+  const registry = { "Kết quả KD": [], "Cân đối KT": [], "Dòng tiền & Tỷ số": [] };
+  let bucket = TABS[0];
+  const tab = (name) => { bucket = name; };
+  const add = (title, traces, layout) => registry[bucket].push({ title, traces, layout });
+
+  let active = TABS[0];
+  const draw = () => {
+    grid.innerHTML = "";
+    const pend = [];
+    for (const c of registry[active]) {
+      const { box, canvas } = chartBox(c.title);
+      grid.appendChild(box);
+      pend.push(() => window.Plotly.react(canvas, c.traces, c.layout, { displayModeBar: false, responsive: true }));
+    }
+    if (!grid.children.length) grid.innerHTML = `<div class="loading">Chưa có dữ liệu cho nhóm này.</div>`;
+    pend.forEach((fn) => fn());
   };
+  for (const t of TABS) {
+    const btn = el(`<button class="range-btn ${t === active ? "active" : ""}">${t}</button>`);
+    btn.onclick = () => {
+      active = t;
+      tabRow.querySelectorAll(".range-btn").forEach((x) => x.classList.remove("active"));
+      btn.classList.add("active");
+      draw();
+    };
+    tabRow.appendChild(btn);
+  }
 
   // `detail` is keyed by its own period list; align it to the quarters shown.
   const dIdx = detail && detail.periods
     ? qs.map((q) => detail.periods.indexOf(q.period)) : null;
-  const dSeries = (bucket, key) => {
-    if (!dIdx || !detail[bucket] || !detail[bucket][key]) return null;
-    const src = detail[bucket][key];
+  const dSeries = (group, key) => {
+    if (!dIdx || !detail[group] || !detail[group][key]) return null;
+    const src = detail[group][key];
     const out = dIdx.map((i) => (i >= 0 && isN(src[i]) ? src[i] : null));
     return out.some(isN) ? out : null;
   };
@@ -175,30 +204,11 @@ export function quarterlyCharts(parent, co, financials, detail, prices) {
     }
   }
 
-  // ── Row 4 — balance-sheet structure ─────────────────────────────
+  // ── Cân đối KT ───────────────────────────────────────────────
+  tab("Cân đối KT");
   if (isBank) {
-    add("Cấu trúc tài sản", [
-      { type: "bar", name: "Tiền & TĐ tiền", x, y: col("cash"), marker: { color: GREEN } },
-      { type: "bar", name: "Cho vay khách hàng", x, y: col("receivables"), marker: { color: BLUE } },
-      { type: "bar", name: "Tài sản khác", x, y: derived((q) => q.total_assets - (q.cash || 0) - (q.receivables || 0)), marker: { color: GREY } },
-    ], Object.assign(base(), { barmode: "stack" }));
-
-    add("Cấu trúc nguồn huy động", [
-      { type: "bar", name: "Tiền gửi khách hàng", x, y: col("payables"), marker: { color: BLUE } },
-      { type: "bar", name: "Vay liên NH & NHNN", x, y: col("debt"), marker: { color: ORANGE } },
-      { type: "bar", name: "Vốn chủ sở hữu", x, y: col("equity"), marker: { color: GREEN } },
-    ], Object.assign(base(), { barmode: "stack" }));
-
-    add("Dư nợ cho vay", [
-      { type: "bar", name: "Dư nợ cho vay", x, y: col("receivables"), marker: { color: BLUE } },
-      { type: "scatter", mode: "lines+markers", name: "Tăng trưởng YoY", x, y: yoy(col("receivables")), yaxis: "y2", line: { color: ORANGE, width: 1.5 }, marker: { size: 4 } },
-    ], pctAxis(base()));
-
-    add("Tiền gửi khách hàng", [
-      { type: "bar", name: "Tiền gửi khách hàng", x, y: col("payables"), marker: { color: GREEN } },
-      { type: "scatter", mode: "lines+markers", name: "Tăng trưởng YoY", x, y: yoy(col("payables")), yaxis: "y2", line: { color: ORANGE, width: 1.5 }, marker: { size: 4 } },
-    ], pctAxis(base()));
-
+    // Income-side bank charts belong to Kết quả KD in the original.
+    tab("Kết quả KD");
     add("Thu nhập & chi phí lãi", [
       // Interest income isn't stored on its own; NII + interest expense recovers it.
       { type: "bar", name: "Thu nhập lãi", x, y: qs.map((q) => (isN(q.gross_profit) && isN(q.interest_expense) ? q.gross_profit + Math.abs(q.interest_expense) : null)), marker: { color: BLUE } },
@@ -206,11 +216,40 @@ export function quarterlyCharts(parent, co, financials, detail, prices) {
       { type: "scatter", mode: "lines+markers", name: "Thu nhập lãi thuần", x, y: col("gross_profit"), line: { color: GREEN, width: 1.6 }, marker: { size: 4 } },
     ], base());
 
+    add("Tiền gửi khách hàng", [
+      { type: "bar", name: "Tiền gửi khách hàng", x, y: col("payables"), marker: { color: GREEN } },
+      { type: "scatter", mode: "lines+markers", name: "Tăng trưởng YoY", x, y: yoy(col("payables")), yaxis: "y2", line: { color: ORANGE, width: 1.5 }, marker: { size: 4 } },
+    ], pctAxis(base()));
+
+    add("Cấu trúc nguồn huy động", [
+      { type: "bar", name: "Tiền gửi khách hàng", x, y: col("payables"), marker: { color: BLUE } },
+      { type: "bar", name: "Vay liên NH & NHNN", x, y: col("debt"), marker: { color: ORANGE } },
+      { type: "bar", name: "Vốn chủ sở hữu", x, y: col("equity"), marker: { color: GREEN } },
+    ], Object.assign(base(), { barmode: "stack" }));
+
     add("Cơ cấu thu nhập", [
       { type: "bar", name: "Thu nhập lãi thuần", x, y: col("gross_profit"), marker: { color: BLUE } },
       { type: "bar", name: "Thu ngoài lãi", x, y: qs.map((q) => (isN(q.revenue) && isN(q.gross_profit) ? q.revenue - q.gross_profit : null)), marker: { color: LBLUE } },
       { type: "scatter", mode: "lines+markers", name: "Tỷ trọng NII", x, y: ratio("gross_profit", "revenue"), yaxis: "y2", line: { color: ORANGE, width: 1.5 }, marker: { size: 4 } },
     ], pctAxis(Object.assign(base(), { barmode: "stack" })));
+
+    add("Các chỉ số sinh lời", [
+      { type: "scatter", mode: "lines+markers", name: "ROA (quý)", x, y: ratio("net_income", "total_assets"), line: { color: BLUE, width: 1.5 }, marker: { size: 4 } },
+      { type: "scatter", mode: "lines+markers", name: "ROE (quý)", x, y: ratio("net_income", "equity"), line: { color: GREEN, width: 1.5 }, marker: { size: 4 } },
+      { type: "scatter", mode: "lines+markers", name: "NIM (quý)", x, y: ratio("gross_profit", "total_assets"), line: { color: ORANGE, width: 1.5 }, marker: { size: 4 } },
+    ], pctY(base()));
+
+    tab("Cân đối KT");
+    add("Cấu trúc tài sản", [
+      { type: "bar", name: "Tiền & TĐ tiền", x, y: col("cash"), marker: { color: GREEN } },
+      { type: "bar", name: "Cho vay khách hàng", x, y: col("receivables"), marker: { color: BLUE } },
+      { type: "bar", name: "Tài sản khác", x, y: derived((q) => q.total_assets - (q.cash || 0) - (q.receivables || 0)), marker: { color: GREY } },
+    ], Object.assign(base(), { barmode: "stack" }));
+
+    add("Dư nợ cho vay", [
+      { type: "bar", name: "Dư nợ cho vay", x, y: col("receivables"), marker: { color: BLUE } },
+      { type: "scatter", mode: "lines+markers", name: "Tăng trưởng YoY", x, y: yoy(col("receivables")), yaxis: "y2", line: { color: ORANGE, width: 1.5 }, marker: { size: 4 } },
+    ], pctAxis(base()));
 
     add("Hệ số thanh khoản", [
       { type: "scatter", mode: "lines+markers", name: "Cho vay / Tiền gửi", x, y: ratio("receivables", "payables"), line: { color: BLUE, width: 1.5 }, marker: { size: 4 } },
@@ -223,11 +262,6 @@ export function quarterlyCharts(parent, co, financials, detail, prices) {
       { type: "scatter", mode: "lines+markers", name: "Đòn bẩy (TS/VCSH)", x, y: ratio("total_assets", "equity"), yaxis: "y2", line: { color: RED, width: 1.5 }, marker: { size: 4 } },
     ], numAxis(pctY(base())));
 
-    add("Các chỉ số sinh lời", [
-      { type: "scatter", mode: "lines+markers", name: "ROA (quý)", x, y: ratio("net_income", "total_assets"), line: { color: BLUE, width: 1.5 }, marker: { size: 4 } },
-      { type: "scatter", mode: "lines+markers", name: "ROE (quý)", x, y: ratio("net_income", "equity"), line: { color: GREEN, width: 1.5 }, marker: { size: 4 } },
-      { type: "scatter", mode: "lines+markers", name: "NIM (quý)", x, y: ratio("gross_profit", "total_assets"), line: { color: ORANGE, width: 1.5 }, marker: { size: 4 } },
-    ], pctY(base()));
   } else {
     add("Cơ cấu tài sản", [
       { type: "bar", name: "Tiền", x, y: col("cash"), marker: { color: GREEN } },
@@ -285,7 +319,8 @@ export function quarterlyCharts(parent, co, financials, detail, prices) {
     ], numAxis(Object.assign(base(), { barmode: "stack" })));
   }
 
-  // ── Row 6 — cash flow, dividends, valuation multiples ───────────
+  // ── Dòng tiền & Tỷ số ────────────────────────────────────────
+  tab("Dòng tiền & Tỷ số");
   add("Dòng tiền", [
     { type: "bar", name: "HĐ Kinh doanh", x, y: col("operating_cf"), marker: { color: GREEN } },
     { type: "bar", name: "HĐ Đầu tư", x, y: col("investing_cf"), marker: { color: ORANGE } },
@@ -334,7 +369,7 @@ export function quarterlyCharts(parent, co, financials, detail, prices) {
     }
   }
 
-  pending.forEach((fn) => fn());
+  draw();
   return card;
 }
 

@@ -143,7 +143,17 @@ def fetch_detail(ticker: str) -> dict | None:
 
 def main() -> None:
     refetch_all = "--all" in sys.argv
-    files = sorted(TICKER_DIR.glob("*.json"))
+    # Fetch the most-traded names first. Alphabetical order buries the tickers
+    # people actually open (VCB, VNM, ...) at the end of an hour-long run, so
+    # the charts appear last exactly where they are looked at first.
+    import json as _json
+    order = {}
+    try:
+        for r in _json.loads((TICKER_DIR.parent / "screener.json").read_text(encoding="utf-8")):
+            order[r["ticker"]] = -(r.get("vol") or 0)
+    except Exception:
+        pass
+    files = sorted(TICKER_DIR.glob("*.json"), key=lambda f: (order.get(f.stem, 1), f.stem))
     done = skipped = failed = 0
     for i, f in enumerate(files, 1):
         obj = json.loads(f.read_text(encoding="utf-8"))
