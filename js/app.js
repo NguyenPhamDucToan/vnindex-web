@@ -657,6 +657,56 @@ async function renderSector() {
   }
   pending.forEach((fn) => fn());
 
+  // ── 3. Quality vs upside scatter, coloured by sector ─────────────
+  const scat = el(`<div class="card"><h2 class="sec-h">Quality Score vs Upside %</h2>
+    <div class="vb-note">Góc trên-phải = chất lượng cao và còn rẻ. Mỗi điểm là một mã; màu theo ngành.</div>
+    <div id="sec-scatter"></div></div>`);
+  root.appendChild(scat);
+  const topSectors = [...agg].sort((a, b) => b.n - a.n).slice(0, 12).map((s) => s.sector);
+  const PAL = ["#2563eb", "#ea580c", "#15803d", "#7c3aed", "#0e7490", "#b91c1c",
+               "#ca8a04", "#0891b2", "#be185d", "#4d7c0f", "#7c2d12", "#475569"];
+  const scatTraces = topSectors.map((sec, i) => {
+    const pts = rows.filter((r) => r.sector === sec && F.isNum(r.q) && F.isNum(r.upFrac));
+    return {
+      type: "scatter", mode: "markers", name: sec,
+      x: pts.map((r) => Math.max(-100, Math.min(300, r.upFrac * 100))),
+      y: pts.map((r) => r.q),
+      text: pts.map((r) => r.ticker),
+      marker: { size: 8, color: PAL[i % PAL.length], opacity: 0.75 },
+      hovertemplate: "%{text}<br>Upside %{x:.0f}% · Quality %{y:.0f}<extra></extra>",
+    };
+  }).filter((t) => t.x.length);
+  window.Plotly.react($("#sec-scatter", scat), scatTraces, {
+    height: 460, dragmode: false, margin: { l: 54, r: 14, t: 10, b: 40 },
+    paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+    font: { family: "Fira Code, monospace", size: 10, color: "#0a121d" },
+    legend: { font: { size: 9 } },
+    xaxis: { title: { text: "Upside %", font: { size: 10 } }, gridcolor: "rgba(148,163,184,0.22)",
+             zeroline: true, zerolinecolor: "#94a3b8", ticksuffix: "%" },
+    yaxis: { title: { text: "Quality Score", font: { size: 10 } }, gridcolor: "rgba(148,163,184,0.22)", range: [0, 100] },
+    shapes: [{ type: "line", x0: 0, x1: 0, yref: "paper", y0: 0, y1: 1, line: { color: "#cbd5e1", width: 1, dash: "dot" } },
+             { type: "line", xref: "paper", x0: 0, x1: 1, y0: 50, y1: 50, line: { color: "#cbd5e1", width: 1, dash: "dot" } }],
+  }, { displayModeBar: false, responsive: true });
+
+  // ── 4. Top 5 per sector by model upside ──────────────────────────
+  const top5 = el(`<div class="card"><h2 class="sec-h">Top 5 mỗi Ngành — theo Upside</h2>
+    <div class="top5-grid"></div></div>`);
+  const t5grid = top5.querySelector(".top5-grid");
+  for (const s of [...agg].sort((a, b) => (b.up ?? -1e9) - (a.up ?? -1e9))) {
+    const best = rows.filter((r) => r.sector === s.sector && F.isNum(r.upFrac))
+      .sort((a, b) => b.upFrac - a.upFrac).slice(0, 5);
+    if (!best.length) continue;
+    const box = el(`<div class="t5-box"><div class="t5-h">${F.escapeHtml(s.sector)}</div></div>`);
+    for (const r of best) {
+      const row = el(`<div class="t5-row"><b>${r.ticker}</b>
+        <span style="color:${r.upFrac >= 0 ? "#15803d" : "#b91c1c"}">${fmtUpside(r.upFrac)}</span></div>`);
+      row.onclick = () => selectTicker(r.ticker);
+      box.appendChild(row);
+    }
+    t5grid.appendChild(box);
+  }
+  root.appendChild(top5);
+
   // ── 3. Sector summary table — same columns as the original ───────
   const tbl = el(`<div class="card"><h2 class="sec-h">Bảng tổng hợp theo Ngành</h2>
     <table class="screen"><thead><tr>

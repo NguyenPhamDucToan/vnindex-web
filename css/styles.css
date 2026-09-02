@@ -358,3 +358,10 @@ table.screen tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--pri
   .mv { overflow: hidden; text-overflow: ellipsis; }
   .cmp-pick input, #cmp-sugg { width: 100%; }
 }
+
+/* sector: top-5 per sector grid */
+.top5-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
+.t5-box { border: 1px solid var(--rule); border-radius: 4px; padding: 10px 12px; background: var(--paper); min-width: 0; }
+.t5-h { font-size: 11px; font-weight: 700; letter-spacing: .4px; color: var(--muted); text-transform: uppercase; margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.t5-row { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 12.5px; padding: 3px 0; cursor: pointer; border-radius: 3px; }
+.t5-row:hover { background: var(--paper-3); }
