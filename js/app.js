@@ -150,7 +150,7 @@ async function renderStock(t) {
 
   // Quarterly analysis charts (the "meat" rows) from the exported financials.
   // Appends itself to root, then renders (Plotly needs an attached node).
-  quarterlyCharts(root, co, d.financials || []);
+  quarterlyCharts(root, co, d.financials || [], d.detail, prices);
   extraCharts(root, co, d.financials || []);
 
   if ((d.valuation_history || []).length > 2) {
