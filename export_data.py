@@ -237,8 +237,8 @@ def main() -> None:
     sec_by_ticker = dict(zip(companies.ticker, companies.sector))
     name_by_ticker = dict(zip(companies.ticker, companies.name))
     screen_cols = ["ticker", "pe", "pb", "roe", "net_margin", "avg_intrinsic_value",
-                   "dcf_estimate", "upside_pct", "debt_to_equity", "current_ratio",
-                   "profit_quality", "fcf_margin"]
+                   "dcf_estimate", "fcfe_estimate", "graham_number", "upside_pct",
+                   "debt_to_equity", "current_ratio", "profit_quality", "fcf_margin"]
     screener = valuations[[c for c in screen_cols if c in valuations.columns]].copy()
     screener["name"] = screener.ticker.map(name_by_ticker)
     screener["sector"] = screener.ticker.map(sec_by_ticker)
@@ -335,6 +335,8 @@ def main() -> None:
     screener["model_price"] = screener.ticker.map(lambda t: model_out.get(t, {}).get("price"))
     screener["model_upside"] = screener.ticker.map(lambda t: model_out.get(t, {}).get("upside"))
     screener["chg"] = screener.ticker.map(lambda t: change_out.get(t, {}).get("chg"))
+    # Latest close, so the screener can show "Giá (VND)" like the original.
+    screener["close"] = screener.ticker.map(lambda t: change_out.get(t, {}).get("close"))
     screener["vol"] = screener.ticker.map(lambda t: change_out.get(t, {}).get("vol"))
     _write(OUT / "screener.json", _records(screener))
     print(f"  wrote screener.json ({len(screener)} rows)")

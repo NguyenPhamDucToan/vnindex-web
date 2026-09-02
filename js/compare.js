@@ -27,10 +27,19 @@ export async function renderCompare(root, onPick) {
   const screen = await loadScreener();
   const byTicker = new Map(screen.map((r) => [r.ticker, r]));
 
-  // Default set: a few liquid, well-covered names so the view isn't empty.
-  const preferred = ["VCB", "FPT", "VNM", "HPG"].filter((t) => byTicker.has(t));
-  let picked = preferred.length >= 2 ? preferred
-    : screen.slice().sort((a, b) => (b.vol ?? 0) - (a.vol ?? 0)).slice(0, 4).map((r) => r.ticker);
+  // Default to the ticker being viewed plus its most-traded sector peers, as the
+  // original does -- opening this on a steel stock should compare steel names,
+  // not a fixed blue-chip list.
+  const current = new URLSearchParams(location.search).get("ticker");
+  let picked;
+  const cur = current && byTicker.get(current);
+  if (cur && cur.sector) {
+    const peers = screen.filter((r) => r.sector === cur.sector && r.ticker !== current)
+      .sort((a, b) => (b.vol ?? 0) - (a.vol ?? 0)).slice(0, 3).map((r) => r.ticker);
+    picked = [current, ...peers];
+  } else {
+    picked = screen.slice().sort((a, b) => (b.vol ?? 0) - (a.vol ?? 0)).slice(0, 4).map((r) => r.ticker);
+  }
 
   root.innerHTML = "";
   const shell = el(`<div>
@@ -179,45 +188,68 @@ export async function renderCompare(root, onPick) {
       yaxis: { gridcolor: "rgba(148,163,184,0.22)", tickfont: { size: 9 } },
     }, { displayModeBar: false, responsive: true }));
 
-    // ── 4. Revenue & net income, five years ──────────────────────────
-    const annCard = card("Doanh thu & Lợi nhuận ròng (5 năm)", "cmp-annual");
+    // ── 4. Revenue, net income and revenue growth, five years ────────
     const years = [...new Set(data.flatMap((x) =>
       (x.d.financials || []).filter((f) => f.period_type === "Y").map((f) => String(f.period).slice(0, 4))))]
       .sort().slice(-5);
-    const annTraces = [];
-    data.forEach((x, i) => {
-      const ann = new Map((x.d.financials || []).filter((f) => f.period_type === "Y")
-        .map((f) => [String(f.period).slice(0, 4), f]));
-      annTraces.push({
-        type: "bar", name: `${x.t} · Doanh thu`, x: years,
-        y: years.map((y) => (ann.get(y) || {}).revenue ?? null),
-        marker: { color: SERIES[i % SERIES.length] },
-        hovertemplate: `${x.t} DT %{x}: %{y:,.0f} tỷ<extra></extra>`,
-      });
-      annTraces.push({
-        type: "scatter", mode: "lines+markers", name: `${x.t} · LN ròng`, x: years,
-        y: years.map((y) => (ann.get(y) || {}).net_income ?? null), yaxis: "y2",
-        line: { color: SERIES[i % SERIES.length], width: 1.6, dash: "dot" }, marker: { size: 5 },
-        hovertemplate: `${x.t} LN %{x}: %{y:,.0f} tỷ<extra></extra>`,
-      });
-    });
-    pending.push(() => window.Plotly.react(annCard.querySelector("#cmp-annual"), annTraces, {
-      height: 380, dragmode: false, barmode: "group", margin: { l: 58, r: 58, t: 26, b: 34 },
-      paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: FONT,
-      legend: { orientation: "h", y: 1.12, x: 0, font: { size: 9 } },
-      xaxis: { type: "category", showgrid: false, tickfont: { size: 10 } },
-      yaxis: { gridcolor: "rgba(148,163,184,0.22)", tickfont: { size: 9 },
-               title: { text: "Doanh thu (tỷ ₫)", font: { size: 10 } } },
-      yaxis2: { overlaying: "y", side: "right", showgrid: false, tickfont: { size: 9 },
-                title: { text: "LN ròng (tỷ ₫)", font: { size: 10 } } },
-      hovermode: "x unified",
-    }, { displayModeBar: false, responsive: true }));
+    const annOf = (x) => new Map((x.d.financials || []).filter((f) => f.period_type === "Y")
+      .map((f) => [String(f.period).slice(0, 4), f]));
 
-    // ── 5. Detail table ──────────────────────────────────────────────
+    const annCard = el(`<div class="card"><h2 class="sec-h">Doanh thu &amp; Lợi nhuận ròng (5 năm)</h2><div class="qgrid"></div></div>`);
+    body.appendChild(annCard);
+    const annualChart = (title, id, pick, suffix) => {
+      const box = el(`<div class="qchart"><div class="qtitle">${title}</div><div id="${id}"></div></div>`);
+      annCard.querySelector(".qgrid").appendChild(box);
+      const c = annCard;
+      const tr = data.map((x, i) => {
+        const ann = annOf(x);
+        return {
+          type: "bar", name: x.t, x: years, y: years.map((y) => pick(ann.get(y), ann, y)),
+          marker: { color: SERIES[i % SERIES.length] },
+          hovertemplate: `${x.t} %{x}: %{y:,.1f}${suffix}<extra></extra>`,
+        };
+      });
+      pending.push(() => window.Plotly.react(c.querySelector("#" + id), tr, {
+        height: 340, dragmode: false, barmode: "group", margin: { l: 58, r: 14, t: 26, b: 34 },
+        paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: FONT,
+        legend: { orientation: "h", y: 1.1, x: 0, font: { size: 10 } },
+        xaxis: { type: "category", showgrid: false, tickfont: { size: 10 } },
+        yaxis: { gridcolor: "rgba(148,163,184,0.22)", tickfont: { size: 9 }, ticksuffix: suffix },
+        hovermode: "x unified",
+      }, { displayModeBar: false, responsive: true }));
+    };
+    annualChart("Doanh thu (tỷ đồng)", "cmp-rev", (r) => (r && F.isNum(r.revenue) ? r.revenue : null), "");
+    annualChart("Lợi nhuận ròng (tỷ đồng)", "cmp-ni", (r) => (r && F.isNum(r.net_income) ? r.net_income : null), "");
+    annualChart("Tăng trưởng doanh thu YoY (%)", "cmp-growth", (r, ann, y) => {
+      const prev = ann.get(String(+y - 1));
+      return (r && prev && F.isNum(r.revenue) && F.isNum(prev.revenue) && prev.revenue)
+        ? (r.revenue - prev.revenue) / Math.abs(prev.revenue) * 100 : null;
+    }, "%");
+
+    // ── 5. Transposed metric table (one row per metric, one column per mã) ──
+    const MET = [
+      ["Giá", (x) => F.priceVND((x.d.prices || []).slice(-1)[0]?.close)],
+      ["P/E", (x) => F.mult(x.v.pe)], ["P/B", (x) => F.mult(x.v.pb)],
+      ["ROE", (x) => F.pct(x.v.roe)], ["Biên LN ròng", (x) => F.pct(x.v.net_margin)],
+      ["FCF Margin", (x) => F.pct(x.v.fcf_margin)], ["D/E", (x) => F.mult(x.v.debt_to_equity)],
+      ["Current ratio", (x) => F.mult(x.v.current_ratio)],
+      ["Avg Upside", (x) => (x.upFrac == null ? "—" : F.pctSigned(x.upFrac * 100))],
+      ["Quality", (x) => x.q.toFixed(0)],
+    ];
+    const tt = el(`<div class="card"><h2 class="sec-h">Bảng chỉ số theo mã</h2>
+      <div class="ta-scroll"><table class="screen"><thead><tr><th>Chỉ số</th>${
+        data.map((x) => `<th>${x.t}</th>`).join("")}</tr></thead><tbody></tbody></table></div></div>`);
+    for (const [name, fn] of MET) {
+      tt.querySelector("tbody").appendChild(el(`<tr><td class="dim">${name}</td>${
+        data.map((x) => `<td>${fn(x)}</td>`).join("")}</tr>`));
+    }
+    body.appendChild(tt);
+
+    // ── 6. Detail table ──────────────────────────────────────────────
     const tbl = el(`<div class="card"><h2 class="sec-h">Bảng so sánh chi tiết</h2>
       <table class="screen"><thead><tr>
         <th>Mã</th><th>Ngành</th><th>Giá</th><th>P/E</th><th>P/B</th><th>ROE</th>
-        <th>Biên LN ròng</th><th>D/E</th><th>Upside</th><th>Chất lượng</th><th>Tín hiệu</th>
+        <th>LN ròng</th><th>FCF Margin</th><th>D/E</th><th>CR</th><th>Avg Upside</th><th>Quality</th>
       </tr></thead><tbody></tbody></table></div>`);
     const tb = tbl.querySelector("tbody");
     for (const x of data) {
@@ -228,10 +260,10 @@ export async function renderCompare(root, onPick) {
         <td class="dim">${F.escapeHtml(x.sector || "")}</td>
         <td>${F.priceVND(lastC)}</td>
         <td>${F.mult(x.v.pe, 1)}</td><td>${F.mult(x.v.pb)}</td><td>${F.pct(x.v.roe)}</td>
-        <td>${F.pct(x.v.net_margin)}</td><td>${F.mult(x.v.debt_to_equity)}</td>
+        <td>${F.pct(x.v.net_margin)}</td><td>${F.pct(x.v.fcf_margin)}</td>
+        <td>${F.mult(x.v.debt_to_equity)}</td><td>${F.mult(x.v.current_ratio)}</td>
         <td style="color:${(x.upFrac ?? 0) >= 0 ? "#15803d" : "#b91c1c"}">${x.upFrac == null ? "—" : F.pctSigned(x.upFrac * 100)}</td>
-        <td>${x.q.toFixed(0)}</td>
-        <td>${x.sig ? `<span style="color:${SIGNAL_COLOR[x.sig]}">${SIGNAL_VI[x.sig]}</span>` : "—"}</td></tr>`);
+        <td>${x.q.toFixed(0)}</td></tr>`);
       if (onPick) tr.onclick = () => onPick(x.t);
       tb.appendChild(tr);
     }

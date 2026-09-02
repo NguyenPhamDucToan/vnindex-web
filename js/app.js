@@ -231,12 +231,29 @@ function metricsGrid(co, v, q, mcap, shares, vol15) {
 }
 
 // ── TTM ratio scorecard (from stored ratios) ────────────────────────
+// Each cell carries the original's hover card: the formula, one line on what
+// the number means, and the three thresholds it is graded against. Without it
+// the scorecard is a wall of figures with no way to ask "good or bad?".
+function tipHtml(t) {
+  if (!t || !t.f) return "";
+  const e = (x) => F.escapeHtml(x || "");
+  return `<div class="ttm-tooltip">
+    <div class="tt-f">${e(t.f)}</div>
+    <div class="tt-d">${e(t.d)}</div>
+    <div class="tt-bands">
+      <span><i style="background:#16a34a"></i>Tốt: ${e(t.g)}</span>
+      <span><i style="background:#d97706"></i>Cảnh báo: ${e(t.w)}</span>
+      <span><i style="background:#dc2626"></i>Nguy hiểm: ${e(t.b)}</span>
+    </div><div class="ttm-tt-arrow"></div></div>`;
+}
+
 function scoreRow(title, cells) {
   const row = el(`<div class="sc-block"><div class="sc-title">${title}</div><div class="sc-cells"></div></div>`);
   const wrap = $(".sc-cells", row);
   cells.forEach((c, i) => {
     const sep = i < cells.length - 1 ? "border-right:1px solid rgba(148,163,184,0.25);" : "";
-    wrap.appendChild(el(`<div class="sc-cell" style="${sep}">
+    wrap.appendChild(el(`<div class="sc-cell ttm-cell" style="${sep}">
+      ${tipHtml(c.tip)}
       <div class="sc-k">${c.label}</div>
       <div class="sc-v" style="color:${c.color}">${c.value}</div></div>`));
   });
@@ -253,13 +270,21 @@ function scorecard(co, v, ttm) {
   const div = (a, b) => (F.isNum(a) && b) ? a / b : null;
 
   card.appendChild(scoreRow("SINH LỜI", [
-    { label: isBank ? "Thu nhập lãi / Tổng TN" : "Biên LN gộp", value: F.pct(v.gross_margin), color: R(v.gross_margin, 0.25, 0.15) },
-    { label: isBank ? "Biên trước dự phòng" : "Biên hoạt động", value: F.pct(v.operating_margin), color: R(v.operating_margin, 0.15, 0.05) },
-    { label: "Biên LN ròng", value: F.pct(v.net_margin), color: R(v.net_margin, 0.10, 0.05) },
-    { label: "ROE", value: F.pct(v.roe), color: R(v.roe, 0.15, 0.10) },
+    { label: isBank ? "Thu nhập lãi / Tổng TN" : "Biên LN gộp", value: F.pct(v.gross_margin), color: R(v.gross_margin, 0.25, 0.15),
+      tip: { f: isBank ? "Thu nhập lãi thuần / Tổng thu nhập hoạt động" : "Lợi nhuận gộp / Doanh thu",
+             d: isBank ? "Bao nhiêu phần thu nhập đến từ cho vay. Thấp hơn nghĩa là nguồn thu đa dạng hơn (phí, ngoại hối, đầu tư)"
+                       : "Đo hiệu quả sản xuất cốt lõi trước chi phí vận hành",
+             g: "≥ 25%", w: "15 – 25%", b: "< 15%" } },
+    { label: isBank ? "Biên trước dự phòng" : "Biên hoạt động", value: F.pct(v.operating_margin), color: R(v.operating_margin, 0.15, 0.05),
+      tip: { f: isBank ? "Lợi nhuận trước dự phòng (PPOP) / Tổng thu nhập hoạt động" : "EBIT / Doanh thu",
+             d: isBank ? "Lãi còn lại sau chi phí vận hành nhưng trước khi trích lập dự phòng nợ xấu"
+                       : "Lợi nhuận sau chi phí bán hàng & quản lý, trước lãi vay và thuế",
+             g: "≥ 15%", w: "5 – 15%", b: "< 5%" } },
+    { label: "Biên LN ròng", value: F.pct(v.net_margin), color: R(v.net_margin, 0.10, 0.05) , tip: { f: "Lợi nhuận sau thuế / Doanh thu", d: "Tỷ suất sinh lời thực tế cuối cùng giữ lại cho cổ đông", g: "≥ 10%", w: "5 – 10%", b: "< 5%" } },
+    { label: "ROE", value: F.pct(v.roe), color: R(v.roe, 0.15, 0.10) , tip: { f: "Lợi nhuận ròng / Vốn chủ sở hữu", d: "Đo mức sinh lời trên đồng vốn cổ đông bỏ ra", g: "≥ 15%", w: "10 – 15%", b: "< 10%" } },
     // Banks earn 1-2% on a deposit-funded asset base by design; scoring against
     // the 8%/5% industrial band would paint every bank red.
-    { label: "ROA", value: F.pct(v.roa), color: isBank ? R(v.roa, 0.015, 0.010) : R(v.roa, 0.08, 0.05) },
+    { label: "ROA", value: F.pct(v.roa), color: isBank ? R(v.roa, 0.015, 0.010) : R(v.roa, 0.08, 0.05) , tip: { f: "Lợi nhuận ròng / Tổng tài sản", d: "Đo hiệu quả sử dụng toàn bộ tài sản", g: "≥ 8%", w: "5 – 8%", b: "< 5%" } },
   ]));
 
   if (isBank && ttm) {
@@ -273,45 +298,45 @@ function scorecard(co, v, ttm) {
     const cc = div(ttm.cogs != null ? Math.abs(ttm.cogs) : null, ttm.receivables);
     const ea = div(ttm.equity, ttm.total_assets);
     card.appendChild(scoreRow("HIỆU QUẢ & AN TOÀN NGÂN HÀNG", [
-      { label: "Biên lãi thuần (NIM)", value: F.pct(nim), color: R(nim, 0.030, 0.020) },
-      { label: "Chi phí / Thu nhập (CIR)", value: F.pct(cir), color: R(cir, 0.35, 0.50, false) },
-      { label: "Cho vay / Tiền gửi", value: F.pct(ldr), color: R(ldr, 1.00, 1.20, false) },
-      { label: "Chi phí tín dụng", value: F.pct(cc), color: R(cc, 0.010, 0.020, false) },
-      { label: "Vốn chủ / Tổng tài sản", value: F.pct(ea), color: R(ea, 0.09, 0.06) },
+      { label: "Biên lãi thuần (NIM)", value: F.pct(nim), color: R(nim, 0.030, 0.020) , tip: { f: "Thu nhập lãi thuần / Tổng tài sản", d: "Chênh lệch lãi cho vay và lãi huy động, tính trên toàn bộ tài sản. Đây là nguồn sống chính của ngân hàng", g: "≥ 3%", w: "2 – 3%", b: "< 2%" } },
+      { label: "Chi phí / Thu nhập (CIR)", value: F.pct(cir), color: R(cir, 0.35, 0.50, false) , tip: { f: "Chi phí hoạt động / Tổng thu nhập hoạt động", d: "Tốn bao nhiêu đồng chi phí để tạo ra 100 đồng thu nhập. Càng thấp càng vận hành hiệu quả", g: "≤ 35%", w: "35 – 50%", b: "> 50%" } },
+      { label: "Cho vay / Tiền gửi", value: F.pct(ldr), color: R(ldr, 1.00, 1.20, false) , tip: { f: "Dư nợ cho vay khách hàng / Tiền gửi khách hàng", d: "Cho vay ra bao nhiêu so với tiền huy động được. Lưu ý: đây không phải LDR theo quy định của NHNN", g: "≤ 100%", w: "100 – 120%", b: "> 120%" } },
+      { label: "Chi phí tín dụng", value: F.pct(cc), color: R(cc, 0.010, 0.020, false) , tip: { f: "Chi phí dự phòng rủi ro / Dư nợ cho vay", d: "Mỗi năm phải trích lập dự phòng bao nhiêu phần trăm dư nợ. Tăng lên là dấu hiệu chất lượng tài sản đi xuống", g: "≤ 1%", w: "1 – 2%", b: "> 2%" } },
+      { label: "Vốn chủ / Tổng tài sản", value: F.pct(ea), color: R(ea, 0.09, 0.06) , tip: { f: "Vốn chủ sở hữu / Tổng tài sản", d: "Đệm vốn tự có chống đỡ rủi ro. Mỏng thì chịu lỗ kém hơn khi nợ xấu tăng", g: "≥ 9%", w: "6 – 9%", b: "< 6%" } },
     ]));
     const lev = div(ttm.total_assets, ttm.equity);
     const dep = div(ttm.payables, ttm.total_assets);
     card.appendChild(scoreRow("CƠ CẤU VỐN & NGUỒN VỐN", [
-      { label: "Đòn bẩy (TS / VCSH)", value: F.mult(lev), color: R(lev, 12, 15, false) },
-      { label: "Tiền gửi KH / Tổng TS", value: F.pct(dep), color: R(dep, 0.60, 0.45) },
-      { label: "Vay liên NH / Vốn chủ", value: F.mult(v.debt_to_equity), color: R(v.debt_to_equity, 2, 4, false) },
+      { label: "Đòn bẩy (TS / VCSH)", value: F.mult(lev), color: R(lev, 12, 15, false) , tip: { f: "Tổng tài sản / Vốn chủ sở hữu", d: "Đòn bẩy thật của ngân hàng. Đây mới là con số phản ánh rủi ro, không phải D/E", g: "≤ 12x", w: "12 – 15x", b: "> 15x" } },
+      { label: "Tiền gửi KH / Tổng TS", value: F.pct(dep), color: R(dep, 0.60, 0.45) , tip: { f: "Tiền gửi khách hàng / Tổng tài sản", d: "Bao nhiêu phần nguồn vốn đến từ tiền gửi. Cao thì nguồn vốn ổn định và rẻ", g: "≥ 60%", w: "45 – 60%", b: "< 45%" } },
+      { label: "Vay liên NH / Vốn chủ", value: F.mult(v.debt_to_equity), color: R(v.debt_to_equity, 2, 4, false) , tip: { f: "Vay liên ngân hàng & NHNN / Vốn chủ sở hữu", d: "Mức phụ thuộc nguồn vốn bán buôn ngoài tiền gửi. Nguồn này rút nhanh hơn tiền gửi", g: "≤ 2x", w: "2 – 4x", b: "> 4x" } },
     ]));
   } else if (isSec && ttm) {
     // Brokers keep D/E (leverage is real risk) but drop FCF/profit-quality --
     // they run structurally negative OCF from growing the margin book.
     const ea = div(ttm.equity, ttm.total_assets);
     card.appendChild(scoreRow("THANH KHOẢN", [
-      { label: "Current ratio", value: F.mult(v.current_ratio), color: R(v.current_ratio, 2, 1) },
-      { label: "Quick ratio", value: F.mult(v.quick_ratio), color: R(v.quick_ratio, 1, 0.5) },
-      { label: "OCF / Nợ ngắn hạn", value: F.mult(v.ocf_to_current_liab), color: R(v.ocf_to_current_liab, 0.4, 0.2) },
+      { label: "Current ratio", value: F.mult(v.current_ratio), color: R(v.current_ratio, 2, 1) , tip: { f: "Tài sản ngắn hạn / Nợ ngắn hạn", d: "Khả năng trả nợ ngắn hạn bằng tài sản lưu động", g: "≥ 2x", w: "1 – 2x", b: "< 1x" } },
+      { label: "Quick ratio", value: F.mult(v.quick_ratio), color: R(v.quick_ratio, 1, 0.5) , tip: { f: "(Tài sản ngắn hạn − Hàng tồn kho) / Nợ ngắn hạn", d: "Loại trừ hàng tồn kho để đo thanh khoản thực tế hơn", g: "≥ 1x", w: "0.5 – 1x", b: "< 0.5x" } },
+      { label: "OCF / Nợ ngắn hạn", value: F.mult(v.ocf_to_current_liab), color: R(v.ocf_to_current_liab, 0.4, 0.2) , tip: { f: "Dòng tiền hoạt động / Nợ ngắn hạn", d: "Khả năng trả nợ từ tiền kinh doanh tạo ra", g: "≥ 0.4x", w: "0.2 – 0.4x", b: "< 0.2x" } },
     ]));
     card.appendChild(scoreRow("ĐÒN BẨY & AN TOÀN VỐN", [
-      { label: "Nợ / Vốn chủ (D/E)", value: F.mult(v.debt_to_equity), color: R(v.debt_to_equity, 1, 2, false) },
-      { label: "Nợ / Tổng tài sản", value: F.pct(v.debt_to_assets), color: R(v.debt_to_assets, 0.30, 0.60, false) },
-      { label: "Vốn chủ / Tổng tài sản", value: F.pct(ea), color: R(ea, 0.40, 0.25) },
+      { label: "Nợ / Vốn chủ (D/E)", value: F.mult(v.debt_to_equity), color: R(v.debt_to_equity, 1, 2, false) , tip: { f: "Tổng nợ vay / Vốn chủ sở hữu", d: "Mức độ đòn bẩy tài chính", g: "≤ 1x", w: "1 – 2x", b: "> 2x" } },
+      { label: "Nợ / Tổng tài sản", value: F.pct(v.debt_to_assets), color: R(v.debt_to_assets, 0.30, 0.60, false) , tip: { f: "Tổng nợ vay / Tổng tài sản", d: "Tỷ trọng nợ trong cơ cấu vốn", g: "≤ 30%", w: "30 – 60%", b: "> 60%" } },
+      { label: "Vốn chủ / Tổng tài sản", value: F.pct(ea), color: R(ea, 0.40, 0.25) , tip: { f: "Vốn chủ sở hữu / Tổng tài sản", d: "Đệm vốn tự có chống đỡ rủi ro. Mỏng thì chịu lỗ kém hơn khi nợ xấu tăng", g: "≥ 9%", w: "6 – 9%", b: "< 6%" } },
     ]));
   } else {
     card.appendChild(scoreRow("THANH KHOẢN", [
-      { label: "Current ratio", value: F.mult(v.current_ratio), color: R(v.current_ratio, 2, 1) },
-      { label: "Quick ratio", value: F.mult(v.quick_ratio), color: R(v.quick_ratio, 1, 0.5) },
-      { label: "OCF / Nợ ngắn hạn", value: F.mult(v.ocf_to_current_liab), color: R(v.ocf_to_current_liab, 0.4, 0.2) },
-      { label: "Đòn bẩy (TS/VCSH)", value: F.mult(v.financial_leverage), color: R(v.financial_leverage, 2.5, 4, false) },
+      { label: "Current ratio", value: F.mult(v.current_ratio), color: R(v.current_ratio, 2, 1) , tip: { f: "Tài sản ngắn hạn / Nợ ngắn hạn", d: "Khả năng trả nợ ngắn hạn bằng tài sản lưu động", g: "≥ 2x", w: "1 – 2x", b: "< 1x" } },
+      { label: "Quick ratio", value: F.mult(v.quick_ratio), color: R(v.quick_ratio, 1, 0.5) , tip: { f: "(Tài sản ngắn hạn − Hàng tồn kho) / Nợ ngắn hạn", d: "Loại trừ hàng tồn kho để đo thanh khoản thực tế hơn", g: "≥ 1x", w: "0.5 – 1x", b: "< 0.5x" } },
+      { label: "OCF / Nợ ngắn hạn", value: F.mult(v.ocf_to_current_liab), color: R(v.ocf_to_current_liab, 0.4, 0.2) , tip: { f: "Dòng tiền hoạt động / Nợ ngắn hạn", d: "Khả năng trả nợ từ tiền kinh doanh tạo ra", g: "≥ 0.4x", w: "0.2 – 0.4x", b: "< 0.2x" } },
+      { label: "Đòn bẩy (TS/VCSH)", value: F.mult(v.financial_leverage), color: R(v.financial_leverage, 2.5, 4, false) , tip: { f: "Tổng tài sản / Vốn chủ sở hữu", d: "Mỗi đồng vốn chủ đang gánh bao nhiêu đồng tài sản", g: "≤ 2.5x", w: "2.5 – 4x", b: "> 4x" } },
     ]));
     card.appendChild(scoreRow("ĐÒN BẨY & DÒNG TIỀN", [
-      { label: "Nợ / Vốn chủ (D/E)", value: F.mult(v.debt_to_equity), color: R(v.debt_to_equity, 1, 2, false) },
-      { label: "Nợ / Tổng tài sản", value: F.pct(v.debt_to_assets), color: R(v.debt_to_assets, 0.30, 0.60, false) },
-      { label: "Biên FCF", value: F.pct(v.fcf_margin), color: R(v.fcf_margin, 0.10, 0.0) },
-      { label: "Chất lượng LN", value: F.mult(v.profit_quality), color: R(v.profit_quality, 1, 0.8) },
+      { label: "Nợ / Vốn chủ (D/E)", value: F.mult(v.debt_to_equity), color: R(v.debt_to_equity, 1, 2, false) , tip: { f: "Tổng nợ vay / Vốn chủ sở hữu", d: "Mức độ đòn bẩy tài chính", g: "≤ 1x", w: "1 – 2x", b: "> 2x" } },
+      { label: "Nợ / Tổng tài sản", value: F.pct(v.debt_to_assets), color: R(v.debt_to_assets, 0.30, 0.60, false) , tip: { f: "Tổng nợ vay / Tổng tài sản", d: "Tỷ trọng nợ trong cơ cấu vốn", g: "≤ 30%", w: "30 – 60%", b: "> 60%" } },
+      { label: "Biên FCF", value: F.pct(v.fcf_margin), color: R(v.fcf_margin, 0.10, 0.0) , tip: { f: "Dòng tiền tự do (FCF) / Doanh thu", d: "Khả năng tạo tiền thực sau đầu tư CAPEX", g: "≥ 10%", w: "0 – 10%", b: "< 0%" } },
+      { label: "Chất lượng LN", value: F.mult(v.profit_quality), color: R(v.profit_quality, 1, 0.8) , tip: { f: "Dòng tiền hoạt động / Lợi nhuận ròng", d: "> 1x: lợi nhuận được bảo chứng bằng tiền mặt thực", g: "≥ 1x", w: "0.8 – 1x", b: "< 0.8x" } },
     ]));
     // Property developers hold years of project inventory by design, so the
     // DIO/CCC bands widen for them.
@@ -319,10 +344,10 @@ function scorecard(co, v, ttm) {
     const cccGood = isRE ? 1095 : 50, cccWarn = isRE ? 1825 : 90;
     const cic = v.cash_interest_coverage;
     card.appendChild(scoreRow("VÒNG QUAY VỐN & AN TOÀN NỢ", [
-      { label: "Chu kỳ tiền mặt (CCC)", value: F.days(v.ccc), color: R(v.ccc, cccGood, cccWarn, false) },
-      { label: "Ngày thu tiền (DSO)", value: F.days(v.dso), color: R(v.dso, 30, 60, false) },
-      { label: "Ngày tồn kho (DIO)", value: F.days(v.dio), color: R(v.dio, dioGood, dioWarn, false) },
-      { label: "Tiền mặt trả lãi vay", value: F.isNum(cic) && cic > 100 ? "Không vay nợ" : F.mult(cic), color: F.isNum(cic) && cic > 100 ? "#16a34a" : R(cic, 5, 3) },
+      { label: "Chu kỳ tiền mặt (CCC)", value: F.days(v.ccc), color: R(v.ccc, cccGood, cccWarn, false) , tip: { f: "Số ngày thu tiền + tồn kho − số ngày trả người bán", d: "Tiền bị kẹt trong vòng quay kinh doanh bao lâu trước khi quay về. Càng ngắn càng tốt", g: "≤ 50 ngày", w: "50 – 90 ngày", b: "> 90 ngày" } },
+      { label: "Ngày thu tiền (DSO)", value: F.days(v.dso), color: R(v.dso, 30, 60, false) , tip: { f: "Phải thu × 365 / Doanh thu", d: "Bán xong bao lâu mới thu được tiền. Tăng dần qua các quý = khách hàng trả chậm hơn", g: "≤ 30 ngày", w: "30 – 60 ngày", b: "> 60 ngày" } },
+      { label: "Ngày tồn kho (DIO)", value: F.days(v.dio), color: R(v.dio, dioGood, dioWarn, false) , tip: { f: "Hàng tồn kho × 365 / Giá vốn", d: "Hàng nằm kho bao lâu mới bán được. Phình lên = hàng khó tiêu thụ", g: "≤ 50 ngày", w: "50 – 100 ngày", b: "> 100 ngày" } },
+      { label: "Tiền mặt trả lãi vay", value: F.isNum(cic) && cic > 100 ? "Không vay nợ" : F.mult(cic), color: F.isNum(cic) && cic > 100 ? "#16a34a" : R(cic, 5, 3) , tip: { f: "Dòng tiền hoạt động / Chi phí lãi vay", d: "Tiền thật kiếm được gấp bao nhiêu lần tiền lãi phải trả. Trên 100x nghĩa là gần như không vay", g: "≥ 5x", w: "3 – 5x", b: "< 3x" } },
     ]));
   }
 
@@ -442,9 +467,10 @@ async function renderScreener() {
   const sectors = [...new Set(rows.map((r) => r.sector).filter(Boolean))].sort();
 
   root.innerHTML = "";
+  root.appendChild(el(`<h2 class="view-title">Sàng lọc Cổ phiếu</h2>`));
   // Filter set mirrors the original's sidebar sliders (Avg Upside, Max P/E,
   // Max P/B, ROE, Net margin, Quality, D/E) plus sector and signal.
-  const card = el(`<div class="card"><h2 class="sec-h">Sàng lọc cổ phiếu</h2>
+  const card = el(`<div class="card"><h2 class="sec-h">Lọc cổ phiếu</h2>
     <div class="sig-counts" id="sig-counts"></div>
     <div class="filters">
       <label>Ngành <select id="f-sector"><option value="">Tất cả</option>${sectors.map((s) => `<option>${F.escapeHtml(s)}</option>`).join("")}</select></label>
@@ -459,9 +485,11 @@ async function renderScreener() {
       <button id="f-reset" class="range-btn">Xóa lọc</button>
       <span id="f-count" class="fcount"></span>
     </div>
-    <table class="screen"><thead><tr>
-      <th>Mã</th><th>Ngành</th><th>P/E</th><th>P/B</th><th>ROE</th>
-      <th>Upside</th><th>Chất lượng</th><th>Tín hiệu</th></tr></thead><tbody></tbody></table></div>`);
+    <div class="ta-scroll"><table class="screen screen-wide"><thead><tr>
+      <th>Mã</th><th>Tín hiệu</th><th>Ngành</th><th>Giá (VND)</th><th>Avg Estimate</th>
+      <th>Avg Upside</th><th>DCF Estimate</th><th>FCFE Estimate</th><th>Upside</th>
+      <th>Quality</th><th>Graham Number</th><th>P/E</th><th>P/B</th><th>Biên LN ròng</th>
+    </tr></thead><tbody></tbody></table></div></div>`);
   root.appendChild(card);
   const tb = $("tbody", card);
 
@@ -499,11 +527,18 @@ async function renderScreener() {
     for (const r of out) {
       const tr = el(`<tr>
         <td><b>${r.ticker}</b></td>
+        <td>${r.sig ? `<span style="color:${SIGNAL_COLOR[r.sig]}">${SIGNAL_VI[r.sig]}</span>` : "—"}</td>
         <td class="dim">${F.escapeHtml(r.sector || "")}</td>
-        <td>${F.mult(r.pe)}</td><td>${F.mult(r.pb)}</td><td>${F.pct(r.roe)}</td>
+        <td>${F.priceVND(r.close)}</td>
+        <td>${F.rawVND(r.avg_intrinsic_value)}</td>
         <td style="color:${(r.upFrac ?? 0) >= 0 ? "#15803d" : "#b91c1c"}">${fmtUpside(r.upFrac)}</td>
+        <td>${F.rawVND(r.dcf_estimate)}</td>
+        <td>${F.rawVND(r.fcfe_estimate)}</td>
+        <td style="color:${(r.upside_pct ?? 0) >= 0 ? "#15803d" : "#b91c1c"}">${fmtUpside(r.upside_pct)}</td>
         <td>${r.q.toFixed(0)}</td>
-        <td>${r.sig ? `<span style="color:${SIGNAL_COLOR[r.sig]}">${SIGNAL_VI[r.sig]}</span>` : "—"}</td></tr>`);
+        <td>${F.rawVND(r.graham_number)}</td>
+        <td>${F.mult(r.pe)}</td><td>${F.mult(r.pb)}</td>
+        <td>${F.pct(r.net_margin)}</td></tr>`);
       tr.onclick = () => selectTicker(r.ticker);
       tb.appendChild(tr);
     }
@@ -516,6 +551,147 @@ async function renderScreener() {
     apply();
   };
   apply();
+
+  // The original puts its distribution / opportunity / backtest charts under
+  // the table; they read the whole universe, not the filtered subset.
+  screenerAnalytics(root, rows);
+}
+
+// Analytics that sit under the screener table in the original: signal
+// distribution, opportunities by sector, quality-vs-upside scatter, the upside
+// histogram, and the historical signal backtest.
+function screenerAnalytics(root, rows) {
+  const P = { family: "Fira Code, monospace", size: 10, color: "#0a121d" };
+  const GRID = "rgba(148,163,184,0.22)";
+  const pend = [];
+  const card = (title, id, note = "") => {
+    const c = el(`<div class="card"><h2 class="sec-h">${title}</h2>${note}<div id="${id}"></div></div>`);
+    root.appendChild(c);
+    return c;
+  };
+
+  // ── signal distribution donut ───────────────────────────────────
+  const counts = SIGNAL_ORDER.map((s) => rows.filter((r) => r.sig === s).length);
+  const dc = card("Phân bố Tín hiệu", "sc-donut");
+  pend.push(() => window.Plotly.react(dc.querySelector("#sc-donut"), [{
+    type: "pie", hole: 0.55, labels: SIGNAL_ORDER.map((s) => SIGNAL_VI[s]), values: counts,
+    marker: { colors: SIGNAL_ORDER.map((s) => SIGNAL_COLOR[s]) },
+    textinfo: "label+percent", textposition: "outside",
+    hovertemplate: "%{label}: %{value} mã (%{percent})<extra></extra>",
+  }], {
+    height: 380, margin: { l: 20, r: 20, t: 20, b: 20 }, showlegend: false,
+    paper_bgcolor: "rgba(0,0,0,0)", font: P,
+  }, { displayModeBar: false, responsive: true }));
+
+  // ── buy opportunities by sector ─────────────────────────────────
+  const BUYS = ["Strong Buy", "Buy"];
+  const bySec = {};
+  for (const r of rows) {
+    if (!r.sector || !BUYS.includes(r.sig)) continue;
+    (bySec[r.sector] ||= { "Strong Buy": 0, "Buy": 0 })[r.sig]++;
+  }
+  const secs = Object.entries(bySec)
+    .sort((a, b) => (b[1]["Strong Buy"] + b[1]["Buy"]) - (a[1]["Strong Buy"] + a[1]["Buy"]))
+    .slice(0, 18);
+  if (secs.length) {
+    const oc = card("Cơ hội theo Ngành", "sc-opps",
+      `<div class="vb-note">Số mã đang ở tín hiệu Mua / Mua mạnh trong mỗi ngành.</div>`);
+    pend.push(() => window.Plotly.react(oc.querySelector("#sc-opps"), BUYS.map((s) => ({
+      type: "bar", orientation: "h", name: SIGNAL_VI[s],
+      y: secs.map((x) => x[0]).reverse(), x: secs.map((x) => x[1][s]).reverse(),
+      marker: { color: SIGNAL_COLOR[s] },
+      hovertemplate: "%{y} · " + SIGNAL_VI[s] + ": %{x} mã<extra></extra>",
+    })), {
+      height: Math.max(320, secs.length * 24), barmode: "stack", dragmode: false,
+      margin: { l: 150, r: 20, t: 30, b: 30 },
+      paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: P,
+      legend: { orientation: "h", y: 1.06, x: 0, font: { size: 10 } },
+      xaxis: { gridcolor: GRID, tickfont: { size: 9 } },
+      yaxis: { tickfont: { size: 9 }, automargin: true },
+    }, { displayModeBar: false, responsive: true }));
+  }
+
+  // ── quality vs upside, coloured by signal ───────────────────────
+  const qc = card("Quality vs Avg Upside (tất cả mã đã lọc)", "sc-scatter",
+    `<div class="vb-note">Góc trên-phải = chất lượng cao và còn rẻ. Đường kẻ chia tại upside 0% và quality 50.</div>`);
+  const traces = SIGNAL_ORDER.map((s) => {
+    const pts = rows.filter((r) => r.sig === s && F.isNum(r.upFrac) && F.isNum(r.q));
+    return {
+      type: "scatter", mode: "markers", name: SIGNAL_VI[s],
+      x: pts.map((r) => Math.max(-100, Math.min(300, r.upFrac * 100))),
+      y: pts.map((r) => r.q), text: pts.map((r) => r.ticker),
+      marker: { size: 8, color: SIGNAL_COLOR[s], opacity: 0.75 },
+      hovertemplate: "%{text}<br>Upside %{x:.0f}% · Quality %{y:.0f}<extra></extra>",
+    };
+  }).filter((t) => t.x.length);
+  pend.push(() => window.Plotly.react(qc.querySelector("#sc-scatter"), traces, {
+    height: 460, dragmode: false, margin: { l: 54, r: 14, t: 10, b: 40 },
+    paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: P,
+    legend: { font: { size: 9 } },
+    xaxis: { title: { text: "Avg Upside %", font: { size: 10 } }, gridcolor: GRID, zeroline: true, ticksuffix: "%" },
+    yaxis: { title: { text: "Quality Score", font: { size: 10 } }, gridcolor: GRID, range: [0, 100] },
+    shapes: [
+      { type: "line", x0: 0, x1: 0, yref: "paper", y0: 0, y1: 1, line: { color: "#cbd5e1", width: 1, dash: "dot" } },
+      { type: "line", xref: "paper", x0: 0, x1: 1, y0: 50, y1: 50, line: { color: "#cbd5e1", width: 1, dash: "dot" } },
+    ],
+  }, { displayModeBar: false, responsive: true }));
+
+  // ── upside distribution ─────────────────────────────────────────
+  const ups = rows.map((r) => r.upFrac).filter(F.isNum).map((v) => Math.max(-100, Math.min(300, v * 100)));
+  if (ups.length > 10) {
+    const hc = card("Phân bố Avg Upside", "sc-hist");
+    pend.push(() => window.Plotly.react(hc.querySelector("#sc-hist"), [{
+      type: "histogram", x: ups, nbinsx: 40, marker: { color: "#2563eb" },
+      hovertemplate: "%{x}%: %{y} mã<extra></extra>",
+    }], {
+      height: 320, dragmode: false, margin: { l: 50, r: 14, t: 12, b: 36 },
+      paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: P,
+      xaxis: { title: { text: "Avg Upside %", font: { size: 10 } }, gridcolor: GRID, ticksuffix: "%" },
+      yaxis: { title: { text: "Số mã", font: { size: 10 } }, gridcolor: GRID },
+      shapes: [{ type: "line", x0: 0, x1: 0, yref: "paper", y0: 0, y1: 1, line: { color: "#b91c1c", width: 1.5, dash: "dot" } }],
+    }, { displayModeBar: false, responsive: true }));
+  }
+
+  // ── historical signal performance (backtest) ────────────────────
+  fetch("data/backtest.json").then((r) => r.json()).then((bt) => {
+    if (!Array.isArray(bt) || !bt.length) return;
+    const bc = card("Hiệu quả tín hiệu lịch sử (Backtest 2020–2025)", "sc-bt",
+      `<div class="vb-note">Lợi nhuận trung bình sau 1 năm kể từ khi tín hiệu xuất hiện, tính trên toàn bộ lịch sử — kiểm chứng xem thang tín hiệu có thực sự phân biệt được hay không.</div>`);
+    const order = bt.slice().sort((a, b) => SIGNAL_ORDER.indexOf(a.signal) - SIGNAL_ORDER.indexOf(b.signal));
+    window.Plotly.react(bc.querySelector("#sc-bt"), [
+      { type: "bar", name: "LN TB 1 năm", x: order.map((r) => SIGNAL_VI[r.signal] || r.signal),
+        y: order.map((r) => r.mean_return),
+        marker: { color: order.map((r) => (r.mean_return >= 0 ? "#22c55e" : "#ef4444")) },
+        hovertemplate: "%{x}: %{y:.1f}%<extra></extra>" },
+      { type: "scatter", mode: "lines+markers", name: "Tỷ lệ thắng", yaxis: "y2",
+        x: order.map((r) => SIGNAL_VI[r.signal] || r.signal), y: order.map((r) => r.win_rate),
+        line: { color: "#2563eb", width: 1.8 }, marker: { size: 6 },
+        hovertemplate: "%{x}: thắng %{y:.1f}%<extra></extra>" },
+    ], {
+      height: 360, dragmode: false, margin: { l: 52, r: 52, t: 30, b: 40 },
+      paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: P,
+      legend: { orientation: "h", y: 1.1, x: 0, font: { size: 10 } },
+      xaxis: { type: "category", tickfont: { size: 10 } },
+      yaxis: { title: { text: "LN TB 1 năm (%)", font: { size: 10 } }, gridcolor: GRID, zeroline: true, ticksuffix: "%" },
+      yaxis2: { title: { text: "Tỷ lệ thắng (%)", font: { size: 10 } }, overlaying: "y", side: "right", showgrid: false, ticksuffix: "%" },
+      hovermode: "x unified",
+    }, { displayModeBar: false, responsive: true });
+
+    const tb = el(`<table class="screen"><thead><tr>
+      <th>Tín hiệu</th><th>Số lần</th><th>LN TB 1 năm</th><th>LN trung vị</th><th>Tỷ lệ thắng</th>
+    </tr></thead><tbody></tbody></table>`);
+    for (const r of order) {
+      tb.querySelector("tbody").appendChild(el(`<tr>
+        <td><span style="color:${SIGNAL_COLOR[r.signal] || "var(--ink)"}">${SIGNAL_VI[r.signal] || r.signal}</span></td>
+        <td>${r.count.toLocaleString("en-US")}</td>
+        <td style="color:${r.mean_return >= 0 ? "#15803d" : "#b91c1c"}">${r.mean_return.toFixed(1)}%</td>
+        <td>${r.median_return.toFixed(1)}%</td>
+        <td>${r.win_rate.toFixed(1)}%</td></tr>`));
+    }
+    bc.appendChild(tb);
+  }).catch(() => {});
+
+  pend.forEach((fn) => fn());
 }
 
 // ── sector view ─────────────────────────────────────────────────────
@@ -555,6 +731,7 @@ async function renderSector() {
   }));
 
   root.innerHTML = "";
+  root.appendChild(el(`<h2 class="view-title">Phân tích Ngành</h2>`));
 
   // ── 1. Heatmap with the original's metric selector ────────────────
   const METRICS = {
@@ -658,7 +835,7 @@ async function renderSector() {
   pending.forEach((fn) => fn());
 
   // ── 3. Quality vs upside scatter, coloured by sector ─────────────
-  const scat = el(`<div class="card"><h2 class="sec-h">Quality Score vs Upside %</h2>
+  const scat = el(`<div class="card"><h2 class="sec-h">Quality Score vs DCF Upside %</h2>
     <div class="vb-note">Góc trên-phải = chất lượng cao và còn rẻ. Mỗi điểm là một mã; màu theo ngành.</div>
     <div id="sec-scatter"></div></div>`);
   root.appendChild(scat);
@@ -689,7 +866,7 @@ async function renderSector() {
   }, { displayModeBar: false, responsive: true });
 
   // ── 4. Top 5 per sector by model upside ──────────────────────────
-  const top5 = el(`<div class="card"><h2 class="sec-h">Top 5 mỗi Ngành — theo Upside</h2>
+  const top5 = el(`<div class="card"><h2 class="sec-h">Top 5 mỗi Ngành — theo Avg Est Upside</h2>
     <div class="top5-grid"></div></div>`);
   const t5grid = top5.querySelector(".top5-grid");
   for (const s of [...agg].sort((a, b) => (b.up ?? -1e9) - (a.up ?? -1e9))) {
@@ -710,7 +887,7 @@ async function renderSector() {
   // ── 3. Sector summary table — same columns as the original ───────
   const tbl = el(`<div class="card"><h2 class="sec-h">Bảng tổng hợp theo Ngành</h2>
     <table class="screen"><thead><tr>
-      <th>Ngành</th><th>Số mã</th><th>Upside</th><th>P/E</th><th>P/B</th><th>ROE</th>
+      <th>Ngành</th><th>Số mã</th><th>DCF Upside</th><th>P/E</th><th>P/B</th><th>ROE</th>
       <th>Biên LN ròng</th><th>FCF Margin</th><th>D/E</th><th>Curr Ratio</th><th>Quality</th>
     </tr></thead><tbody></tbody></table></div>`);
   const tb = $("tbody", tbl);
@@ -829,6 +1006,7 @@ async function renderMarket() {
   const total = withChg.length || 1;
 
   view.innerHTML = "";
+  view.appendChild(el(`<h2 class="view-title">Tổng quan Thị trường</h2>`));
 
   // The original splits this view into "Thị trường" and "Vĩ mô" sub-tabs.
   const subtabs = el(`<div class="range-row mo-tabs">
@@ -854,8 +1032,20 @@ async function renderMarket() {
   const root = mktPane;
 
   // ── 1. VN-Index chart + advance/decline panel (3:1, as in the original) ──
+  const idxAll = market.vnindex || [];
+  const iLast = idxAll.length ? idxAll[idxAll.length - 1].close : null;
+  const iPrev = idxAll.length > 1 ? idxAll[idxAll.length - 2].close : null;
+  const iYear = idxAll.length ? idxAll[Math.max(0, idxAll.length - 252)].close : null;
+  const iDay = (F.isNum(iLast) && F.isNum(iPrev) && iPrev) ? (iLast - iPrev) / iPrev * 100 : null;
+  const iYr = (F.isNum(iLast) && F.isNum(iYear) && iYear) ? (iLast - iYear) / iYear * 100 : null;
+  const idxSub = F.isNum(iLast)
+    ? `${iLast.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` +
+      `${iDay == null ? "" : ` (${F.pctSigned(iDay, 2)})`}` +
+      `${iYr == null ? "" : ` · ${F.pctSigned(iYr)} trong 1 năm`}`
+    : "";
   const top = el(`<div class="card split-31">
-    <div><h2 class="sec-h">VN-Index (1 năm)</h2><div id="vni-chart"></div></div>
+    <div><h2 class="sec-h">VN-Index (1 năm)</h2>
+      <div class="chart-sub">${idxSub}</div><div id="vni-chart"></div></div>
     <div><h2 class="sec-h">Tăng / Giảm</h2><div id="ad-panel"></div></div>
   </div>`);
   root.appendChild(top);
@@ -905,6 +1095,7 @@ async function renderMarket() {
   const hist = await fetch("data/market_history.json").then((r) => r.json()).catch(() => []);
   if (hist.length > 3) {
     const c = el(`<div class="card"><h2 class="sec-h">Định giá Thị trường (P/E &amp; P/B) so với Lịch sử</h2>
+      <div class="chart-sub" id="mkt-hist-sub"></div>
       <div id="mkt-hist"></div>
       <div class="vb-note" id="mkt-hist-note"></div></div>`);
     root.appendChild(c);
@@ -929,6 +1120,19 @@ async function renderMarket() {
                 title: { text: "P/B (×)", font: { size: 10 } } },
       hovermode: "x unified",
     }, { displayModeBar: false, responsive: true });
+
+    // Context line above the chart, matching the original's "x hiện tại · y so TB".
+    const relLine = (key, label, digits) => {
+      const vals = hist.map((d) => d[key]).filter((v) => F.isNum(v)).sort((a, b) => a - b);
+      const cur = hist[hist.length - 1][key];
+      if (!F.isNum(cur) || !vals.length) return "";
+      const med = vals[Math.floor(vals.length / 2)];
+      const rel = (cur - med) / med * 100;
+      const verdict = rel > 10 ? "Trên trung bình" : rel < -10 ? "Dưới trung bình" : "Quanh trung bình";
+      return `${cur.toFixed(digits)}x ${label} hiện tại · ${rel >= 0 ? "+" : ""}${rel.toFixed(0)}% so TB — ${verdict}`;
+    };
+    $("#mkt-hist-sub", c).textContent =
+      `${relLine("pe", "P/E", 1)}   |   ${relLine("pb", "P/B", 2)}`;
 
     const pes = hist.map((d) => d.pe).filter((v) => F.isNum(v)).sort((a, b) => a - b);
     const curPe = hist[hist.length - 1].pe, medPe = pes[Math.floor(pes.length / 2)];
@@ -975,12 +1179,14 @@ async function renderMarket() {
   const liquid = [...withChg].filter((r) => F.isNum(r.vol)).sort((a, b) => b.vol - a.vol).slice(0, 20);
   const moversCard = (title, list, valFn) => {
     const c = el(`<div class="card mv-card"><h2 class="sec-h">${title}</h2>
-      <table class="screen"><tbody></tbody></table></div>`);
+      <table class="screen"><thead><tr><th>Mã</th><th>Công ty</th><th>Giá</th><th>Thay đổi</th><th>Khối lượng</th></tr></thead>
+      <tbody></tbody></table></div>`);
     const tb = $("tbody", c);
     for (const r of list) {
       const v = valFn(r);
       const tr = el(`<tr><td><b>${r.ticker}</b></td>
-        <td class="dim">${F.escapeHtml(r.sector || "")}</td>
+        <td class="dim">${F.escapeHtml((r.name || r.sector || "").slice(0, 26))}</td>
+        <td>${F.priceVND(r.close)}</td>
         <td style="color:${v.c}">${v.t}</td>
         <td>${F.isNum(r.vol) ? (r.vol / 1e6).toFixed(2) + "M" : "—"}</td></tr>`);
       tr.onclick = () => selectTicker(r.ticker);
