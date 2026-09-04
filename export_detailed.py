@@ -131,6 +131,45 @@ def fetch_news_events(ticker: str) -> dict:
     return out
 
 
+def fetch_holders(ticker: str) -> dict:
+    """Major shareholders and officers with a stake, from VCI."""
+    import warnings
+    out = {"shareholders": [], "officers": []}
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            from vnstock import Company
+            co = Company(symbol=ticker, source="VCI")
+            try:
+                df = co.shareholders()
+                if df is not None and not df.empty:
+                    for _, r in df.iterrows():
+                        pct = r.get("share_own_percent")
+                        out["shareholders"].append({
+                            "name": str(r.get("share_holder") or "")[:180],
+                            # Stored as a fraction upstream; keep it that way.
+                            "pct": None if pct is None or pct != pct else round(float(pct), 6),
+                        })
+            except (Exception, SystemExit):
+                pass
+            time.sleep(2.0)
+            try:
+                df = co.officers()
+                if df is not None and not df.empty:
+                    for _, r in df.iterrows():
+                        pct = r.get("officer_own_percent")
+                        out["officers"].append({
+                            "name": str(r.get("officer_name") or "")[:120],
+                            "position": str(r.get("officer_position") or "")[:120],
+                            "pct": None if pct is None or pct != pct else round(float(pct), 8),
+                        })
+            except (Exception, SystemExit):
+                pass
+    except (Exception, SystemExit):
+        pass
+    return out
+
+
 def _client(ticker: str):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -235,7 +274,10 @@ def main() -> None:
             det = o.get("detail") or {}
             if o.get("valuation") is None:
                 continue
-            if ((det.get("balance") or {}).get(field) is None
+            top = o.get(field)
+            has_top = bool(top) if isinstance(top, (dict, list)) else top is not None
+            if (not has_top
+                    and (det.get("balance") or {}).get(field) is None
                     and (det.get("income") or {}).get(field) is None):
                 keep.append(f)
         files = keep
@@ -261,6 +303,8 @@ def main() -> None:
         # costing a second full sweep of the universe.
         time.sleep(2.0)
         obj["news_events"] = fetch_news_events(f.stem)
+        time.sleep(2.0)
+        obj["holders"] = fetch_holders(f.stem)
         f.write_text(json.dumps(obj, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
         done += 1
         if d is None:

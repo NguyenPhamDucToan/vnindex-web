@@ -324,3 +324,104 @@ export function peerSection(co, v, screenerRows, modelUpside) {
   };
   return card;
 }
+
+
+// ── Cổ đông lớn & Ban lãnh đạo ────────────────────────────────────
+// Classification copied from the original: it decides the bar colours and the
+// donut's slices, so the two must agree.
+const OWNER_COLORS = {
+  "Nhà nước": "#60a5fa",
+  "Nước ngoài": "#34d399",
+  "Tổ chức trong nước": "#fb923c",
+  "Cá nhân": "#c084fc",
+  "Khác (nhỏ lẻ)": "#475569",
+};
+
+function ownerType(name) {
+  const n = (name || "").toUpperCase();
+  const has = (list) => list.some((k) => n.includes(k));
+  if (has(["NHÀ NƯỚC", "SCIC", "TỔNG CÔNG TY ĐẦU TƯ VÀ KINH DOANH VỐN", "UBND", "BỘ TÀI CHÍNH"]))
+    return "Nhà nước";
+  if (has(["ETF", "FUND", "TRUST", "LIMITED", "PTE", "LTD", "INTERNATIONAL", "GLOBAL",
+           "VANGUARD", "FIDELITY", "MATTHEWS", "NORGES", "DEUTSCHE", "BARCLAYS",
+           "MERCER", "BROWN", "PZENA", "FUBON", "CITIGROUP"]))
+    return "Nước ngoài";
+  if (has(["QUỸ", "CÔNG TY TNHH", "CÔNG TY CỔ PHẦN", "NGÂN HÀNG"]))
+    return "Tổ chức trong nước";
+  return "Cá nhân";
+}
+
+export function holdersSection(holders) {
+  const sh = ((holders || {}).shareholders || []).filter((r) => F.isNum(r.pct) && r.pct > 0);
+  const off = ((holders || {}).officers || []).filter((r) => F.isNum(r.pct) && r.pct > 0);
+  if (!sh.length && !off.length) return null;
+
+  const card = el(`<details class="card holders">
+    <summary class="sec-h hd-sum">🏛 Cổ đông lớn &amp; Ban lãnh đạo</summary>
+    <div class="hd-body">
+      <div class="hd-split">
+        <div><div class="vb-note">Top 12 cổ đông lớn nhất · màu theo nhóm sở hữu</div>
+             <div id="hd-bar"></div></div>
+        <div><div class="vb-note">Cơ cấu theo nhóm</div><div id="hd-pie"></div></div>
+      </div>
+      <div id="hd-off"></div>
+    </div>
+  </details>`);
+
+  const PF = { family: "'Fira Code', monospace", size: 10, color: "#0a121d" };
+  let drawn = false;
+  const draw = () => {
+    if (drawn || !sh.length) return;
+    drawn = true;
+    // Ascending, so the largest holder ends up at the top of a horizontal bar.
+    const top = sh.slice().sort((a, b) => b.pct - a.pct).slice(0, 12).reverse();
+    const short = (n) => (n.length <= 42 ? n : n.slice(0, 40) + "…");
+    window.Plotly.react(card.querySelector("#hd-bar"), [{
+      type: "bar", orientation: "h",
+      x: top.map((r) => r.pct * 100), y: top.map((r) => short(r.name)),
+      marker: { color: top.map((r) => OWNER_COLORS[ownerType(r.name)] || "#94a3b8") },
+      text: top.map((r) => `${(r.pct * 100).toFixed(2)}%`),
+      textposition: "outside", cliponaxis: false,
+      customdata: top.map((r) => [r.name, ownerType(r.name)]),
+      hovertemplate: "%{customdata[0]}<br>%{customdata[1]} · %{x:.2f}%<extra></extra>",
+    }], {
+      height: Math.max(320, top.length * 30), dragmode: false,
+      margin: { l: 300, r: 60, t: 8, b: 30 },
+      paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: PF,
+      xaxis: { gridcolor: "rgba(148,163,184,0.22)", ticksuffix: "%", tickfont: { size: 9 } },
+      yaxis: { tickfont: { size: 9 }, automargin: true },
+    }, { displayModeBar: false, responsive: true });
+
+    // Group the disclosed holders, then let the unlisted float be its own
+    // slice -- without it the donut implies the disclosed names are the whole
+    // register, which for most tickers they are not.
+    const byType = {};
+    for (const r of sh) byType[ownerType(r.name)] = (byType[ownerType(r.name)] || 0) + r.pct * 100;
+    const disclosed = Object.values(byType).reduce((a, b) => a + b, 0);
+    if (disclosed < 99.5) byType["Khác (nhỏ lẻ)"] = 100 - disclosed;
+    const labels = Object.keys(byType);
+    window.Plotly.react(card.querySelector("#hd-pie"), [{
+      type: "pie", hole: 0.5, labels, values: labels.map((k) => byType[k]),
+      marker: { colors: labels.map((k) => OWNER_COLORS[k] || "#94a3b8") },
+      textinfo: "label+percent", textposition: "outside",
+      hovertemplate: "%{label}: %{value:.2f}%<extra></extra>",
+    }], {
+      height: 400, margin: { l: 20, r: 20, t: 20, b: 20 }, showlegend: false,
+      paper_bgcolor: "rgba(0,0,0,0)", font: PF,
+    }, { displayModeBar: false, responsive: true });
+  };
+
+  if (off.length) {
+    const rows = off.slice().sort((a, b) => b.pct - a.pct);
+    card.querySelector("#hd-off").appendChild(el(`<div>
+      <div class="vb-note">Ban lãnh đạo có cổ phần</div>
+      <table class="screen"><thead><tr><th>Họ tên</th><th>Chức vụ</th><th>Sở hữu (%)</th></tr></thead>
+      <tbody>${rows.map((r) => `<tr><td>${F.escapeHtml(r.name)}</td>
+        <td class="dim">${F.escapeHtml(r.position || "")}</td>
+        <td class="num">${(r.pct * 100).toFixed(4)}%</td></tr>`).join("")}</tbody></table></div>`));
+  }
+
+  // Plotly cannot measure a node inside a closed <details>, so draw on open.
+  card.addEventListener("toggle", () => { if (card.open) draw(); });
+  return card;
+}

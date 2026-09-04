@@ -5,7 +5,8 @@ import { ratingColor } from "./ratings.js";
 import { computeTTM } from "./ttm.js";
 import { quarterlyCharts, foreignSection } from "./quarterly.js";
 import { valuationPanel, technicalPanel } from "./valuation-panel.js";
-import { dupontSection, roicSection, peerSection, valuationBandSection } from "./sections.js";
+import { dupontSection, roicSection, peerSection, valuationBandSection,
+         holdersSection } from "./sections.js";
 import { renderCompare } from "./compare.js";
 import { renderMacro } from "./macro.js";
 import * as F from "./format.js";
@@ -123,6 +124,8 @@ async function renderStock(t) {
   headRow.appendChild(header(co, last, prev, chg, chgPct));
   headRow.appendChild(metricsGrid(co, v, q, mcap, shares, vol15));
   root.appendChild(headRow);
+  const hd = holdersSection(d.holders);
+  if (hd) root.appendChild(hd);
 
   // Two-column split matching the original: price chart on the left, the
   // valuation-estimates + technical panel down the right.

@@ -548,3 +548,12 @@ table.screen-wide { min-width: 1100px; }
               font-weight: 700; letter-spacing: .10em; text-transform: uppercase;
               padding: 8px 16px; border-top: 2px solid #bfdbfe; }
 .cmp-heat td.num { text-align: right; font-family: var(--mono); white-space: nowrap; }
+
+/* Cổ đông lớn & Ban lãnh đạo — collapsed by default, as in the original. */
+.holders > summary, .hd-sum { cursor: pointer; list-style: none; font-size: 17px; }
+.holders > summary::-webkit-details-marker { display: none; }
+.holders > summary::before { content: "▸ "; color: var(--muted); }
+.holders[open] > summary::before { content: "▾ "; }
+.hd-body { margin-top: var(--space-md); }
+.hd-split { display: grid; grid-template-columns: 3fr 2fr; gap: var(--space-xl); align-items: start; }
+@media (max-width: 900px) { .hd-split { grid-template-columns: 1fr; } }
