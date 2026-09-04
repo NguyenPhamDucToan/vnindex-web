@@ -35,10 +35,12 @@ async function boot() {
 function buildNav() {
   const nav = $("#nav");
   // The original ships five views; "Vĩ mô" is a sub-tab of Tổng quan Thị
-  // trường there, not a top-level entry. Danh mục is our own addition.
+  // trường there, not a top-level entry. "Danh mục" was our own addition and
+  // the user asked for it to be hidden -- the view and its route still work
+  // (#portfolio), it just isn't advertised in the nav.
   const views = [["stock", "Phân tích cổ phiếu"], ["screen", "Sàng lọc"],
     ["compare", "So sánh cổ phiếu"], ["sector", "Phân tích ngành"],
-    ["market", "Tổng quan thị trường"], ["portfolio", "Danh mục"]];
+    ["market", "Tổng quan thị trường"]];
   for (const [id, label] of views) {
     const a = el(`<button class="nav-item" data-view="${id}">${label}</button>`);
     a.onclick = () => showView(id);
@@ -50,6 +52,10 @@ function buildNav() {
 function showView(id) {
   document.querySelectorAll(".nav-item").forEach((n) => n.classList.toggle("active", n.dataset.view === id));
   document.querySelectorAll(".view").forEach((v) => v.classList.toggle("hidden", v.id !== `view-${id}`));
+  // The screener's filters live in the sidebar, as they do in the original;
+  // they only make sense while that view is on screen.
+  const sf = $("#side-filters");
+  if (sf) sf.classList.toggle("hidden", id !== "screen");
   if (id === "screen") renderScreener();
   if (id === "sector") renderSector();
   if (id === "portfolio") renderPortfolio();
@@ -570,6 +576,38 @@ async function enrichScreener() {
 }
 
 let screenerBuilt = false;
+const WL_KEY = "vnindex.watchlist";
+const loadWL = () => {
+  // A private window or cleared site data makes this throw; an empty
+  // watchlist is the right answer there, not a broken view.
+  try { return new Set(JSON.parse(localStorage.getItem(WL_KEY) || "[]")); }
+  catch { return new Set(); }
+};
+const saveWL = (set) => {
+  try { localStorage.setItem(WL_KEY, JSON.stringify([...set])); } catch { /* ignore */ }
+};
+
+// Sliders, ranges and steps copied from the original's sidebar.
+const SCREEN_FILTERS = [
+  ["f-roe", "ROE tối thiểu (%)", -50, 50, 5, -50],
+  ["f-nm", "Biên LN ròng tối thiểu (%)", -50, 50, 1, -50],
+  ["f-pb", "Max P/B (×)", 0, 10, 0.1, 10],
+  ["f-qs", "Quality tối thiểu", 0, 100, 5, 0],
+  ["f-de", "D/E tối đa (x)", 0, 30, 0.5, 30],
+  ["f-pe", "Max P/E (×)", 0, 100, 1, 100],
+  ["f-up", "Avg Upside tối thiểu (%)", -1000, 200, 50, -1000],
+];
+
+const SORT_OPTIONS = [
+  ["Tín hiệu (Strong Buy trước)", (a, b) => SIGNAL_ORDER.indexOf(a.sig) - SIGNAL_ORDER.indexOf(b.sig) || b.q - a.q],
+  ["Tín hiệu (Strong Sell trước)", (a, b) => SIGNAL_ORDER.indexOf(b.sig) - SIGNAL_ORDER.indexOf(a.sig) || b.q - a.q],
+  ["Upside (tốt nhất trước)", (a, b) => (b.upFrac ?? -9e9) - (a.upFrac ?? -9e9)],
+  ["Quality (tốt nhất trước)", (a, b) => b.q - a.q],
+  ["ROE (tốt nhất trước)", (a, b) => (b.roe ?? -9e9) - (a.roe ?? -9e9)],
+  ["Biên LN ròng (tốt nhất trước)", (a, b) => (b.net_margin ?? -9e9) - (a.net_margin ?? -9e9)],
+  ["Mã (A-Z)", (a, b) => a.ticker.localeCompare(b.ticker)],
+];
+
 async function renderScreener() {
   if (screenerBuilt) return;
   screenerBuilt = true;
@@ -577,67 +615,89 @@ async function renderScreener() {
   root.innerHTML = `<div class="loading">Đang tải…</div>`;
   const rows = await enrichScreener();
   const sectors = [...new Set(rows.map((r) => r.sector).filter(Boolean))].sort();
+  const wl = loadWL();
+
+  // ── sidebar filter panel (the original keeps these in the sidebar) ──
+  let side = $("#side-filters");
+  if (!side) {
+    side = el(`<div id="side-filters" class="side-filters"></div>`);
+    $("#nav").after(side);
+  }
+  side.innerHTML = `
+    <div class="sf-h">Filters</div>
+    <label class="sf-l">Ngành
+      <select id="f-sector" multiple size="6">${sectors.map((x) =>
+        `<option>${F.escapeHtml(x)}</option>`).join("")}</select></label>
+    <label class="sf-l">Lọc theo Tín hiệu
+      <select id="f-signal" multiple size="7">${SIGNAL_ORDER.map((x) =>
+        `<option value="${x}">${SIGNAL_VI[x]}</option>`).join("")}</select></label>
+    ${SCREEN_FILTERS.map(([id, label, lo, hi, step, def]) => `
+      <label class="sf-l">${label} <span class="sf-v" id="${id}-v">${def}</span>
+        <input id="${id}" type="range" min="${lo}" max="${hi}" step="${step}" value="${def}" /></label>`).join("")}
+    <label class="sf-c"><input id="f-pinned" type="checkbox" /> Chỉ Theo dõi</label>
+    <label class="sf-l">Sắp xếp theo
+      <select id="f-sort">${SORT_OPTIONS.map(([n], i) =>
+        `<option value="${i}">${n}</option>`).join("")}</select></label>
+    <button id="f-reset" class="range-btn sf-reset">Xóa lọc</button>`;
 
   root.innerHTML = "";
-  root.appendChild(el(`<h2 class="view-title">Sàng lọc Cổ phiếu</h2>`));
-  // Filter set mirrors the original's sidebar sliders (Avg Upside, Max P/E,
-  // Max P/B, ROE, Net margin, Quality, D/E) plus sector and signal.
-  const card = el(`<div class="card"><h2 class="sec-h">Lọc cổ phiếu</h2>
+  root.appendChild(el(`<div class="range-row sc-tabs"></div>`));
+  root.appendChild(el(`<h2 class="view-title" id="sc-title">Lọc cổ phiếu</h2>`));
+
+  const card = el(`<div class="card">
     <div class="sig-counts" id="sig-counts"></div>
-    <div class="filters">
-      <label>Ngành <select id="f-sector"><option value="">Tất cả</option>${sectors.map((s) => `<option>${F.escapeHtml(s)}</option>`).join("")}</select></label>
-      <label>Tín hiệu <select id="f-signal"><option value="">Tất cả</option>${SIGNAL_ORDER.map((s) => `<option value="${s}">${SIGNAL_VI[s]}</option>`).join("")}</select></label>
-      <label>Avg Upside ≥ <input id="f-up" type="number" step="5" placeholder="%" /></label>
-      <label>Max P/E <input id="f-pe" type="number" step="1" placeholder="×" /></label>
-      <label>Max P/B <input id="f-pb" type="number" step="0.5" placeholder="×" /></label>
-      <label>ROE ≥ <input id="f-roe" type="number" step="1" placeholder="%" /></label>
-      <label>Biên LN ròng ≥ <input id="f-nm" type="number" step="1" placeholder="%" /></label>
-      <label>Quality ≥ <input id="f-qs" type="number" step="5" placeholder="0-100" /></label>
-      <label>D/E ≤ <input id="f-de" type="number" step="0.5" placeholder="×" /></label>
-      <button id="f-reset" class="range-btn">Xóa lọc</button>
-      <span id="f-count" class="fcount"></span>
-    </div>
+    <div class="sc-bar"><span id="f-count" class="fcount"></span></div>
     <div class="ta-scroll"><table class="screen screen-wide"><thead><tr>
-      <th>Mã</th><th>Tín hiệu</th><th>Ngành</th><th>Giá (VND)</th><th>Avg Estimate</th>
+      <th>★</th><th>Mã</th><th>Tín hiệu</th><th>Ngành</th><th>Giá (VND)</th><th>Avg Estimate</th>
       <th>Avg Upside</th><th>DCF Estimate</th><th>FCFE Estimate</th><th>Upside</th>
       <th>Quality</th><th>Graham Number</th><th>P/E</th><th>P/B</th><th>Biên LN ròng</th>
     </tr></thead><tbody></tbody></table></div></div>`);
   root.appendChild(card);
   const tb = $("tbody", card);
 
-  // Signal-count row; clicking one filters to that signal (as in the original).
   const counts = $("#sig-counts", card);
-  for (const s of SIGNAL_ORDER) {
-    const n = rows.filter((r) => r.sig === s).length;
-    const b = el(`<button class="sig-c" data-sig="${s}" style="border-top-color:${SIGNAL_COLOR[s]}">
-      <div class="sig-n">${n}</div><div class="sig-l">${SIGNAL_VI[s]}</div></button>`);
+  for (const sg of SIGNAL_ORDER) {
+    const n = rows.filter((r) => r.sig === sg).length;
+    const b = el(`<button class="sig-c" data-sig="${sg}" style="border-top-color:${SIGNAL_COLOR[sg]}">
+      <div class="sig-n">${n}</div><div class="sig-l">${SIGNAL_VI[sg]}</div></button>`);
     b.onclick = () => {
-      const sel = $("#f-signal", card);
-      sel.value = sel.value === s ? "" : s;
+      const sel = $("#f-signal");
+      const on = [...sel.options].filter((o) => o.selected).map((o) => o.value);
+      const only = on.length === 1 && on[0] === sg;
+      for (const o of sel.options) o.selected = !only && o.value === sg;
       apply();
     };
     counts.appendChild(b);
   }
 
-  const apply = () => {
-    const num = (id) => parseFloat($(id, card).value);
-    const sec = $("#f-sector", card).value;
-    const sig = $("#f-signal", card).value;
-    const maxPe = num("#f-pe"), maxPb = num("#f-pb"), minRoe = num("#f-roe");
-    const minNm = num("#f-nm"), minQs = num("#f-qs"), maxDe = num("#f-de"), minUp = num("#f-up");
-    const out = rows.filter((r) =>
-      (!sec || r.sector === sec) &&
-      (!sig || r.sig === sig) &&
-      (isNaN(maxPe) || (F.isNum(r.pe) && r.pe <= maxPe)) &&
-      (isNaN(maxPb) || (F.isNum(r.pb) && r.pb <= maxPb)) &&
-      (isNaN(minRoe) || (F.isNum(r.roe) && r.roe * 100 >= minRoe)) &&
-      (isNaN(minNm) || (F.isNum(r.net_margin) && r.net_margin * 100 >= minNm)) &&
-      (isNaN(minQs) || r.q >= minQs) &&
-      (isNaN(maxDe) || (F.isNum(r.debt_to_equity) && r.debt_to_equity <= maxDe)) &&
-      (isNaN(minUp) || (F.isNum(r.upFrac) && r.upFrac * 100 >= minUp)));
+  const multi = (id) => [...$(id).options].filter((o) => o.selected).map((o) => o.value);
+  const slider = (id) => parseFloat($(id).value);
+
+  function apply() {
+    for (const [id] of SCREEN_FILTERS) $(`#${id}-v`).textContent = $(`#${id}`).value;
+    const secs = multi("#f-sector"), sigs = multi("#f-signal");
+    const minRoe = slider("#f-roe"), minNm = slider("#f-nm"), maxPb = slider("#f-pb");
+    const minQs = slider("#f-qs"), maxDe = slider("#f-de"), maxPe = slider("#f-pe");
+    const minUp = slider("#f-up"), pinned = $("#f-pinned").checked;
+    const watchOnly = pinned || currentScTab === "Theo dõi";
+
+    let out = rows.filter((r) =>
+      (!secs.length || secs.includes(r.sector)) &&
+      (!sigs.length || sigs.includes(r.sig)) &&
+      (!watchOnly || wl.has(r.ticker)) &&
+      (F.isNum(r.roe) ? r.roe * 100 >= minRoe : minRoe <= -50) &&
+      (F.isNum(r.net_margin) ? r.net_margin * 100 >= minNm : minNm <= -50) &&
+      (F.isNum(r.pb) ? r.pb <= maxPb : maxPb >= 10) &&
+      (F.isNum(r.q) ? r.q >= minQs : minQs <= 0) &&
+      (F.isNum(r.debt_to_equity) ? r.debt_to_equity <= maxDe : maxDe >= 30) &&
+      (F.isNum(r.pe) ? r.pe <= maxPe : maxPe >= 100) &&
+      (F.isNum(r.upFrac) ? r.upFrac * 100 >= minUp : minUp <= -1000));
+    out = out.slice().sort(SORT_OPTIONS[parseInt($("#f-sort").value, 10)][1]);
+
     tb.innerHTML = "";
     for (const r of out) {
       const tr = el(`<tr>
+        <td class="wl-cell"><button class="wl-star ${wl.has(r.ticker) ? "on" : ""}" title="Theo dõi">${wl.has(r.ticker) ? "★" : "☆"}</button></td>
         <td><b>${r.ticker}</b></td>
         <td>${r.sig ? `<span style="color:${SIGNAL_COLOR[r.sig]}">${SIGNAL_VI[r.sig]}</span>` : "—"}</td>
         <td class="dim">${F.escapeHtml(r.sector || "")}</td>
@@ -651,21 +711,44 @@ async function renderScreener() {
         <td>${F.rawVND(r.graham_number)}</td>
         <td>${F.mult(r.pe)}</td><td>${F.mult(r.pb)}</td>
         <td>${F.pct(r.net_margin)}</td></tr>`);
+      tr.querySelector(".wl-star").onclick = (ev) => {
+        ev.stopPropagation();
+        if (wl.has(r.ticker)) wl.delete(r.ticker); else wl.add(r.ticker);
+        saveWL(wl);
+        apply();
+      };
       tr.onclick = () => selectTicker(r.ticker);
       tb.appendChild(tr);
     }
     $("#f-count", card).textContent = `${out.length} / ${rows.length} mã`;
-  };
-  card.querySelectorAll("select, input").forEach((c) => c.addEventListener("input", apply));
-  $("#f-reset", card).onclick = () => {
-    card.querySelectorAll("select").forEach((s) => (s.value = ""));
-    card.querySelectorAll("input").forEach((i) => (i.value = ""));
+  }
+
+  // ── the original's two tabs ────────────────────────────────────
+  let currentScTab = "Lọc cổ phiếu";
+  const tabRow = $(".sc-tabs", root);
+  for (const name of ["Lọc cổ phiếu", "Theo dõi"]) {
+    const btn = el(`<button class="range-btn ${name === currentScTab ? "active" : ""}">${name}</button>`);
+    btn.onclick = () => {
+      currentScTab = name;
+      tabRow.querySelectorAll(".range-btn").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      $("#sc-title", root).textContent = name === "Theo dõi" ? "Lọc & Theo dõi" : "Lọc cổ phiếu";
+      apply();
+    };
+    tabRow.appendChild(btn);
+  }
+
+  side.querySelectorAll("select, input").forEach((c) => c.addEventListener("input", apply));
+  $("#f-reset").onclick = () => {
+    for (const sel of ["#f-sector", "#f-signal"])
+      for (const o of $(sel).options) o.selected = false;
+    for (const [id, , , , , def] of SCREEN_FILTERS) $(`#${id}`).value = def;
+    $("#f-pinned").checked = false;
+    $("#f-sort").value = "0";
     apply();
   };
   apply();
 
-  // The original puts its distribution / opportunity / backtest charts under
-  // the table; they read the whole universe, not the filtered subset.
   screenerAnalytics(root, rows);
 }
 
