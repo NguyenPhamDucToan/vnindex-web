@@ -44,7 +44,21 @@ INCOME_ITEMS = {
     "other_profit":        ["net_other_income_expenses", "other_profit"],
     "pre_tax_profit":      ["net_accounting_profit_loss_before_tax"],
     "tax_expense":         ["corporate_income_tax_expenses"],
-    "net_income":          ["net_profit_loss_after_tax", "attributable_to_parent_company"],
+    "net_income":          ["net_profit_loss_after_tax", "attributable_to_parent_company",
+                            "net_profit_attributable_to_shareholders_of_the_group"],
+    # Insurers: the combined ratio and its two halves are the sector's headline
+    # numbers, and none of them can be derived from the industrial items above.
+    "ins_gross_premium":   ["gross_written_premium"],
+    "ins_net_premium":     ["net_revenue_of_insurance_premium", "net_sales_from_insurance_business"],
+    "ins_ceded":           ["reinsurance_premium_ceded"],
+    "ins_claims":          ["total_insurance_claim_settlement_expenses",
+                            "total_direct_insurance_operating_expenses"],
+    "ins_claims_retained": ["claim_expenses_on_retained_risks"],
+    "ins_commission":      ["commissions"],
+    "ins_underwriting":    ["gross_insurance_operating_profit"],
+    "ins_financial_profit": ["profit_from_financial_activities"],
+    "ins_pretax":          ["profit_before_tax"],
+    "ins_after_tax":       ["profit_after_tax"],
 }
 BALANCE_ITEMS = {
     "cash":               ["cash_and_cash_equivalents", "cash_and_precious_metals"],
@@ -67,6 +81,14 @@ BALANCE_ITEMS = {
                            "available_for_sale_financial_assets_afs"],
     "current_liabilities": ["current_liabilities"],
     "equity":             ["owners_equity", "equity"],
+    # Insurers hold an investment book, not inventory; reserves are their
+    # largest liability and drive solvency.
+    "ins_st_invest":      ["short_term_investments"],
+    "ins_lt_invest":      ["long_term_investments"],
+    "ins_htm":            ["held_to_maturity_investment"],
+    "ins_reinsurance_assets": ["reinsurance_assets"],
+    "ins_lt_payables":    ["other_long_term_payables"],
+    "ins_total_liab":     ["liabilities"],
 }
 
 
@@ -200,6 +222,25 @@ def main() -> None:
     files = sorted(TICKER_DIR.glob("*.json"), key=lambda f: (order.get(f.stem, 1), f.stem))
     # --tickers A B C limits the run to those symbols (used to backfill a single
     # sector after adding a field, instead of re-sweeping the whole universe).
+    # --missing FIELD refetches only tickers whose detail lacks that field, so
+    # a run interrupted halfway resumes instead of starting over.
+    if "--missing" in sys.argv:
+        field = sys.argv[sys.argv.index("--missing") + 1]
+        keep = []
+        for f in files:
+            try:
+                o = json.loads(f.read_text(encoding="utf-8"))
+            except (ValueError, OSError):
+                continue
+            det = o.get("detail") or {}
+            if o.get("valuation") is None:
+                continue
+            if ((det.get("balance") or {}).get(field) is None
+                    and (det.get("income") or {}).get(field) is None):
+                keep.append(f)
+        files = keep
+        refetch_all = True
+        print(f"  {len(files)} tickers still missing '{field}'")
     if "--tickers" in sys.argv:
         want = {t.upper() for t in sys.argv[sys.argv.index("--tickers") + 1:]
                 if not t.startswith("--")}

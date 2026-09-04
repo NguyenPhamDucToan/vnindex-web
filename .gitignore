@@ -10,3 +10,7 @@ Thumbs.db
 export_run.log
 analyst_run.log
 export_analyst.log
+
+backfill.log
+*_run.log
+server.log
