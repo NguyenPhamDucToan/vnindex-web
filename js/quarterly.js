@@ -506,7 +506,7 @@ export function quarterlyCharts(parent, co, financials, detail, prices, valHisto
     const pYears = [], pRev = [], pNi = [];
     let lr = rev.filter(isN).slice(-1)[0] ?? 0, ln = ni.filter(isN).slice(-1)[0] ?? 0;
     const lastY = parseInt(years[years.length - 1]) || new Date().getFullYear();
-    for (let i = 1; i <= 3; i++) { lr *= 1 + gR; ln *= 1 + gN; pYears.push(String(lastY + i)); pRev.push(lr); pNi.push(ln); }
+    for (let i = 1; i <= 3; i++) { lr *= 1 + gR; ln *= 1 + gN; pYears.push(`${lastY + i}F`); pRev.push(lr); pNi.push(ln); }
     const allY = [...years, ...pYears];
     const pad = (a, before) => before ? [...a, ...new Array(3).fill(null)]
                                       : [...new Array(years.length).fill(null), ...a];
@@ -527,22 +527,54 @@ export function quarterlyCharts(parent, co, financials, detail, prices, valHisto
       { type: "scatter", mode: "lines+markers", name: "Biên lợi nhuận thuần %", x: allY,
         y: [...years.map((_, k) => (isN(rev[k]) && rev[k] && isN(ni[k]) ? ni[k] / rev[k] : null)), null, null, null],
         yaxis: "y2", line: { color: MARGIN, width: 1.6 }, marker: { size: 4 } },
+      // Repeat the last actual margin at index years.length-1 so the dashed
+      // forecast joins the solid line instead of starting in mid-air.
       { type: "scatter", mode: "lines+markers", name: "Biên LN thuần % (DB)", x: allY,
-        y: [...new Array(years.length).fill(null), ...pRev.map((r, k) => (r ? pNi[k] / r : null))],
+        y: [...new Array(years.length - 1).fill(null),
+            (isN(rev[years.length - 1]) && rev[years.length - 1] && isN(ni[years.length - 1]))
+              ? ni[years.length - 1] / rev[years.length - 1] : null,
+            ...pRev.map((r, k) => (r ? pNi[k] / r : null))],
         yaxis: "y2", line: { color: MARGIN, width: 1.6, dash: "dot" }, marker: { size: 4 } },
     ], pctAxis(Object.assign(base(), { barmode: "group", xaxis: { type: "category", tickfont: { ...FONT, size: 9 }, showgrid: false } })));
   }
 
-  if ((valHistory || []).length > 2 && (prices || []).length) {
+  if ((valHistory || []).length && (prices || []).length) {
     const px = prices.slice(-500);
-    add("Giá so với giá trị nội tại", [
-      { type: "scatter", mode: "lines", name: "Giá thị trường",
-        x: px.map((r) => r.date), y: px.map((r) => r.close * 1000),
-        line: { color: PRICE_BLUE, width: 1.5 }, fill: "tozeroy", fillcolor: "rgba(37,99,235,0.06)" },
-      { type: "scatter", mode: "lines", name: "DCF", connectgaps: true,
-        x: valHistory.map((r) => r.calc_date), y: valHistory.map((r) => r.dcf_estimate),
-        line: { color: DRED, width: 1.5, dash: "dash" } },
-    ], Object.assign(base(), { xaxis: { tickfont: { ...FONT, size: 9 }, showgrid: false } }));
+    // The estimate is recomputed only now and then, so it covers a fraction of
+    // the price window. The original pads it to both ends of that window and
+    // interpolates, giving one continuous line instead of a stub; do the same.
+    const pts = valHistory
+      .map((r) => [r.calc_date || r.date, r.avg_intrinsic_value ?? r.avg])
+      .filter(([d, v]) => d && isN(v))
+      .sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+    if (pts.length) {
+      const dates = px.map((r) => r.date);
+      const iv = dates.map((d) => {
+        let lo = null, hi = null;
+        for (const [pd, pv] of pts) {
+          if (pd <= d) lo = [pd, pv];
+          if (pd >= d && !hi) hi = [pd, pv];
+        }
+        if (lo && hi && lo[0] !== hi[0]) {
+          const t0 = Date.parse(lo[0]), t1 = Date.parse(hi[0]), t = Date.parse(d);
+          return lo[1] + (hi[1] - lo[1]) * ((t - t0) / (t1 - t0));
+        }
+        return (lo || hi)[1];               // flat before the first / after the last
+      });
+      add("Giá so với giá trị nội tại", [
+        { type: "scatter", mode: "lines", name: "Giá thị trường",
+          x: dates, y: px.map((r) => r.close * 1000),
+          line: { color: PRICE_BLUE, width: 1.5 }, fill: "tozeroy", fillcolor: "rgba(37,99,235,0.06)",
+          hovertemplate: "%{y:,.0f} VND<extra></extra>" },
+        { type: "scatter", mode: "lines", name: "Giá trị nội tại TB",
+          x: dates, y: iv, line: { color: DRED, width: 2, dash: "dash" },
+          hovertemplate: "%{y:,.0f} VND<extra></extra>" },
+      ], Object.assign(base(), {
+        xaxis: { tickfont: { ...FONT, size: 9 }, showgrid: false },
+        yaxis: { gridcolor: RULE, tickfont: { ...FONT, size: 9 },
+                 title: { text: "Giá (VND)", font: { ...FONT, size: 10 } } },
+      }));
+    }
   }
 
   // The original's chart 21: every valuation method as a bar against the
@@ -568,7 +600,10 @@ export function quarterlyCharts(parent, co, financials, detail, prices, valHisto
     // compare rate of change rather than absolute price. Inputs are dashed.
     add(commDef.title, commRows.map(([sym, name, color, isInput]) => ({
       type: "scatter", mode: "lines", name,
-      x: commodities.dates, y: commSeries[sym],
+      // Futures and the steel ETF keep different holiday calendars, so the
+      // union date index leaves the odd hole; bridge it rather than snapping
+      // the line, the hole is a calendar artefact and not missing signal.
+      x: commodities.dates, y: commSeries[sym], connectgaps: true,
       line: { color, width: 2, dash: isInput ? "dash" : "solid" },
       hovertemplate: `${name}: %{y:.1f}<extra></extra>`,
     })), Object.assign(base(), {
