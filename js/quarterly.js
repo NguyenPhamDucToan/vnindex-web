@@ -648,40 +648,97 @@ export function quarterlyCharts(parent, co, financials, detail, prices, valHisto
 // renders it inside col_chart as "Giao dịch Nước ngoài & Tự doanh". The
 // proprietary ("Tự doanh") half is a placeholder in the original too: its data
 // source does not expose it.
-export function foreignSection(parent, foreign) {
+export function foreignSection(parent, foreign, prices) {
   if ((foreign || []).length < 2) return null;
-  const card = el(`<div class="card"><h2 class="sec-h">Giao dịch Nước ngoài <span class="ta-sub">· 20 phiên gần nhất</span></h2><div class="qgrid ff-grid"></div></div>`);
-  const grid = card.querySelector(".qgrid");
+  const card = el(`<div class="card">
+    <h2 class="sec-h">Giao dịch Nước ngoài &amp; Tự doanh <span class="ta-sub">· 20 phiên gần nhất</span></h2>
+    <div class="range-row ff-tabs"></div>
+    <div class="ff-body"></div>
+  </div>`);
   parent.appendChild(card);
-  const pending = [];
-  const add = (title, traces, layout) => {
-    const { box, canvas } = chartBox(title);
-    grid.appendChild(box);
-    pending.push(() => window.Plotly.react(canvas, traces, layout, { displayModeBar: false, responsive: true }));
-  };
+  const body = card.querySelector(".ff-body");
+  const tabRow = card.querySelector(".ff-tabs");
 
   const fx = foreign.slice(-20);
   const x = fx.map((d) => String(d.date).slice(5, 10).split("-").reverse().join("/"));
   const y = fx.map((d) => (isN(d.net_val) ? d.net_val / 1e9 : null));
-  add("Khối ngoại mua/bán ròng (tỷ ₫) · 20 phiên", [
-    { type: "bar", x, y, marker: { color: y.map((v) => (v >= 0 ? MARK_UP : MARK_DOWN)) },
-      hovertemplate: "%{x}: %{y:.2f} tỷ<extra></extra>" },
-  ], Object.assign(base(), { yaxis: { gridcolor: RULE, tickfont: { ...FONT, size: 9 }, zeroline: true, zerolinecolor: MUTED } }));
+
+  // The price line shares the bars' category axis, so it can only carry the
+  // sessions the flow data has -- look each one up rather than slicing.
+  const closeBy = new Map((prices || []).map((r) => [String(r.date), r.close]));
+  const closes = fx.map((d) => {
+    const v = closeBy.get(String(d.date));
+    return isN(v) ? v : null;
+  });
 
   const L = fx[fx.length - 1] || {};
   const n0 = (v) => (isN(v) ? Math.round(v).toLocaleString("en-US") : "—");
-  const nS = (v) => (isN(v) ? (v >= 0 ? "+" : "") + Math.round(v).toLocaleString("en-US") : "—");
+  const nS = (v) => (isN(v) ? (v >= 0 ? "+" : "−") + Math.abs(Math.round(v)).toLocaleString("en-US") : "—");
   const bn = (v) => (isN(v) ? (v / 1e9).toFixed(2) : "—");
-  const bnS = (v) => (isN(v) ? (v >= 0 ? "+" : "") + (v / 1e9).toFixed(2) : "—");
-  const stats = [
-    ["KL Mua", n0(L.buy_vol), ""], ["KL Bán", n0(L.sell_vol), ""],
-    ["KL Mua-Bán", nS(L.net_vol), (L.net_vol ?? 0) >= 0 ? "gain" : "loss"],
-    ["GT Mua (tỷ)", bn(L.buy_val), ""], ["GT Bán (tỷ)", bn(L.sell_val), ""],
-    ["GT Mua-Bán (tỷ)", bnS(L.net_val), (L.net_val ?? 0) >= 0 ? "gain" : "loss"],
-  ];
-  grid.appendChild(el(`<div class="ff-stats">${stats.map(([k, v, c]) =>
-    `<div class="ff-cell"><div class="ff-k">${k}</div><div class="ff-v ${c}">${v}</div></div>`).join("")}</div>`));
-  pending.forEach((fn) => fn());
+  const bnS = (v) => (isN(v) ? (v >= 0 ? "+" : "−") + Math.abs(v / 1e9).toFixed(2) : "—");
+  const sign = (v) => ((v ?? 0) >= 0 ? "gain" : "loss");
+
+  function renderForeign() {
+    body.innerHTML = "";
+    // Two rows of three, above the chart, as st.columns(3) twice.
+    const rows = [
+      [["KL Mua", n0(L.buy_vol), ""], ["KL Bán", n0(L.sell_vol), ""],
+       ["KL Mua-Bán", nS(L.net_vol), sign(L.net_vol)]],
+      [["GT Mua (tỷ)", bn(L.buy_val), ""], ["GT Bán (tỷ)", bn(L.sell_val), ""],
+       ["GT Mua-Bán (tỷ)", bnS(L.net_val), sign(L.net_val)]],
+    ];
+    for (const r of rows) {
+      body.appendChild(el(`<div class="ff-stats">${r.map(([k, v, c]) =>
+        `<div class="ff-cell"><div class="ff-k">${k}</div><div class="ff-v ${c}">${v}</div></div>`).join("")}</div>`));
+    }
+    const canvas = el(`<div class="ff-plot"></div>`);
+    body.appendChild(canvas);
+    body.appendChild(el(`<div class="vb-note">GTNN = giá trị giao dịch ròng của nhà đầu tư nước ngoài.</div>`));
+
+    const traces = [
+      { type: "bar", x, y, name: "GTNN mua ròng (tỷ)",
+        marker: { color: y.map((v) => ((v ?? 0) >= 0 ? MARK_UP : MARK_DOWN)) },
+        customdata: fx.map((d) => [(d.buy_val || 0) / 1e9, (d.sell_val || 0) / 1e9]),
+        hovertemplate: "Net: %{y:,.2f} tỷ · Buy: %{customdata[0]:,.2f} tỷ · "
+                     + "Sell: %{customdata[1]:,.2f} tỷ<extra>GTNN ròng</extra>" },
+    ];
+    if (closes.some(isN)) {
+      traces.push({ type: "scatter", mode: "lines", x, y: closes, yaxis: "y2",
+        name: "Giá đóng cửa", connectgaps: true,
+        line: { color: SKY, width: 2 },
+        hovertemplate: "%{y:,.1f}<extra>Giá đóng cửa</extra>" });
+    }
+    window.Plotly.react(canvas, traces, {
+      height: 280, dragmode: false, margin: { l: 52, r: 52, t: 28, b: 30 },
+      paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: FONT,
+      hovermode: "x unified",
+      legend: { orientation: "h", y: 1.1, x: 0, font: { ...FONT, size: 11 } },
+      xaxis: { type: "category", showgrid: false, tickfont: { ...FONT, size: 10 } },
+      yaxis: { title: { text: "GTNN ròng (tỷ)", font: { ...FONT, size: 10 } },
+               gridcolor: RULE, zeroline: false },
+      yaxis2: { title: { text: "Giá (nghìn VND)", font: { ...FONT, size: 10 } },
+                overlaying: "y", side: "right", showgrid: false },
+      shapes: [{ type: "line", xref: "paper", x0: 0, x1: 1, y0: 0, y1: 0,
+                 line: { color: "#cbd5e1", width: 1 } }],
+    }, { displayModeBar: false, responsive: true });
+  }
+
+  function renderProp() {
+    body.innerHTML = "";
+    // The original shows the same notice: proprietary flow isn't in the feed.
+    body.appendChild(el(`<div class="vb-note">Dữ liệu giao dịch tự doanh chưa có sẵn từ nguồn dữ liệu hiện tại.</div>`));
+  }
+
+  for (const name of ["Nước ngoài", "Tự doanh"]) {
+    const btn = el(`<button class="range-btn ${name === "Nước ngoài" ? "active" : ""}">${name}</button>`);
+    btn.addEventListener("click", () => {
+      tabRow.querySelectorAll(".range-btn").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      (name === "Nước ngoài" ? renderForeign : renderProp)();
+    });
+    tabRow.appendChild(btn);
+  }
+  renderForeign();
   return card;
 }
 
