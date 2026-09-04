@@ -279,8 +279,48 @@ export function peerSection(co, v, screenerRows, modelUpside) {
       <div class="pr-d ${good ? "gain" : "loss"}">${d >= 0 ? "+" : ""}${fmt(d)} vs trung vị</div></div>`;
   }).join("");
 
-  return el(`<div class="card">
-    <h2 class="sec-h">So sánh cùng ngành <span class="ta-sub">· ${F.escapeHtml(co.sector)} · ${peers.length} mã</span></h2>
+  const card = el(`<div class="card">
+    <h2 class="sec-h">So sánh cùng ngành <span class="ta-sub">· ${F.escapeHtml(co.sector)}</span></h2>
     <div class="pr-row">${cards}</div>
+    <div id="pr-scatter"></div>
+    <div class="vb-note">★ ${F.escapeHtml(co.ticker)} · Góc dưới-phải = rẻ &amp; sinh lời tốt (P/E thấp, ROE cao)</div>
   </div>`);
+
+  // Plotly throws on a detached node, so the caller runs this after appending.
+  // sections.js has no shared font constant; match the valuation band beside it.
+  const PFONT = { family: "'Fira Code', monospace", size: 10, color: "#0a121d" };
+  card.renderChart = () => {
+    const pts = peers.filter((r) => F.isNum(r.pe) && F.isNum(r.roe));
+    if (pts.length < 3) return;
+    const self = pts.filter((r) => r.ticker === co.ticker);
+    const others = pts.filter((r) => r.ticker !== co.ticker);
+    // roe is stored as a fraction; the original's axis is in percent.
+    const roePct = (r) => r.roe * 100;
+    const traces = [{
+      type: "scatter", mode: "markers+text", name: "Đối thủ",
+      x: others.map((r) => r.pe), y: others.map(roePct), text: others.map((r) => r.ticker),
+      textposition: "top center", textfont: { family: PFONT.family, size: 10, color: "#6b7280" },
+      marker: { size: 15, color: "#5b9bd5", opacity: 0.7, line: { width: 0.5, color: "#1f2937" } },
+      hovertemplate: "%{text}<br>P/E %{x:.1f}× · ROE %{y:.1f}%<extra></extra>",
+    }];
+    if (self.length) {
+      traces.push({
+        type: "scatter", mode: "markers+text", name: co.ticker,
+        x: self.map((r) => r.pe), y: self.map(roePct), text: self.map((r) => r.ticker),
+        textposition: "top center", textfont: { family: PFONT.family, size: 14, color: "#f59e0b" },
+        marker: { size: 28, color: "#f59e0b", symbol: "star", line: { width: 1.5, color: "#fff" } },
+        hovertemplate: "<b>%{text}</b><br>P/E %{x:.1f}× · ROE %{y:.1f}%<extra></extra>",
+      });
+    }
+    window.Plotly.react(card.querySelector("#pr-scatter"), traces, {
+      height: 340, dragmode: false, margin: { l: 52, r: 16, t: 10, b: 42 },
+      paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+      font: PFONT, showlegend: false, hovermode: "closest",
+      xaxis: { title: { text: "P/E (×)", font: { ...PFONT, size: 10 } },
+               gridcolor: "rgba(148,163,184,0.22)", tickfont: { ...PFONT, size: 9 } },
+      yaxis: { title: { text: "ROE (%)", font: { ...PFONT, size: 10 } },
+               gridcolor: "rgba(148,163,184,0.22)", tickfont: { ...PFONT, size: 9 } },
+    }, { displayModeBar: false, responsive: true });
+  };
+  return card;
 }

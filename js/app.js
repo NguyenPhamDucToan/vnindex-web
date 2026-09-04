@@ -135,7 +135,7 @@ async function renderStock(t) {
   const left = $(".split-l", split);
   const peers = await loadScreener().catch(() => null);
   const pc = peerSection(co, v, peers, (d.model || {}).upside);
-  if (pc) left.appendChild(pc);
+  if (pc) { left.appendChild(pc); pc.renderChart(); }
   foreignSection(left, d.foreign || [], prices);
   valuationBandSection(left, d.financials || [], prices);
 
