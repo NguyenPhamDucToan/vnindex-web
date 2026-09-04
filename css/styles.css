@@ -469,3 +469,6 @@ table.screen-wide { min-width: 1100px; }
 .wl-cell { text-align: center; width: 28px; }
 .wl-star { border: 0; background: none; cursor: pointer; font-size: 14px; color: var(--rule); line-height: 1; padding: 0; }
 .wl-star.on { color: #f59e0b; }
+
+.cmp-ind { display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 13px; color: var(--ink); }
+.cmp-ind .dim { color: var(--muted); font-size: 12px; }

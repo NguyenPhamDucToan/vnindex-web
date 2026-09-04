@@ -6,6 +6,8 @@
 // the exported per-ticker files plus the screener snapshot, so no new data.
 import { loadTicker, loadScreener } from "./data.js";
 import { computeQualityScore, classifySignal, SIGNAL_VI, SIGNAL_COLOR } from "./signals.js";
+import { computeTTM } from "./ttm.js";
+import { axesFor, normalise } from "./sector-metrics.js";
 import * as F from "./format.js";
 
 const el = (h) => { const t = document.createElement("template"); t.innerHTML = h.trim(); return t.content.firstElementChild; };
@@ -14,14 +16,6 @@ const FONT = { family: "Fira Code, monospace", size: 10, color: "#0a121d" };
 // six overlapping lines stay tellable apart.
 // Same Excel-ish series palette the original uses for multi-ticker charts.
 const SERIES = ["#5b9bd5", "#f0ad4e", "#70ad47", "#7030a0", "#5bc0de", "#c00000"];
-
-const RADAR = [
-  { label: "ROE", key: "roe", max: 0.30, pct: true },
-  { label: "Biên LN ròng", key: "net_margin", max: 0.25, pct: true },
-  { label: "Biên FCF", key: "fcf_margin", max: 0.20, pct: true },
-  { label: "Chất lượng", key: "q", max: 100, pct: false },
-  { label: "Upside", key: "upFrac", max: 1.0, pct: true },
-];
 
 export async function renderCompare(root, onPick) {
   root.innerHTML = `<div class="loading">Đang tải…</div>`;
@@ -51,6 +45,8 @@ export async function renderCompare(root, onPick) {
         <div id="cmp-sugg" class="hidden"></div>
         <div id="cmp-chips" class="cmp-chips"></div>
       </div>
+      <label class="cmp-ind"><input type="checkbox" id="cmp-industry" />
+        Toàn ngành <span class="dim">· so mã đầu tiên với tất cả công ty cùng ngành</span></label>
     </div>
     <div id="cmp-body"></div>
   </div>`);
@@ -59,6 +55,11 @@ export async function renderCompare(root, onPick) {
   const input = shell.querySelector("#cmp-input");
   const sugg = shell.querySelector("#cmp-sugg");
   const chips = shell.querySelector("#cmp-chips");
+  // "Toàn ngành": overlay the sector average on the radar and widen the table
+  // to the whole sector, as the original's toggle does.
+  const indBox = shell.querySelector("#cmp-industry");
+  let industryMode = false;
+  indBox.addEventListener("change", () => { industryMode = indBox.checked; rebuild(); });
 
   const drawChips = () => {
     chips.innerHTML = "";
@@ -106,10 +107,50 @@ export async function renderCompare(root, onPick) {
         const q = computeQualityScore(v.roe, v.net_margin, v.profit_quality, v.fcf_margin, v.current_ratio, v.debt_to_equity);
         const upFrac = F.isNum((d.model || {}).upside) ? d.model.upside : null;
         data.push({ t, d, v, q, upFrac, sig: upFrac != null ? classifySignal(upFrac, q) : null,
+                    ttm: computeTTM(d.financials || []) || {},
                     sector: (d.company || {}).sector, name: (d.company || {}).name });
       } catch { /* unknown ticker -- skip */ }
     }
     if (!data.length) { body.innerHTML = `<div class="loading">Không tải được dữ liệu.</div>`; return; }
+
+    // Industry average for the radar. Loading a whole sector can mean sixty
+    // per-ticker files, so cap at the twenty most-traded names -- enough for a
+    // stable mean, and the label says how many went into it.
+    let industryAvg = null;
+    if (industryMode && data[0] && data[0].sector) {
+      const sectorAxes = axesFor([data[0].sector]);
+      const peers = screen.filter((r) => r.sector === data[0].sector)
+        .sort((a, b) => (b.vol ?? 0) - (a.vol ?? 0)).slice(0, 20);
+      const acc = {}, cnt = {};
+      for (const a of sectorAxes) { acc[a.label] = 0; cnt[a.label] = 0; }
+      let n = 0;
+      for (const r of peers) {
+        let pd;
+        try { pd = await loadTicker(r.ticker); } catch { continue; }
+        const pv = pd.valuation || {};
+        const ctx = {
+          t: r.ticker, d: pd, v: pv,
+          q: computeQualityScore(pv.roe, pv.net_margin, pv.profit_quality, pv.fcf_margin,
+                                 pv.current_ratio, pv.debt_to_equity),
+          upFrac: F.isNum((pd.model || {}).upside) ? pd.model.upside : null,
+          ttm: computeTTM(pd.financials || []) || {},
+        };
+        n++;
+        for (const a of sectorAxes) {
+          let raw = null;
+          try { raw = a.calc(ctx); } catch { raw = null; }
+          if (F.isNum(raw)) { acc[a.label] += raw; cnt[a.label]++; }
+        }
+      }
+      if (n) {
+        const raw = {}, norm = {};
+        for (const a of sectorAxes) {
+          raw[a.label] = cnt[a.label] ? acc[a.label] / cnt[a.label] : null;
+          norm[a.label] = normalise(a, raw[a.label]);
+        }
+        industryAvg = { n, raw, norm };
+      }
+    }
 
     body.innerHTML = "";
     const pending = [];
@@ -143,27 +184,55 @@ export async function renderCompare(root, onPick) {
     }, { displayModeBar: false, responsive: true }));
 
     // ── 2. Overall profile radar ─────────────────────────────────────
+    // Axes follow the sector when every selected name shares one -- comparing
+    // banks on gross margin, or insurers on inventory turns, says nothing.
+    const axes = axesFor(data.map((x) => x.sector));
+    const theta = axes.map((a) => a.label);
     const radarCard = card("Hồ sơ tổng thể", "cmp-radar",
-      `<div class="vb-note">Mỗi trục đã chuẩn hóa về thang 0–100% của ngưỡng tham chiếu
-       (ROE 30%, biên LN ròng 25%, biên FCF 20%, chất lượng 100, upside 100%).</div>`);
-    const radarTraces = data.map((x, i) => ({
-      type: "scatterpolar", name: x.t, fill: "toself",
-      r: RADAR.map((c) => {
-        const raw = c.key === "q" ? x.q : c.key === "upFrac" ? x.upFrac : x.v[c.key];
-        if (!F.isNum(raw)) return 0;
-        return Math.max(0, Math.min(100, raw / c.max * 100));
-      }).concat([0]).slice(0, RADAR.length),
-      theta: RADAR.map((c) => c.label),
-      line: { color: SERIES[i % SERIES.length] },
-      fillcolor: SERIES[i % SERIES.length] + "22",
-      hovertemplate: `${x.t} %{theta}: %{r:.0f}<extra></extra>`,
-    }));
+      `<div class="vb-note">Trục: ${axes.map((a) => a.label).join(" · ")}.
+       Mỗi trục chuẩn hóa 0–100 theo ngưỡng tham chiếu; trục "càng thấp càng tốt"
+       được đảo chiều nên xa tâm luôn là tốt hơn. Hover để xem số thực.</div>`);
+
+    const traceFor = (name, vals, labels, color, dash, fillAlpha) => ({
+      type: "scatterpolar", name, fill: "toself",
+      r: vals.concat([vals[0]]), theta: theta.concat([theta[0]]),
+      customdata: labels.concat([labels[0]]),
+      line: { color, width: dash ? 2 : 2.5, dash: dash || "solid" },
+      fillcolor: color + fillAlpha,
+      hovertemplate: `%{theta}: %{customdata}<extra>${name}</extra>`,
+    });
+
+    const radarTraces = [];
+    // Industry average first so the individual names draw on top of it.
+    if (industryMode && data.length && data[0].sector) {
+      const peers = screen.filter((r) => r.sector === data[0].sector);
+      if (peers.length > 1 && industryAvg) {
+        const vals = axes.map((a) => industryAvg.norm[a.label] ?? 0);
+        const labels = axes.map((a) => a.fmt(industryAvg.raw[a.label]));
+        radarTraces.push(traceFor(`TB ngành (${industryAvg.n} CP)`, vals, labels,
+                                  "#f97316", "dash", "1f"));
+      }
+    }
+    for (const [i, x] of data.entries()) {
+      const raws = axes.map((a) => { try { return a.calc(x); } catch { return null; } });
+      radarTraces.push(traceFor(x.t, axes.map((a, k) => normalise(a, raws[k])),
+                                axes.map((a, k) => a.fmt(raws[k])),
+                                SERIES[i % SERIES.length], null, "33"));
+    }
     pending.push(() => window.Plotly.react(radarCard.querySelector("#cmp-radar"), radarTraces, {
-      height: 420, dragmode: false, margin: { l: 60, r: 60, t: 40, b: 40 },
+      height: 440, dragmode: false, margin: { l: 60, r: 60, t: 20, b: 60 },
       paper_bgcolor: "rgba(0,0,0,0)", font: FONT,
-      polar: { radialaxis: { visible: true, range: [0, 100], tickfont: { size: 9 } },
-               angularaxis: { tickfont: { size: 10 } }, bgcolor: "rgba(0,0,0,0)" },
-      legend: { orientation: "h", y: 1.08, x: 0, font: { size: 10 } },
+      // Without an explicit square domain the polar drifts to one side of a
+      // very wide card; the original's container is narrow so it never did.
+      polar: {
+        domain: { x: [0.28, 0.72], y: [0, 1] },
+        bgcolor: "rgba(241,245,249,0.95)",
+        radialaxis: { visible: true, range: [0, 100], showticklabels: false,
+                      showline: false, ticks: "", gridcolor: "#e2e8f0" },
+        angularaxis: { gridcolor: "#e2e8f0", linecolor: "#64748b", tickfont: { size: 10 } },
+      },
+      legend: { orientation: "h", yanchor: "bottom", y: -0.14, xanchor: "center", x: 0.5,
+                font: { size: 10 } },
     }, { displayModeBar: false, responsive: true }));
 
     // ── 3. Financial-metric comparison (grouped bars per metric) ─────
