@@ -283,7 +283,7 @@ export function peerSection(co, v, screenerRows, modelUpside) {
     <h2 class="sec-h">So sánh cùng ngành <span class="ta-sub">· ${F.escapeHtml(co.sector)}</span></h2>
     <div class="pr-row">${cards}</div>
     <div id="pr-scatter"></div>
-    <div class="vb-note">★ ${F.escapeHtml(co.ticker)} · Góc dưới-phải = rẻ &amp; sinh lời tốt (P/E thấp, ROE cao)</div>
+    <div class="vb-note">★ ${F.escapeHtml(co.ticker)} · Góc trên-trái = rẻ &amp; sinh lời tốt (P/E thấp, ROE cao)</div>
   </div>`);
 
   // Plotly throws on a detached node, so the caller runs this after appending.
