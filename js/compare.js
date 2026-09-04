@@ -281,7 +281,7 @@ export async function renderCompare(root, onPick) {
 
     const cmpCard = el(`<div class="card">
       <h2 class="sec-h">So sánh chỉ số tài chính${sAxes ? ` <span class="ta-sub">· gồm chỉ số riêng của ${F.escapeHtml(sectorNames[0])}</span>` : ""}</h2>
-      <div class="vb-note">Ô đậm hơn = tốt hơn trong cùng hàng. Cột cam là trung bình ngành.</div>
+      <div class="vb-note">★ = dẫn đầu hàng đó, tô theo màu của mã.</div>
       <div class="ta-scroll"><table class="screen cmp-heat"><thead><tr><th>Chỉ số</th></tr></thead><tbody></tbody></table></div>
     </div>`);
     body.appendChild(cmpCard);
@@ -295,6 +295,8 @@ export async function renderCompare(root, onPick) {
       head.appendChild(el(`<th style="color:${c.colour}">${F.escapeHtml(c.label)}</th>`));
     }
     const cmpBody = cmpCard.querySelector("tbody");
+    // rankLog[colIndex] = [{label, rank, of}] -- feeds the summary above.
+    const rankLog = cols.map(() => []);
     for (const [group, rows] of GROUPS) {
       cmpBody.appendChild(el(`<tr class="cmp-grp"><td colspan="${cols.length + 1}">${F.escapeHtml(group)}</td></tr>`));
       for (const [label, get, higherBetter, fmt] of rows) {
@@ -310,13 +312,50 @@ export async function renderCompare(root, onPick) {
         vals.forEach((v, i) => {
           if (!F.isNum(v)) { tr.appendChild(el(`<td class="num dim">—</td>`)); return; }
           const r = rank.get(i) ?? valid.length;
-          const alpha = valid.length > 1 ? 0.30 * (1 - r / (valid.length - 1)) + 0.04 : 0.12;
-          const c = cols[i].colour;
-          tr.appendChild(el(`<td class="num" style="background:${c}${Math.round(alpha * 255).toString(16).padStart(2, "0")}">${
-            F.escapeHtml(fmt(v) ?? "—")}</td>`));
+          if (valid.length > 1) rankLog[i].push({ label, rank: r, of: valid.length });
+          // No fill: colouring every cell left nothing standing out. Only the
+          // leader is marked, in its own column's colour so the mark points
+          // back to the ticker without a legend.
+          const best = r === 0 && valid.length > 1;
+          tr.appendChild(el(best
+            ? `<td class="num cmp-best" style="color:${cols[i].colour}">${
+                F.escapeHtml(fmt(v) ?? "—")} <span class="cmp-star">★</span></td>`
+            : `<td class="num">${F.escapeHtml(fmt(v) ?? "—")}</td>`));
         });
         cmpBody.appendChild(tr);
       }
+    }
+
+    // ── 3b. Who wins where ───────────────────────────────────────────
+    // The sector average is a yardstick, not a contender, so it is excluded
+    // from the win count -- otherwise "TB ngành" would appear to compete.
+    const contenders = cols.map((c, i) => ({ ...c, i }))
+      .filter((c) => !c.avg && rankLog[c.i].length);
+    if (contenders.length > 1) {
+      const summary = el(`<div class="card">
+        <h2 class="sec-h">Tổng kết so sánh</h2>
+        <div class="vb-note">Thứ hạng tính trong chính nhóm đang so, không phải toàn thị trường.</div>
+        <div class="cmp-cards"></div></div>`);
+      const grid = summary.querySelector(".cmp-cards");
+      const ranked = contenders
+        .map((c) => ({ ...c, wins: rankLog[c.i].filter((r) => r.rank === 0).length }))
+        .sort((a, b) => b.wins - a.wins);
+      for (const c of ranked) {
+        const log = rankLog[c.i];
+        const total = log.length;
+        // Strongest = best relative position; ties broken by the wider field.
+        const byPos = log.slice().sort((a, b) =>
+          (a.rank / Math.max(1, a.of - 1)) - (b.rank / Math.max(1, b.of - 1)));
+        const strong = byPos.slice(0, 3).map((r) => r.label);
+        const weak = byPos.slice(-2).reverse().map((r) => r.label);
+        grid.appendChild(el(`<div class="cmp-card" style="border-top-color:${c.colour}">
+          <div class="cmp-t" style="color:${c.colour}">${F.escapeHtml(c.label)}</div>
+          <div class="cmp-w">${c.wins}<span class="cmp-wl">/${total} chỉ số dẫn đầu</span></div>
+          <div class="cmp-l"><b>Mạnh</b> ${F.escapeHtml(strong.join(" · "))}</div>
+          <div class="cmp-l"><b>Yếu</b> ${F.escapeHtml(weak.join(" · "))}</div>
+        </div>`));
+      }
+      body.insertBefore(summary, cmpCard);
     }
 
     // ── 4. Revenue, net income and revenue growth, five years ────────
@@ -361,29 +400,8 @@ export async function renderCompare(root, onPick) {
     // grouped, rank-shaded comparison table above shows the same rows with
     // the sector's own metrics folded in.)
 
-    // ── 6. Detail table ──────────────────────────────────────────────
-    const tbl = el(`<div class="card"><h2 class="sec-h">Bảng so sánh chi tiết</h2>
-      <table class="screen"><thead><tr>
-        <th>Mã</th><th>Ngành</th><th>Giá</th><th>P/E</th><th>P/B</th><th>ROE</th>
-        <th>LN ròng</th><th>FCF Margin</th><th>D/E</th><th>CR</th><th>Avg Upside</th><th>Quality</th>
-      </tr></thead><tbody></tbody></table></div>`);
-    const tb = tbl.querySelector("tbody");
-    for (const x of data) {
-      const px = (x.d.prices || []);
-      const lastC = px.length ? px[px.length - 1].close : null;
-      const tr = el(`<tr>
-        <td><b>${x.t}</b></td>
-        <td class="dim">${F.escapeHtml(x.sector || "")}</td>
-        <td>${F.priceVND(lastC)}</td>
-        <td>${F.mult(x.v.pe, 1)}</td><td>${F.mult(x.v.pb)}</td><td>${F.pct(x.v.roe)}</td>
-        <td>${F.pct(x.v.net_margin)}</td><td>${F.pct(x.v.fcf_margin)}</td>
-        <td>${F.mult(x.v.debt_to_equity)}</td><td>${F.mult(x.v.current_ratio)}</td>
-        <td style="color:${(x.upFrac ?? 0) >= 0 ? "#15803d" : "#b91c1c"}">${x.upFrac == null ? "—" : F.pctSigned(x.upFrac * 100)}</td>
-        <td>${x.q.toFixed(0)}</td></tr>`);
-      if (onPick) tr.onclick = () => onPick(x.t);
-      tb.appendChild(tr);
-    }
-    body.appendChild(tbl);
+    // (The detail table that used to close this view is gone: it repeated
+    // the comparison table's numbers transposed.)
 
     pending.forEach((fn) => fn());
   }

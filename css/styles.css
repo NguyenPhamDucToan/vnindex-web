@@ -557,3 +557,15 @@ table.screen-wide { min-width: 1100px; }
 .hd-body { margin-top: var(--space-md); }
 .hd-split { display: grid; grid-template-columns: 3fr 2fr; gap: var(--space-xl); align-items: start; }
 @media (max-width: 900px) { .hd-split { grid-template-columns: 1fr; } }
+
+/* Comparison summary cards */
+.cmp-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: var(--space-md); }
+.cmp-card { border: 1px solid var(--rule); border-top: 3px solid; border-radius: 4px; background: var(--paper); padding: 12px 14px; }
+.cmp-t { font-family: var(--mono); font-size: 16px; font-weight: 700; }
+.cmp-w { font-family: var(--mono); font-size: 26px; font-weight: 700; color: var(--ink); margin: 4px 0 8px; }
+.cmp-wl { font-family: var(--sans); font-size: 12px; font-weight: 400; color: var(--muted); margin-left: 6px; }
+.cmp-l { font-size: 12px; color: var(--muted); line-height: 1.55; }
+.cmp-l b { color: var(--ink); font-weight: 600; margin-right: 4px; }
+.cmp-best { font-weight: 700; }
+/* Star inherits the cell colour, so it always matches its ticker. */
+.cmp-star { color: currentColor; font-size: 10px; }
