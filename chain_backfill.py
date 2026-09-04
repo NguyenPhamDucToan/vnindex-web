@@ -23,7 +23,10 @@ def fetch_running() -> bool:
         out = subprocess.run(
             ["powershell", "-NoProfile", "-Command",
              "Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | "
-             "Where-Object { $_.CommandLine -match 'export_detailed|backfill\\.py' } | "
+             # Anchored on the space before the script name: an unanchored
+             # backfill pattern also matches this file's own name, so the
+             # wait never ends.
+             "Where-Object { $_.CommandLine -match ' backfill| export_detailed' } | "
              "Measure-Object | Select-Object -ExpandProperty Count"],
             capture_output=True, text=True, timeout=60)
         return int((out.stdout or "0").strip() or 0) > 0
