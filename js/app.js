@@ -117,8 +117,12 @@ async function renderStock(t) {
   const vol15 = prices.slice(-15).reduce((a, r) => a + (r.volume || 0), 0) / Math.min(15, prices.length);
 
   root.innerHTML = "";
-  root.appendChild(header(co, last, prev, chg, chgPct));
-  root.appendChild(metricsGrid(co, v, q, mcap, shares, vol15));
+  // Identity, price and the metric grid share one row in the original; the
+  // port had the price pushed to the far edge with the grid on a line below.
+  const headRow = el(`<div class="head-row"></div>`);
+  headRow.appendChild(header(co, last, prev, chg, chgPct));
+  headRow.appendChild(metricsGrid(co, v, q, mcap, shares, vol15));
+  root.appendChild(headRow);
 
   // Two-column split matching the original: price chart on the left, the
   // valuation-estimates + technical panel down the right.

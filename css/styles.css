@@ -117,12 +117,16 @@ b, strong { font-weight: 600; }
 }
 
 /* ── stock header ─────────────────────────────────────────── */
-.stock-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-xl); margin-bottom: var(--space-lg); flex-wrap: wrap; }
+.stock-head { display: flex; justify-content: flex-start; align-items: flex-start; gap: var(--space-xl); flex-wrap: wrap; }
+/* One row: identity, price, then the metric grid, as the original lays it out. */
+.head-row { display: flex; align-items: flex-start; gap: var(--space-xl); margin-bottom: var(--space-lg); flex-wrap: wrap; }
+.head-row > .stock-head { flex: 0 0 auto; margin-bottom: 0; }
+.head-row > .metrics { flex: 1 1 460px; min-width: 0; }
 .sh-tick { font-family: var(--mono); font-size: 30px; font-weight: 700; letter-spacing: -0.5px; display: flex; align-items: center; gap: 10px; }
 .badge { font-family: var(--sans); font-size: 10.5px; font-weight: 600; letter-spacing: .5px; background: var(--primary-soft); color: var(--primary); padding: 3px 8px; border-radius: 4px; }
 .sh-name { color: var(--ink-2); margin-top: 5px; font-size: 14px; }
 .sh-sector { color: var(--muted); font-size: 12px; margin-top: 1px; }
-.sh-right { text-align: right; min-width: 230px; }
+.sh-right { text-align: left; min-width: 300px; padding-right: 28px; }
 .sh-price { font-family: var(--mono); font-size: 36px; font-weight: 700; line-height: 1; letter-spacing: -1px; }
 .sh-chg { font-family: var(--mono); font-size: 13px; margin-top: 5px; }
 .sh-range { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-family: var(--mono); font-size: 10px; color: var(--muted); }
@@ -324,7 +328,8 @@ table.screen tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--pri
   .sc-cell { flex: 1 1 45%; }
   .qgrid { grid-template-columns: 1fr; }
   .stock-head { gap: var(--space-md); }
-  .sh-right { text-align: left; min-width: 0; }
+  .sh-right { text-align: left; min-width: 0; padding-right: 0; }
+  .head-row { flex-direction: column; gap: var(--space-md); }
   .split { grid-template-columns: 1fr; gap: var(--space-xl); }
 }
 @media (max-width: 1200px) and (min-width: 821px) {
@@ -535,3 +540,11 @@ table.screen-wide { min-width: 1100px; }
   .side-filters { display: none; }
   .side-filters.sf-open { display: flex; }
 }
+
+/* Comparison table: group headers and rank-shaded cells. */
+.cmp-heat th { text-align: right; }
+.cmp-heat th:first-child, .cmp-heat td:first-child { text-align: left; white-space: nowrap; }
+.cmp-grp td { background: var(--accent-tint, #eef4ff); color: #1e3a5f; font-size: 11.5px;
+              font-weight: 700; letter-spacing: .10em; text-transform: uppercase;
+              padding: 8px 16px; border-top: 2px solid #bfdbfe; }
+.cmp-heat td.num { text-align: right; font-family: var(--mono); white-space: nowrap; }

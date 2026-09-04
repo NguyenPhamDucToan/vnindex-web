@@ -7,7 +7,7 @@
 import { loadTicker, loadScreener } from "./data.js";
 import { computeQualityScore, classifySignal, SIGNAL_VI, SIGNAL_COLOR } from "./signals.js";
 import { computeTTM } from "./ttm.js";
-import { axesFor, normalise } from "./sector-metrics.js";
+import { axesFor, normalise, SECTOR_AXES } from "./sector-metrics.js";
 import * as F from "./format.js";
 
 const el = (h) => { const t = document.createElement("template"); t.innerHTML = h.trim(); return t.content.firstElementChild; };
@@ -235,28 +235,89 @@ export async function renderCompare(root, onPick) {
                 font: { size: 10 } },
     }, { displayModeBar: false, responsive: true }));
 
-    // ── 3. Financial-metric comparison (grouped bars per metric) ─────
-    const metCard = card("So sánh chỉ số tài chính", "cmp-metrics");
-    const METRICS = [
-      ["P/E", (x) => x.v.pe, "×"], ["P/B", (x) => x.v.pb, "×"],
-      ["ROE", (x) => (F.isNum(x.v.roe) ? x.v.roe * 100 : null), "%"],
-      ["Biên LN ròng", (x) => (F.isNum(x.v.net_margin) ? x.v.net_margin * 100 : null), "%"],
-      ["D/E", (x) => x.v.debt_to_equity, "×"],
-      ["Chất lượng", (x) => x.q, ""],
+    // ── 3. Metric comparison table, graded by rank ───────────────────
+    // Grouped by family, one column per ticker, each row shaded so the best
+    // value reads darkest. A table, not a chart: these metrics share no axis
+    // (a 2.5% NIM against a 1.03x LDR), and it stays readable at twenty
+    // columns in industry mode where bars would not.
+    const sectorNames = [...new Set(data.map((x) => x.sector).filter(Boolean))];
+    const sAxes = (sectorNames.length === 1 && SECTOR_AXES[sectorNames[0]])
+      ? SECTOR_AXES[sectorNames[0]] : null;
+
+    const pct1 = (v) => (F.isNum(v) ? `${(v * 100).toFixed(1)}%` : null);
+    const mult = (v) => (F.isNum(v) ? `${v.toFixed(2)}×` : null);
+    const GROUPS = [
+      ["Định giá", [
+        ["P/E", (x) => x.v.pe, false, (v) => `${v.toFixed(1)}x`],
+        ["P/B", (x) => x.v.pb, false, (v) => `${v.toFixed(1)}x`],
+      ]],
+      ["Sinh lời", [
+        ["Biên gộp", (x) => (x.ttm.revenue ? x.ttm.gross_profit / x.ttm.revenue : null), true, pct1],
+        ["Biên EBIT", (x) => (x.ttm.revenue ? x.ttm.ebit / x.ttm.revenue : null), true, pct1],
+        ["Biên LN ròng", (x) => x.v.net_margin, true, pct1],
+        ["Biên FCF", (x) => x.v.fcf_margin, true, pct1],
+        ["ROE", (x) => x.v.roe, true, pct1],
+      ]],
+      ["Sức khỏe", [
+        ["D/E", (x) => x.v.debt_to_equity, false, mult],
+        ["Current Ratio", (x) => x.v.current_ratio, true, mult],
+      ]],
+      ["Triển vọng", [
+        ["Avg Upside", (x) => x.upFrac, true, (v) => `${v >= 0 ? "+" : ""}${(v * 100).toFixed(1)}%`],
+        ["Quality", (x) => x.q, true, (v) => v.toFixed(0)],
+      ]],
     ];
-    const metTraces = data.map((x, i) => ({
-      type: "bar", name: x.t,
-      x: METRICS.map((m) => m[0]), y: METRICS.map((m) => m[1](x)),
-      marker: { color: SERIES[i % SERIES.length] },
-      hovertemplate: `${x.t} %{x}: %{y:.2f}<extra></extra>`,
-    }));
-    pending.push(() => window.Plotly.react(metCard.querySelector("#cmp-metrics"), metTraces, {
-      height: 340, dragmode: false, barmode: "group", margin: { l: 50, r: 14, t: 26, b: 34 },
-      paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: FONT,
-      legend: { orientation: "h", y: 1.1, x: 0, font: { size: 10 } },
-      xaxis: { type: "category", showgrid: false, tickfont: { size: 10 } },
-      yaxis: { gridcolor: "rgba(148,163,184,0.22)", tickfont: { size: 9 } },
-    }, { displayModeBar: false, responsive: true }));
+    if (sAxes) {
+      // Several sector axes (ROE, net margin, ...) are already in the shared
+      // groups above; repeating them would pad the table with duplicate rows.
+      const shown = new Set(GROUPS.flatMap(([, rows]) => rows.map(([l]) => l)));
+      const own = sAxes.filter((a) => !shown.has(a.label));
+      if (own.length) {
+        GROUPS.push([`Đặc thù ngành · ${sectorNames[0]}`,
+          own.map((a) => [a.label, (x) => { try { return a.calc(x); } catch { return null; } },
+                          !a.lowerBetter, a.fmt])]);
+      }
+    }
+
+    const cmpCard = el(`<div class="card">
+      <h2 class="sec-h">So sánh chỉ số tài chính${sAxes ? ` <span class="ta-sub">· gồm chỉ số riêng của ${F.escapeHtml(sectorNames[0])}</span>` : ""}</h2>
+      <div class="vb-note">Ô đậm hơn = tốt hơn trong cùng hàng. Cột cam là trung bình ngành.</div>
+      <div class="ta-scroll"><table class="screen cmp-heat"><thead><tr><th>Chỉ số</th></tr></thead><tbody></tbody></table></div>
+    </div>`);
+    body.appendChild(cmpCard);
+
+    // Columns: the picked tickers, then the sector mean when it is on.
+    const cols = data.map((x, i) => ({ label: x.t, ctx: x, colour: SERIES[i % SERIES.length] }));
+    if (industryAvg) cols.push({ label: `TB ngành (${industryAvg.n})`, avg: true, colour: "#f97316" });
+
+    const head = cmpCard.querySelector("thead tr");
+    for (const c of cols) {
+      head.appendChild(el(`<th style="color:${c.colour}">${F.escapeHtml(c.label)}</th>`));
+    }
+    const cmpBody = cmpCard.querySelector("tbody");
+    for (const [group, rows] of GROUPS) {
+      cmpBody.appendChild(el(`<tr class="cmp-grp"><td colspan="${cols.length + 1}">${F.escapeHtml(group)}</td></tr>`));
+      for (const [label, get, higherBetter, fmt] of rows) {
+        const vals = cols.map((c) => {
+          if (!c.avg) { try { return get(c.ctx); } catch { return null; } }
+          return industryAvg && F.isNum(industryAvg.raw[label]) ? industryAvg.raw[label] : null;
+        });
+        const valid = vals.map((v, i) => [v, i]).filter(([v]) => F.isNum(v));
+        // Rank inside the row, so shading answers "best here", not "biggest".
+        const order = valid.slice().sort((a, b) => (higherBetter ? b[0] - a[0] : a[0] - b[0]));
+        const rank = new Map(order.map(([, i], r) => [i, r]));
+        const tr = el(`<tr><td class="dim">${F.escapeHtml(label)}</td></tr>`);
+        vals.forEach((v, i) => {
+          if (!F.isNum(v)) { tr.appendChild(el(`<td class="num dim">—</td>`)); return; }
+          const r = rank.get(i) ?? valid.length;
+          const alpha = valid.length > 1 ? 0.30 * (1 - r / (valid.length - 1)) + 0.04 : 0.12;
+          const c = cols[i].colour;
+          tr.appendChild(el(`<td class="num" style="background:${c}${Math.round(alpha * 255).toString(16).padStart(2, "0")}">${
+            F.escapeHtml(fmt(v) ?? "—")}</td>`));
+        });
+        cmpBody.appendChild(tr);
+      }
+    }
 
     // ── 4. Revenue, net income and revenue growth, five years ────────
     const years = [...new Set(data.flatMap((x) =>
@@ -296,24 +357,9 @@ export async function renderCompare(root, onPick) {
         ? (r.revenue - prev.revenue) / Math.abs(prev.revenue) * 100 : null;
     }, "%");
 
-    // ── 5. Transposed metric table (one row per metric, one column per mã) ──
-    const MET = [
-      ["Giá", (x) => F.priceVND((x.d.prices || []).slice(-1)[0]?.close)],
-      ["P/E", (x) => F.mult(x.v.pe)], ["P/B", (x) => F.mult(x.v.pb)],
-      ["ROE", (x) => F.pct(x.v.roe)], ["Biên LN ròng", (x) => F.pct(x.v.net_margin)],
-      ["FCF Margin", (x) => F.pct(x.v.fcf_margin)], ["D/E", (x) => F.mult(x.v.debt_to_equity)],
-      ["Current ratio", (x) => F.mult(x.v.current_ratio)],
-      ["Avg Upside", (x) => (x.upFrac == null ? "—" : F.pctSigned(x.upFrac * 100))],
-      ["Quality", (x) => x.q.toFixed(0)],
-    ];
-    const tt = el(`<div class="card"><h2 class="sec-h">Bảng chỉ số theo mã</h2>
-      <div class="ta-scroll"><table class="screen"><thead><tr><th>Chỉ số</th>${
-        data.map((x) => `<th>${x.t}</th>`).join("")}</tr></thead><tbody></tbody></table></div></div>`);
-    for (const [name, fn] of MET) {
-      tt.querySelector("tbody").appendChild(el(`<tr><td class="dim">${name}</td>${
-        data.map((x) => `<td>${fn(x)}</td>`).join("")}</tr>`));
-    }
-    body.appendChild(tt);
+    // (The transposed metric table that used to sit here is gone: the
+    // grouped, rank-shaded comparison table above shows the same rows with
+    // the sector's own metrics folded in.)
 
     // ── 6. Detail table ──────────────────────────────────────────────
     const tbl = el(`<div class="card"><h2 class="sec-h">Bảng so sánh chi tiết</h2>

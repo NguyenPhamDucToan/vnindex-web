@@ -79,6 +79,8 @@ const A = {
     } },
   profitQuality: { label: "Chất lượng LN", max: 2.0, fmt: NUM,
     calc: (c) => num(c.v.profit_quality) },
+  leverage: { label: "Đòn bẩy", max: 5.0, fmt: NUM, lowerBetter: true,
+    calc: (c) => div(c.ttm.total_assets, c.ttm.equity) },
 };
 
 // ── bank ─────────────────────────────────────────────────────────
@@ -100,31 +102,34 @@ const SECURITIES = [
   { label: "TS tài chính/Tổng TS", max: 0.80, fmt: PCT,
     calc: (c) => div(dLast(c.d, "balance", "fvtpl"), c.ttm.total_assets) },
   { label: "Dư nợ margin/Vốn chủ", max: 2.0, fmt: NUM,
-    calc: (c) => div(c.ttm.receivables, c.ttm.equity) },
-  { label: "Đòn bẩy", max: 5.0, fmt: NUM, lowerBetter: true,
-    calc: (c) => div(c.ttm.total_assets, c.ttm.equity) },
+    // Brokers leave the TTM receivables column empty; the margin book is on
+    // the detail balance sheet instead.
+    calc: (c) => div(c.ttm.receivables ?? dLast(c.d, "balance", "receivables_trade"), c.ttm.equity) },
+  A.leverage,
   A.netMargin, A.roe, A.upside,
 ];
 
 // ── insurance ────────────────────────────────────────────────────
-// The combined ratio is the sector's headline number: under 100% the book
-// earns money before any investment return.
+// The six the user approved, in that order. The three insurance-only ratios
+// below them are marked `extra`: they are the sector's real headline numbers
+// but a six-spoke radar is already at its readable limit, so they appear in
+// the bar grid and the per-ticker table instead.
 const INSURANCE = [
-  { label: "Combined ratio", max: 1.2, fmt: PCT, lowerBetter: true,
+  { label: "Đầu tư/Tổng TS", max: 1.0, fmt: PCT,
+    calc: (c) => div((dLast(c.d, "balance", "ins_st_invest") || 0)
+                   + (dLast(c.d, "balance", "ins_lt_invest") || 0), c.ttm.total_assets) },
+  A.netMargin, A.roe, A.leverage, A.profitQuality, A.upside,
+  { label: "Combined ratio", max: 1.2, fmt: PCT, lowerBetter: true, extra: true,
     calc: (c) => {
       const p = dSum4(c.d, "income", "ins_net_premium");
       const claims = abs(dSum4(c.d, "income", "ins_claims"));
       const exp = abs(c.ttm.selling_expense || 0) + abs(c.ttm.ga_expense || 0);
       return div((claims ?? 0) + exp, p);
     } },
-  { label: "Tỷ lệ bồi thường", max: 1.0, fmt: PCT, lowerBetter: true,
+  { label: "Tỷ lệ bồi thường", max: 1.0, fmt: PCT, lowerBetter: true, extra: true,
     calc: (c) => div(abs(dSum4(c.d, "income", "ins_claims")), dSum4(c.d, "income", "ins_net_premium")) },
-  { label: "Tỷ lệ giữ lại", max: 1.0, fmt: PCT,
+  { label: "Tỷ lệ giữ lại", max: 1.0, fmt: PCT, extra: true,
     calc: (c) => div(dSum4(c.d, "income", "ins_net_premium"), dSum4(c.d, "income", "ins_gross_premium")) },
-  { label: "Đầu tư/Tổng TS", max: 1.0, fmt: PCT,
-    calc: (c) => div((dLast(c.d, "balance", "ins_st_invest") || 0)
-                   + (dLast(c.d, "balance", "ins_lt_invest") || 0), c.ttm.total_assets) },
-  A.roe, A.upside,
 ];
 
 const GENERIC = [A.roe, A.netMargin, A.fcfMargin, A.quality, A.upside];
@@ -170,7 +175,10 @@ export const SECTOR_AXES = {
 /** Axes for a set of companies: sector-specific when they all share one. */
 export function axesFor(sectors) {
   const uniq = [...new Set(sectors.filter(Boolean))];
-  if (uniq.length === 1 && SECTOR_AXES[uniq[0]]) return SECTOR_AXES[uniq[0]];
+  if (uniq.length === 1 && SECTOR_AXES[uniq[0]]) {
+    // Radar spokes only: `extra` metrics belong to the bars and the table.
+    return SECTOR_AXES[uniq[0]].filter((a) => !a.extra);
+  }
   return GENERIC;
 }
 
