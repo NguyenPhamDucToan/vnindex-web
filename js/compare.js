@@ -246,7 +246,17 @@ export async function renderCompare(root, onPick) {
 
     const pct1 = (v) => (F.isNum(v) ? `${(v * 100).toFixed(1)}%` : null);
     const mult = (v) => (F.isNum(v) ? `${v.toFixed(2)}×` : null);
+    // Price is in thousands VND and shares in millions, so the product is VND
+    // billions; the original reports this column in nghìn tỷ.
+    const mcapOf = (x) => {
+      const px = (x.d.prices || []).slice(-1)[0];
+      const sh = x.ttm.shares_outstanding;
+      return (px && F.isNum(px.close) && F.isNum(sh)) ? px.close * sh / 1000 : null;
+    };
     const GROUPS = [
+      ["Thị trường", [
+        ["Vốn hóa (nghìn tỷ)", mcapOf, true, (v) => v.toLocaleString("en-US", { maximumFractionDigits: 1 })],
+      ]],
       ["Định giá", [
         ["P/E", (x) => x.v.pe, false, (v) => `${v.toFixed(1)}x`],
         ["P/B", (x) => x.v.pb, false, (v) => `${v.toFixed(1)}x`],
@@ -281,7 +291,7 @@ export async function renderCompare(root, onPick) {
 
     const cmpCard = el(`<div class="card">
       <h2 class="sec-h">So sánh chỉ số tài chính${sAxes ? ` <span class="ta-sub">· gồm chỉ số riêng của ${F.escapeHtml(sectorNames[0])}</span>` : ""}</h2>
-      <div class="vb-note">★ = dẫn đầu hàng đó, tô theo màu của mã.</div>
+      <div class="vb-note">★ = dẫn đầu hàng đó, tô theo màu của mã; hạng nhì đậm hơn phần còn lại.</div>
       <div class="ta-scroll"><table class="screen cmp-heat"><thead><tr><th>Chỉ số</th></tr></thead><tbody></tbody></table></div>
     </div>`);
     body.appendChild(cmpCard);
@@ -292,7 +302,8 @@ export async function renderCompare(root, onPick) {
 
     const head = cmpCard.querySelector("thead tr");
     for (const c of cols) {
-      head.appendChild(el(`<th style="color:${c.colour}">${F.escapeHtml(c.label)}</th>`));
+      head.appendChild(el(`<th style="color:${c.colour};border-top:3px solid ${c.colour}">${
+        F.escapeHtml(c.label)}</th>`));
     }
     const cmpBody = cmpCard.querySelector("tbody");
     // rankLog[colIndex] = [{label, rank, of}] -- feeds the summary above.
@@ -313,14 +324,12 @@ export async function renderCompare(root, onPick) {
           if (!F.isNum(v)) { tr.appendChild(el(`<td class="num dim">—</td>`)); return; }
           const r = rank.get(i) ?? valid.length;
           if (valid.length > 1) rankLog[i].push({ label, rank: r, of: valid.length });
-          // No fill: colouring every cell left nothing standing out. Only the
-          // leader is marked, in its own column's colour so the mark points
-          // back to the ticker without a legend.
+          // Three text tiers, as the original grades them: leader in its own
+          // column colour, runner-up darker, the rest grey. No cell fill.
           const best = r === 0 && valid.length > 1;
-          tr.appendChild(el(best
-            ? `<td class="num cmp-best" style="color:${cols[i].colour}">${
-                F.escapeHtml(fmt(v) ?? "—")} <span class="cmp-star">★</span></td>`
-            : `<td class="num">${F.escapeHtml(fmt(v) ?? "—")}</td>`));
+          const tier = best ? "cmp-r0" : r === 1 ? "cmp-r1" : "cmp-r2";
+          tr.appendChild(el(`<td class="num ${tier}"${best ? ` style="color:${cols[i].colour}"` : ""}>${
+            F.escapeHtml(fmt(v) ?? "—")}${best ? ' <span class="cmp-star">★</span>' : ""}</td>`));
         });
         cmpBody.appendChild(tr);
       }

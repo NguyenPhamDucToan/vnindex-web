@@ -386,7 +386,9 @@ export function holdersSection(holders) {
       hovertemplate: "%{customdata[0]}<br>%{customdata[1]} · %{x:.2f}%<extra></extra>",
     }], {
       height: Math.max(320, top.length * 30), dragmode: false,
-      margin: { l: 300, r: 60, t: 8, b: 30 },
+      // Holder names are long; on a phone a 300px label gutter leaves no plot,
+      // so give the labels less room and let automargin take what it needs.
+      margin: { l: window.innerWidth < 700 ? 110 : 300, r: 60, t: 8, b: 30 },
       paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: PF,
       xaxis: { gridcolor: "rgba(148,163,184,0.22)", ticksuffix: "%", tickfont: { size: 9 } },
       yaxis: { tickfont: { size: 9 }, automargin: true },
@@ -415,10 +417,10 @@ export function holdersSection(holders) {
     const rows = off.slice().sort((a, b) => b.pct - a.pct);
     card.querySelector("#hd-off").appendChild(el(`<div>
       <div class="vb-note">Ban lãnh đạo có cổ phần</div>
-      <table class="screen"><thead><tr><th>Họ tên</th><th>Chức vụ</th><th>Sở hữu (%)</th></tr></thead>
+      <div class="ta-scroll"><table class="screen"><thead><tr><th>Họ tên</th><th>Chức vụ</th><th>Sở hữu (%)</th></tr></thead>
       <tbody>${rows.map((r) => `<tr><td>${F.escapeHtml(r.name)}</td>
         <td class="dim">${F.escapeHtml(r.position || "")}</td>
-        <td class="num">${(r.pct * 100).toFixed(4)}%</td></tr>`).join("")}</tbody></table></div>`));
+        <td class="num">${(r.pct * 100).toFixed(4)}%</td></tr>`).join("")}</tbody></table></div></div>`));
   }
 
   // Plotly cannot measure a node inside a closed <details>, so draw on open.

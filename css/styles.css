@@ -542,12 +542,32 @@ table.screen-wide { min-width: 1100px; }
 }
 
 /* Comparison table: group headers and rank-shaded cells. */
-.cmp-heat th { text-align: right; }
-.cmp-heat th:first-child, .cmp-heat td:first-child { text-align: left; white-space: nowrap; }
-.cmp-grp td { background: var(--accent-tint, #eef4ff); color: #1e3a5f; font-size: 11.5px;
+/* Comparison table, styled after the original: zebra rows, hairline row
+   rules, a divider between ticker columns, and a colour bar per header.
+   These carry table.screen for the shared chrome, so a few of the screener's
+   own alignment rules (which left-align its Mã and Tín hiệu columns) have to
+   be undone here -- only the metric name column is left-aligned. */
+table.screen.cmp-heat th:nth-child(2),
+table.screen.cmp-heat td:nth-child(2) { text-align: right; }
+table.screen.cmp-heat tbody tr { cursor: default; }
+.cmp-heat { width: 100%; border-collapse: collapse; background: rgba(255,255,255,0.97); }
+.cmp-heat th { text-align: right; padding: 12px 16px; font-size: 15px; font-weight: 700;
+               border-bottom: 2px solid #cbd5e1; min-width: 130px; }
+.cmp-heat th:first-child, .cmp-heat td:first-child {
+  text-align: left; white-space: nowrap; min-width: 190px;
+  font-size: 13px; font-weight: 400; color: var(--muted); border-top: 0; }
+.cmp-heat tbody tr { border-bottom: 1px solid #e2e8f0; }
+.cmp-heat tbody tr:nth-child(even):not(.cmp-grp) { background: rgba(0,0,0,0.025); }
+/* One rule between columns so a wide table still reads as columns. */
+.cmp-heat th + th, .cmp-heat td + td { border-left: 1px solid #eef2f7; }
+.cmp-heat .cmp-r0 { font-weight: 700; font-size: 14px; }
+.cmp-heat .cmp-r1 { font-weight: 600; color: #374151; }
+.cmp-heat .cmp-r2 { font-weight: 400; color: #64748b; }
+.cmp-heat .cmp-grp td { border-left: 0; background: var(--accent-tint, #eef4ff); color: #1e3a5f; font-size: 11.5px;
               font-weight: 700; letter-spacing: .10em; text-transform: uppercase;
               padding: 8px 16px; border-top: 2px solid #bfdbfe; }
-.cmp-heat td.num { text-align: right; font-family: var(--mono); white-space: nowrap; }
+.cmp-heat td.num { text-align: right; font-family: var(--mono); white-space: nowrap;
+                   padding: 10px 24px; font-size: 13px; }
 
 /* Cổ đông lớn & Ban lãnh đạo — collapsed by default, as in the original. */
 .holders > summary, .hd-sum { cursor: pointer; list-style: none; font-size: 17px; }
@@ -566,6 +586,12 @@ table.screen-wide { min-width: 1100px; }
 .cmp-wl { font-family: var(--sans); font-size: 12px; font-weight: 400; color: var(--muted); margin-left: 6px; }
 .cmp-l { font-size: 12px; color: var(--muted); line-height: 1.55; }
 .cmp-l b { color: var(--ink); font-weight: 600; margin-right: 4px; }
-.cmp-best { font-weight: 700; }
 /* Star inherits the cell colour, so it always matches its ticker. */
 .cmp-star { color: currentColor; font-size: 10px; }
+
+/* Holder names are long and the officer table is three wide columns; on a
+   phone both need their own scroller rather than pushing the page sideways. */
+@media (max-width: 700px) {
+  .hd-body { overflow-x: hidden; }
+  .hd-split > div { min-width: 0; }
+}
