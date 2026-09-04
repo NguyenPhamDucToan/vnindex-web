@@ -96,6 +96,14 @@ export async function renderMacro(root) {
   let active = names[0];
 
   const shell = el(`<div>
+    <h2 class="view-title">Kinh tế vĩ mô</h2>
+    <div class="vb-note">Nguồn: Tổng cục Thống kê (nso.gov.vn)</div>
+    <div class="card"><h2 class="sec-h">Các chỉ số quan trọng nhất hiện nay</h2>
+      <div class="metrics" id="macro-kpi"></div>
+      <div class="vb-note">💡 Lạm phát = giá cả tăng nhanh bao nhiêu so với năm trước, cao quá thì
+        tiền mất giá nhanh. GDP = quy mô sản xuất của cả nước, tăng = kinh tế đang phát triển.
+        Cán cân thương mại dương = xuất khẩu nhiều hơn nhập khẩu (có lợi cho VND).</div>
+    </div>
     <div class="range-row macro-tabs"></div>
     <div class="card"><div class="qgrid" id="macro-grid"></div></div>
     <div class="vb-note">Nguồn: Tổng cục Thống kê (nso.gov.vn), Ngân hàng Nhà nước, World Bank.</div>
@@ -103,6 +111,34 @@ export async function renderMacro(root) {
   root.appendChild(shell);
   const tabs = shell.querySelector(".macro-tabs");
   const grid = shell.querySelector("#macro-grid");
+
+  // The four headline readings, as the original opens the tab with. Delta is
+  // against the previous reading; for inflation and unemployment a rise is the
+  // bad direction, so those two are coloured the other way round.
+  const KPI = [
+    ["cpi_yoy", "Lạm phát (so với năm trước)", "%", true],
+    ["gdp_growth", "Tăng trưởng kinh tế (GDP)", "%", false],
+    ["unemployment_rate", "Tỷ lệ thất nghiệp", "%", true],
+    ["trade_balance", "Cán cân thương mại", " tỷ USD", false],
+  ];
+  const kpiBox = shell.querySelector("#macro-kpi");
+  for (const [key, label, unit, invert] of KPI) {
+    const pts = (macro[key] || []).filter((x) => F.isNum(x.value));
+    if (!pts.length) {
+      kpiBox.appendChild(el(`<div class="metric"><div class="mk">${label}</div><div class="mv">—</div></div>`));
+      continue;
+    }
+    const cur = pts[pts.length - 1], prev = pts.length > 1 ? pts[pts.length - 2] : null;
+    const d = prev ? cur.value - prev.value : null;
+    const good = d === null ? null : (invert ? d < 0 : d > 0);
+    const cls = good === null ? "" : good ? "gain" : "loss";
+    kpiBox.appendChild(el(`<div class="metric">
+      <div class="mk">${label}</div>
+      <div class="mv">${cur.value.toFixed(2)}${unit}</div>
+      <div class="ms ${cls}">${d === null ? String(cur.period).slice(0, 7)
+        : `${d >= 0 ? "+" : ""}${d.toFixed(2)}${unit} · ${String(cur.period).slice(0, 7)}`}</div>
+    </div>`));
+  }
 
   const draw = () => {
     grid.innerHTML = "";
@@ -125,7 +161,11 @@ export async function renderMacro(root) {
         name: label,
         x: pts.map((p) => (annual ? String(p.period).slice(0, 4) : String(p.period).slice(0, 10))),
         y: pts.map((p) => p.value),
-        marker: { color: colour, size: 4 },
+        // Bars are coloured by sign in the original -- a contraction reads red
+        // whatever the indicator's own series colour is.
+        marker: spec.kind === "bar"
+          ? { color: pts.map((q) => (q.value >= 0 ? "#22c55e" : "#ef4444")) }
+          : { color: colour, size: 4 },
         line: { color: colour, width: 1.6 },
         hovertemplate: `${label} %{x}: %{y:,.2f} ${spec.unit}<extra></extra>`,
       }));

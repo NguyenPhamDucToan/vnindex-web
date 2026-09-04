@@ -641,6 +641,15 @@ async function renderScreener() {
     <button id="f-reset" class="range-btn sf-reset">Xóa lọc</button>`;
 
   root.innerHTML = "";
+  // On a phone the sidebar stacks above the content, so nine filters push the
+  // table off the first two screens. Collapse them behind a toggle there; on
+  // desktop the button is hidden and the panel is always open.
+  const filtToggle = el(`<button class="range-btn sf-toggle">Bộ lọc ▾</button>`);
+  filtToggle.onclick = () => {
+    const open = side.classList.toggle("sf-open");
+    filtToggle.textContent = open ? "Bộ lọc ▴" : "Bộ lọc ▾";
+  };
+  root.appendChild(filtToggle);
   root.appendChild(el(`<div class="range-row sc-tabs"></div>`));
   root.appendChild(el(`<h2 class="view-title" id="sc-title">Lọc cổ phiếu</h2>`));
 
@@ -922,6 +931,7 @@ async function renderSector() {
     de: median(rs.map((r) => r.debt_to_equity)),
     cr: median(rs.map((r) => r.current_ratio)),
     up: median(rs.map((r) => r.upFrac)),
+    dcfUp: median(rs.map((r) => r.upside_pct)),
     q: median(rs.map((r) => r.q)),
   }));
 
@@ -930,12 +940,13 @@ async function renderSector() {
 
   // ── 1. Heatmap with the original's metric selector ────────────────
   const METRICS = {
-    "Định giá vs Thị trường": { key: "up", label: "Upside %", pct: true, asc: false, lo: -0.8, hi: 1.5 },
+    "Avg Estimate vs Thị trường": { key: "up", label: "Avg Est Upside %", pct: true, asc: false, lo: -0.8, hi: 1.5 },
+    "DCF vs Thị trường": { key: "dcfUp", label: "DCF Upside %", pct: true, asc: false, lo: -0.8, hi: 1.5 },
     "P/E (thấp hơn = rẻ hơn)": { key: "pe", label: "P/E", pct: false, asc: true, lo: 0, hi: 50 },
     "P/B (thấp hơn = rẻ hơn)": { key: "pb", label: "P/B", pct: false, asc: true, lo: 0, hi: 5 },
     "ROE (cao hơn = tốt hơn)": { key: "roe", label: "ROE %", pct: true, asc: false, lo: -0.2, hi: 0.4 },
   };
-  let metricName = "Định giá vs Thị trường";
+  let metricName = "Avg Estimate vs Thị trường";
 
   const heat = el(`<div class="card">
     <h2 class="sec-h">Bản đồ nhiệt theo Ngành</h2>
@@ -1029,36 +1040,68 @@ async function renderSector() {
   }
   pending.forEach((fn) => fn());
 
-  // ── 3. Quality vs upside scatter, coloured by sector ─────────────
-  const scat = el(`<div class="card"><h2 class="sec-h">Quality Score vs DCF Upside %</h2>
-    <div class="vb-note">Góc trên-phải = chất lượng cao và còn rẻ. Mỗi điểm là một mã; màu theo ngành.</div>
+  // ── 3. Quality vs a selectable metric, one bubble per sector ─────
+  // The original plots sectors here (bubble size = how many tickers), not
+  // every ticker on a fixed axis; the per-ticker view lives on the screener.
+  const SC_METRICS = {
+    "DCF Upside %": { key: "dcfUp", label: "Median DCF Upside (%)", pct: true },
+    "P/E (median)": { key: "pe", label: "Median P/E (×)", pct: false },
+    "P/B (median)": { key: "pb", label: "Median P/B (×)", pct: false },
+    "ROE %": { key: "roe", label: "Median ROE (%)", pct: true },
+    "Net Margin %": { key: "nm", label: "Median Net Margin (%)", pct: true },
+  };
+  let scName = "DCF Upside %";
+
+  const scat = el(`<div class="card">
+    <h2 class="sec-h" id="sec-sc-h">Quality Score vs ${scName}</h2>
+    <div class="range-row" id="sec-sc-metric"></div>
+    <div class="vb-note">Mỗi bong bóng là một ngành; kích thước theo số mã, màu theo ROE trung vị.</div>
     <div id="sec-scatter"></div></div>`);
   root.appendChild(scat);
-  const topSectors = [...agg].sort((a, b) => b.n - a.n).slice(0, 12).map((s) => s.sector);
-  const PAL = ["#2563eb", "#ea580c", "#15803d", "#7c3aed", "#0e7490", "#b91c1c",
-               "#ca8a04", "#0891b2", "#be185d", "#4d7c0f", "#7c2d12", "#475569"];
-  const scatTraces = topSectors.map((sec, i) => {
-    const pts = rows.filter((r) => r.sector === sec && F.isNum(r.q) && F.isNum(r.upFrac));
-    return {
-      type: "scatter", mode: "markers", name: sec,
-      x: pts.map((r) => Math.max(-100, Math.min(300, r.upFrac * 100))),
-      y: pts.map((r) => r.q),
-      text: pts.map((r) => r.ticker),
-      marker: { size: 8, color: PAL[i % PAL.length], opacity: 0.75 },
-      hovertemplate: "%{text}<br>Upside %{x:.0f}% · Quality %{y:.0f}<extra></extra>",
+
+  const drawScatter = () => {
+    const m = SC_METRICS[scName];
+    const pts = agg.filter((x) => F.isNum(x[m.key]) && F.isNum(x.q));
+    const xs = pts.map((x) => (m.pct ? x[m.key] * 100 : x[m.key]));
+    $("#sec-sc-h", scat).textContent = `Quality Score vs ${scName}`;
+    window.Plotly.react($("#sec-scatter", scat), [{
+      type: "scatter", mode: "markers+text",
+      x: xs, y: pts.map((x) => x.q), text: pts.map((x) => x.sector),
+      textposition: "top center", textfont: { family: "Fira Code, monospace", size: 9, color: "#6b7280" },
+      marker: {
+        size: pts.map((x) => x.n), sizemode: "area",
+        sizeref: 2 * Math.max(...pts.map((x) => x.n), 1) / (38 ** 2), sizemin: 6,
+        color: pts.map((x) => (F.isNum(x.roe) ? x.roe * 100 : 0)),
+        colorscale: "RdYlGn", showscale: true,
+        colorbar: { title: { text: "ROE %", font: { size: 10 } }, thickness: 10, len: 0.7 },
+        line: { width: 0.5, color: "#1f2937" },
+      },
+      customdata: pts.map((x) => [x.n, F.isNum(x.roe) ? x.roe * 100 : null]),
+      hovertemplate: "%{text}<br>" + m.label + ": %{x:.1f}<br>"
+                   + "Quality %{y:.0f} · %{customdata[0]} mã<extra></extra>",
+    }], {
+      height: 480, dragmode: false, margin: { l: 54, r: 14, t: 10, b: 46 },
+      paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+      font: { family: "Fira Code, monospace", size: 10, color: "#0a121d" },
+      xaxis: { title: { text: m.label, font: { size: 10 } },
+               gridcolor: "rgba(148,163,184,0.22)", zeroline: true, zerolinecolor: "#94a3b8" },
+      yaxis: { title: { text: "Quality Score", font: { size: 10 } },
+               gridcolor: "rgba(148,163,184,0.22)", range: [0, 100] },
+    }, { displayModeBar: false, responsive: true });
+  };
+
+  const scRow = $("#sec-sc-metric", scat);
+  for (const name of Object.keys(SC_METRICS)) {
+    const b = el(`<button class="range-btn ${name === scName ? "active" : ""}">${name}</button>`);
+    b.onclick = () => {
+      scName = name;
+      scRow.querySelectorAll(".range-btn").forEach((x) => x.classList.remove("active"));
+      b.classList.add("active");
+      drawScatter();
     };
-  }).filter((t) => t.x.length);
-  window.Plotly.react($("#sec-scatter", scat), scatTraces, {
-    height: 460, dragmode: false, margin: { l: 54, r: 14, t: 10, b: 40 },
-    paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
-    font: { family: "Fira Code, monospace", size: 10, color: "#0a121d" },
-    legend: { font: { size: 9 } },
-    xaxis: { title: { text: "Upside %", font: { size: 10 } }, gridcolor: "rgba(148,163,184,0.22)",
-             zeroline: true, zerolinecolor: "#94a3b8", ticksuffix: "%" },
-    yaxis: { title: { text: "Quality Score", font: { size: 10 } }, gridcolor: "rgba(148,163,184,0.22)", range: [0, 100] },
-    shapes: [{ type: "line", x0: 0, x1: 0, yref: "paper", y0: 0, y1: 1, line: { color: "#cbd5e1", width: 1, dash: "dot" } },
-             { type: "line", xref: "paper", x0: 0, x1: 1, y0: 50, y1: 50, line: { color: "#cbd5e1", width: 1, dash: "dot" } }],
-  }, { displayModeBar: false, responsive: true });
+    scRow.appendChild(b);
+  }
+  drawScatter();
 
   // ── 4. Top 5 per sector by model upside ──────────────────────────
   const top5 = el(`<div class="card"><h2 class="sec-h">Top 5 mỗi Ngành — theo Avg Est Upside</h2>
@@ -1286,62 +1329,94 @@ async function renderMarket() {
     </div>
     <div class="ad-total">trong ${withChg.length} mã</div>`;
 
-  // ── 2. Market P/E & P/B vs its own history ───────────────────────
+  // ── 2. Market P/E and P/B, each against its own history ──────────
+  // Two charts, as the original has them: a single dual-axis line can show the
+  // two series but not where either sits in its own range, which is the whole
+  // question this section answers.
   const hist = await fetch("data/market_history.json").then((r) => r.json()).catch(() => []);
   if (hist.length > 3) {
-    const c = el(`<div class="card"><h2 class="sec-h">Định giá Thị trường (P/E &amp; P/B) so với Lịch sử</h2>
-      <div class="chart-sub" id="mkt-hist-sub"></div>
-      <div id="mkt-hist"></div>
+    const wrap = el(`<div class="card">
+      <h2 class="sec-h">Định giá Thị trường so với Lịch sử</h2>
+      <div class="mkt-pair"><div id="mkt-pe"></div><div id="mkt-pb"></div></div>
       <div class="vb-note" id="mkt-hist-note"></div></div>`);
-    root.appendChild(c);
-    const x = hist.map((d) => d.quarter);
-    window.Plotly.react($("#mkt-hist", c), [
-      { type: "scatter", mode: "lines+markers", name: "P/E", x, y: hist.map((d) => d.pe),
-        line: { color: "#2ca02c", width: 1.8 }, marker: { size: 5 },
-        hovertemplate: "%{x}: P/E %{y:.1f}×<extra></extra>" },
-      { type: "scatter", mode: "lines+markers", name: "P/B", x, y: hist.map((d) => d.pb),
-        yaxis: "y2", line: { color: "#ff7f0e", width: 1.8 }, marker: { size: 5 },
-        hovertemplate: "%{x}: P/B %{y:.2f}×<extra></extra>" },
-    ], {
-      height: 320, dragmode: false, margin: { l: 52, r: 52, t: 26, b: 40 },
-      paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
-      font: { family: "Fira Code, monospace", size: 10, color: "#0a121d" },
-      legend: { orientation: "h", y: 1.14, x: 0, font: { size: 10 } },
-      xaxis: { type: "category", showgrid: false, tickfont: { size: 9 }, tickangle: -45 },
-      yaxis: { gridcolor: "rgba(148,163,184,0.22)", tickfont: { size: 9 },
-               title: { text: "P/E (×)", font: { size: 10 } } },
-      // P/B lives on a different scale entirely; sharing one axis would flatten it.
-      yaxis2: { overlaying: "y", side: "right", showgrid: false, tickfont: { size: 9 },
-                title: { text: "P/B (×)", font: { size: 10 } } },
-      hovermode: "x unified",
-    }, { displayModeBar: false, responsive: true });
+    root.appendChild(wrap);
 
-    // Context line above the chart, matching the original's "x hiện tại · y so TB".
-    const relLine = (key, label, digits) => {
-      const vals = hist.map((d) => d[key]).filter((v) => F.isNum(v)).sort((a, b) => a - b);
-      const cur = hist[hist.length - 1][key];
-      if (!F.isNum(cur) || !vals.length) return "";
-      const med = vals[Math.floor(vals.length / 2)];
-      const rel = (cur - med) / med * 100;
-      const verdict = rel > 10 ? "Trên trung bình" : rel < -10 ? "Dưới trung bình" : "Quanh trung bình";
-      return `${cur.toFixed(digits)}x ${label} hiện tại · ${rel >= 0 ? "+" : ""}${rel.toFixed(0)}% so TB — ${verdict}`;
+    const multipleChart = (node, key, label, digits) => {
+      const pts = hist.filter((d) => F.isNum(d[key]));
+      if (pts.length < 4) return null;
+      const x = pts.map((d) => d.quarter);
+      const v = pts.map((d) => d[key]);
+      const cur = v[v.length - 1];
+      const avg = v.reduce((a, b) => a + b, 0) / v.length;
+      // Sample standard deviation, matching the original's ddof=1.
+      const sd = Math.sqrt(v.reduce((a, b) => a + (b - avg) ** 2, 0) / (v.length - 1));
+      const lo = avg - sd, hi = avg + sd;
+      // Plain language, not "±1σ": what a reader needs is "above this is
+      // unusually expensive", not the name of the statistic.
+      const [verdict, clr] =
+        cur > hi ? ["Đắt hơn mức thường thấy", "#b91c1c"]
+        : cur < lo ? ["Rẻ hơn mức thường thấy", "#15803d"]
+        : cur > avg ? ["Nhỉnh trên trung bình", "#b45309"]
+        : ["Quanh/dưới trung bình", "#15803d"];
+      const diff = avg ? (cur / avg - 1) * 100 : 0;
+      const f = (n) => n.toFixed(digits);
+      const ymin = Math.min(Math.min(...v), lo) * 0.96;
+      const ymax = Math.max(Math.max(...v), hi) * 1.04;
+
+      window.Plotly.react(node, [
+        { type: "scatter", mode: "lines", name: label, x, y: v,
+          line: { color: "#00347b", width: 2.2 },
+          hovertemplate: `%{x}<br>${label}: <b>%{y:.${digits}f}x</b><extra></extra>` },
+        { type: "scatter", mode: "markers", name: "Hiện tại", x: [x[x.length - 1]], y: [cur],
+          marker: { color: "#00347b", size: 11, line: { color: "#ffffff", width: 2 } },
+          hoverinfo: "skip", showlegend: false },
+      ], {
+        height: 320, dragmode: false, margin: { l: 46, r: 116, t: 56, b: 34 },
+        paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(255,255,255,0)",
+        font: { family: "Fira Code, monospace", size: 10, color: "#0a121d" },
+        showlegend: false, hovermode: "x unified",
+        title: { text: `<b style="font-size:19px;color:#0a121d">${f(cur)}x</b>`
+                     + `<span style="font-size:12px;color:#666f7c"> ${label} hiện tại · `
+                     + `${diff >= 0 ? "+" : ""}${diff.toFixed(0)}% so TB</span><br>`
+                     + `<span style="font-size:12.5px;color:${clr}"><b>${verdict}</b></span>`,
+                 font: { size: 13 } },
+        xaxis: { type: "category", nticks: 8, showgrid: false, tickfont: { size: 11 }, tickangle: -45 },
+        yaxis: { title: { text: `${label} (lần)`, font: { size: 10 } },
+                 gridcolor: "#e2e8f0", zeroline: false, range: [ymin, ymax], tickfont: { size: 11 } },
+        shapes: [
+          { type: "rect", xref: "paper", x0: 0, x1: 1, y0: lo, y1: hi,
+            fillcolor: "#00347b", opacity: 0.09, line: { width: 0 }, layer: "below" },
+          ...[hi, lo].map((y) => ({ type: "line", xref: "paper", x0: 0, x1: 1, y0: y, y1: y,
+                                    line: { color: "#afb8c4", width: 1, dash: "dot" } })),
+          { type: "line", xref: "paper", x0: 0, x1: 1, y0: avg, y1: avg,
+            line: { color: "#64748b", width: 1.2, dash: "dash" } },
+        ],
+        annotations: [
+          { x: 1, xref: "paper", y: hi, yanchor: "bottom", xanchor: "right", showarrow: false,
+            text: `Ngưỡng đắt ${f(hi)}`, font: { size: 10, color: "#666f7c" } },
+          { x: 1, xref: "paper", y: lo, yanchor: "top", xanchor: "right", showarrow: false,
+            text: `Ngưỡng rẻ ${f(lo)}`, font: { size: 10, color: "#666f7c" } },
+          { x: 1, xref: "paper", y: avg, yanchor: "bottom", xanchor: "right", showarrow: false,
+            text: `Trung bình ${f(avg)}`, font: { size: 11, color: "#47515e" } },
+        ],
+      }, { displayModeBar: false, responsive: true });
+      return { cur, avg, n: v.length };
     };
-    $("#mkt-hist-sub", c).textContent =
-      `${relLine("pe", "P/E", 1)}   |   ${relLine("pb", "P/B", 2)}`;
 
-    const pes = hist.map((d) => d.pe).filter((v) => F.isNum(v)).sort((a, b) => a - b);
-    const curPe = hist[hist.length - 1].pe, medPe = pes[Math.floor(pes.length / 2)];
-    if (F.isNum(curPe) && F.isNum(medPe)) {
-      const rel = (curPe - medPe) / medPe * 100;
-      $("#mkt-hist-note", c).innerHTML =
-        `P/E thị trường hiện <b>${curPe.toFixed(1)}×</b> so với trung vị ${pes.length} quý là ` +
-        `<b>${medPe.toFixed(1)}×</b> (${rel >= 0 ? "+" : ""}${rel.toFixed(0)}%). ` +
-        (rel > 10 ? "Thị trường đang đắt hơn mặt bằng lịch sử."
-          : rel < -10 ? "Thị trường đang rẻ hơn mặt bằng lịch sử."
-          : "Thị trường ở vùng định giá quen thuộc.") +
-        ` Trung vị giữa các mã, mỗi quý cần tối thiểu 30 mã có số liệu.`;
+    const pe = multipleChart($("#mkt-pe", wrap), "pe", "P/E", 1);
+    multipleChart($("#mkt-pb", wrap), "pb", "P/B", 2);
+    if (pe) {
+      const rel = (pe.cur / pe.avg - 1) * 100;
+      $("#mkt-hist-note", wrap).innerHTML =
+        `P/E thị trường hiện <b>${pe.cur.toFixed(1)}×</b> so với trung bình ${pe.n} quý là `
+        + `<b>${pe.avg.toFixed(1)}×</b> (${rel >= 0 ? "+" : ""}${rel.toFixed(0)}%). `
+        + (rel > 10 ? "Thị trường đang đắt hơn mặt bằng lịch sử."
+           : rel < -10 ? "Thị trường đang rẻ hơn mặt bằng lịch sử."
+           : "Thị trường ở vùng định giá quen thuộc.")
+        + " Dải nhạt là vùng trung bình ± 1 độ lệch chuẩn.";
     }
   }
+
 
   // ── 3. Market-wide foreign net trading ───────────────────────────
   const ff = market.foreign || [];

@@ -253,6 +253,14 @@ export function technicalPanel(prices) {
       paper_bgcolor: "rgba(0,0,0,0)",
       font: { color: "#0f172a", family: "Source Sans 3, sans-serif" },
     }, { displayModeBar: false, responsive: true });
+    // Plotly measures the container at draw time, and at narrower viewports the
+    // grid around this panel has not settled yet -- the gauge then keeps a
+    // stale (much wider) size and spills out of the column. Re-measure once
+    // layout is done.
+    requestAnimationFrame(() => {
+      const node = card.querySelector("#ta-gauge");
+      if (node && window.Plotly && window.Plotly.Plots) window.Plotly.Plots.resize(node);
+    });
   };
   return card;
 }

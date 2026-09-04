@@ -472,3 +472,66 @@ table.screen-wide { min-width: 1100px; }
 
 .cmp-ind { display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 13px; color: var(--ink); }
 .cmp-ind .dim { color: var(--muted); font-size: 12px; }
+
+/* P/E and P/B sit side by side, as two st.columns in the original. */
+.mkt-pair { display: grid; grid-template-columns: repeat(2, 1fr); gap: 22px; }
+@media (max-width: 1100px) { .mkt-pair { grid-template-columns: 1fr; } }
+
+
+/* ── phone layout ─────────────────────────────────────────────────
+   Audited at 390px: the DuPont chain, the metric-selector rows and the
+   header metric labels were the three things still overflowing. */
+@media (max-width: 560px) {
+  /* The DuPont chain is five boxes in a row; on a phone it has to wrap. */
+  .dp-row { flex-wrap: wrap; gap: 8px; }
+  .dp-row > * { flex: 1 1 46%; min-width: 0; }
+  .dp-v { font-size: 17px; letter-spacing: 0; }
+  .dp-k { white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.35; }
+
+  /* Selector rows (ranges, tabs, sector metrics) scroll sideways rather than
+     spilling out of the card. */
+  .range-row { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
+               padding-bottom: 4px; scrollbar-width: thin; }
+  .range-btn { flex: 0 0 auto; }
+
+  /* Header metric labels wrap instead of being cut mid-word. */
+  .mk { white-space: normal; overflow: visible; text-overflow: clip; font-size: 13px; line-height: 1.3; }
+  .mv { font-size: 18px; }
+
+  .metrics { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .card { padding: 12px; }
+  .sec-h { font-size: 20px; }
+  .view-title { font-size: 22px; }
+  /* Wide tables keep their own scroller; make sure nothing forces the page wide. */
+  .screen-wide { min-width: 720px; }
+  .ta-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .sig-counts { grid-template-columns: repeat(2, 1fr); }
+  .top5-grid { grid-template-columns: 1fr; }
+  .pr-row { grid-template-columns: repeat(2, 1fr); }
+  .side-filters .sf-l select { max-width: 100%; }
+}
+
+/* Nothing may push the page itself sideways on a phone. */
+@media (max-width: 820px) {
+  html, body { max-width: 100%; overflow-x: hidden; }
+  .main { min-width: 0; }
+}
+
+/* Between 821 and 1200px the right column is only ~420px wide, so the signal
+   tally and the gauge stop fitting side by side. */
+@media (max-width: 1200px) and (min-width: 821px) {
+  .ta-top { grid-template-columns: 1fr; }
+  .ta-top > div { justify-self: center; }
+  .ta-count { width: 100%; }
+}
+
+/* Belt and braces for the gauge: never wider than the column that holds it. */
+#ta-gauge { max-width: 100%; overflow: hidden; }
+
+/* Filter panel: always open on desktop, collapsed behind a button on a phone. */
+.sf-toggle { display: none; margin-bottom: var(--space-sm); }
+@media (max-width: 820px) {
+  .sf-toggle { display: inline-block; }
+  .side-filters { display: none; }
+  .side-filters.sf-open { display: flex; }
+}
