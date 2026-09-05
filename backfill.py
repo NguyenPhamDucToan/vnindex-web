@@ -29,8 +29,16 @@ def remaining() -> int:
             continue
         if o.get("valuation") is None:
             continue
+        # Must match export_detailed.py --missing, which also accepts a
+        # top-level block like `holders`. Without that this counted every
+        # ticker as missing forever, reported "no progress" on the second
+        # round and stopped -- after the first round had in fact fetched
+        # all of them.
         det = o.get("detail") or {}
-        if ((det.get("balance") or {}).get(FIELD) is None
+        top = o.get(FIELD)
+        has_top = bool(top) if isinstance(top, (dict, list)) else top is not None
+        if (not has_top
+                and (det.get("balance") or {}).get(FIELD) is None
                 and (det.get("income") or {}).get(FIELD) is None):
             n += 1
     return n
