@@ -657,7 +657,7 @@ export async function renderCompare(root, onPick) {
       body.appendChild(rc);
     }
 
-    // ── 7. Price correlation ─────────────────────────────────────────
+    // ── 7. How closely the names move together ───────────────────────
     if (data.length > 1) {
       const series = data.map((x) => new Map(rets((x.d.prices || []).slice(-TRADING_DAYS)).map((q) => [q.date, q.r])));
       const corr = (a, b) => {
@@ -672,53 +672,50 @@ export async function renderCompare(root, onPick) {
         }
         return (sxx && syy) ? sxy / Math.sqrt(sxx * syy) : null;
       };
-      const names = data.map((x) => x.t);
-      const n = names.length;
-      // Lower triangle only: the upper half is its mirror and the diagonal is
-      // a row of 1.00 that earns none of the attention it takes.
-      const z = names.map((_, i) => names.map((__, j) => (j < i ? corr(series[i], series[j]) : null)));
-      const flat = z.flat().filter(F.isNum);
-      const avg = mean(flat);
-      const lo = Math.min(...flat), hi = Math.max(...flat);
 
-      const verdict = avg > 0.7 ? "gần như đi cùng nhau — nắm cả nhóm ít giảm được rủi ro"
-        : avg > 0.4 ? "cùng chiều ở mức vừa phải"
-        : "khá độc lập — nắm cả nhóm có tác dụng phân tán";
-      const cc = el(`<div class="card"><h2 class="sec-h">Tương quan giá <span class="ta-sub">· lợi suất ngày, 1 năm</span></h2>
-        <div class="vb-note">Tương quan trung bình <b>${avg.toFixed(2)}</b> — ${verdict}.
-          Chỉ hiện nửa dưới: nửa trên là ảnh gương, đường chéo luôn bằng 1.
-          Thang màu co theo dải thực tế (${lo.toFixed(2)}–${hi.toFixed(2)}) để thấy rõ chênh lệch.</div>
-        <div id="cmp-corr"></div></div>`);
-      body.appendChild(cc);
-      // Fit the ramp to the data: equity correlations cluster in 0.3-0.8 and a
-      // fixed -1..1 scale renders every one of them the same pale shade.
-      const pad = Math.max(0.05, (hi - lo) * 0.1);
-      pending.push(() => window.Plotly.react(cc.querySelector("#cmp-corr"), [{
-        type: "heatmap", x: names, y: names, z,
-        zmin: Math.max(-1, lo - pad), zmax: Math.min(1, hi + pad),
-        colorscale: [[0, "#eff6ff"], [0.5, "#7ba7d7"], [1, "#1e3a8a"]],
-        xgap: 3, ygap: 3, hoverongaps: false,
-        hovertemplate: "%{y} vs %{x}: <b>%{z:.2f}</b><extra></extra>",
-        colorbar: { thickness: 9, len: 0.7, outlinewidth: 0, tickfont: { size: 9 },
-                    title: { text: "hệ số", font: { size: 9 } } },
-      }], {
-        // Square cells: a correlation matrix read as rectangles looks arbitrary.
-        height: Math.max(260, n * 74), dragmode: false,
-        margin: { l: 74, r: 20, t: 10, b: 54 },
-        paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: FONT,
-        xaxis: { type: "category", tickfont: { size: 12 }, showgrid: false,
-                 side: "bottom", constrain: "domain" },
-        yaxis: { type: "category", tickfont: { size: 12 }, showgrid: false,
-                 autorange: "reversed", scaleanchor: "x", constrain: "domain" },
-        annotations: names.flatMap((rn, i) => names.map((cn, j) => {
-          const v = z[i][j];
-          if (!F.isNum(v)) return null;
-          // White above the midpoint of the fitted ramp, ink below it.
-          const mid = (Math.max(-1, lo - pad) + Math.min(1, hi + pad)) / 2;
-          return { x: cn, y: rn, text: v.toFixed(2), showarrow: false,
-                   font: { ...FONT, size: 13, color: v > mid ? "#ffffff" : "#0f172a" } };
-        }).filter(Boolean)),
-      }, { displayModeBar: false, responsive: true }));
+      // Every unordered pair once. n names give n(n-1)/2 rows -- six for four
+      // names, which is a short list, not a grid to decode.
+      const pairs = [];
+      for (let i = 0; i < data.length; i++) {
+        for (let j = i + 1; j < data.length; j++) {
+          const v = corr(series[i], series[j]);
+          if (F.isNum(v)) pairs.push({ a: data[i].t, b: data[j].t, v,
+                                       ca: SERIES[i % SERIES.length], cb: SERIES[j % SERIES.length] });
+        }
+      }
+      if (pairs.length) {
+        pairs.sort((p2, q2) => q2.v - p2.v);
+        const avg = mean(pairs.map((q) => q.v));
+        // Bands from how equity correlations actually behave: above 0.7 two
+        // names are effectively one position, below 0.4 they are genuinely
+        // separate bets.
+        const band = (v) => v >= 0.7 ? ["Gần như đi cùng nhau", "#b91c1c"]
+          : v >= 0.55 ? ["Đi cùng chiều rõ", "#d97706"]
+          : v >= 0.4 ? ["Cùng chiều vừa phải", "#ca8a04"]
+          : v >= 0.2 ? ["Khá độc lập", "#4d7c0f"]
+          : ["Gần như độc lập", "#15803d"];
+        const overall = band(avg);
+
+        const cc = el(`<div class="card">
+          <h2 class="sec-h">Mức độ đi cùng nhau <span class="ta-sub">· lợi suất ngày, 1 năm</span></h2>
+          <div class="vb-note">Đo mức hai mã cùng lên cùng xuống. Càng cao thì nắm cả hai càng
+            ít tác dụng phân tán rủi ro — vì khi một mã giảm, mã kia thường giảm theo.
+            Trung bình cả nhóm: <b style="color:${overall[1]}">${avg.toFixed(2)} — ${overall[0].toLowerCase()}</b>.</div>
+          <div class="cr-list"></div></div>`);
+        const list = cc.querySelector(".cr-list");
+        for (const q of pairs) {
+          const [label, colour] = band(q.v);
+          list.appendChild(el(`<div class="cr-row">
+            <div class="cr-pair"><span style="color:${readable(q.ca)}">${q.a}</span>
+              <span class="cr-x">↔</span>
+              <span style="color:${readable(q.cb)}">${q.b}</span></div>
+            <div class="cr-track"><div class="cr-fill" style="width:${Math.max(2, q.v * 100).toFixed(0)}%;background:${colour}"></div></div>
+            <div class="cr-val" style="color:${colour}">${q.v.toFixed(2)}</div>
+            <div class="cr-lab">${label}</div>
+          </div>`));
+        }
+        body.appendChild(cc);
+      }
     }
 
     // (The detail table that used to close this view is gone: it repeated

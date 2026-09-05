@@ -684,3 +684,20 @@ table.screen.cmp-heat tbody tr { cursor: default; }
 
 /* Label above a row of selector chips, as the original captions its radios. */
 .sel-lab { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+
+/* Correlation as a ranked list: one row per pair, sorted, with the reading
+   spelled out. A matrix was compact but made the reader decode a colour. */
+.cr-list { display: flex; flex-direction: column; gap: 8px; }
+.cr-row { display: grid; grid-template-columns: 150px 1fr 52px 170px; align-items: center;
+          gap: 12px; font-size: 13px; }
+.cr-pair { font-family: var(--mono); font-weight: 700; white-space: nowrap; }
+.cr-x { color: var(--muted); font-weight: 400; margin: 0 2px; }
+.cr-track { height: 10px; border-radius: 5px; background: var(--paper-3, #eef2f7); overflow: hidden; }
+.cr-fill { height: 100%; border-radius: 5px; }
+.cr-val { font-family: var(--mono); font-weight: 700; text-align: right; }
+.cr-lab { color: var(--muted); font-size: 12px; }
+@media (max-width: 820px) {
+  .cr-row { grid-template-columns: 1fr 44px; grid-template-areas: "pair val" "track track" "lab lab"; row-gap: 4px; }
+  .cr-pair { grid-area: pair; } .cr-val { grid-area: val; }
+  .cr-track { grid-area: track; } .cr-lab { grid-area: lab; }
+}

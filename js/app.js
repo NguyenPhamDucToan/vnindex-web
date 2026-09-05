@@ -1131,7 +1131,7 @@ async function renderSector() {
       hovertemplate: "%{label}<br>%{value} mã · " + m.label + " %{text}<extra></extra>",
       marker: {
         colors: data.map((s) => norm(s[m.key])),
-        colorscale: [[0, "#b91c1c"], [0.5, "#f1f5f9"], [1, "#15803d"]],
+        colorscale: [[0, "#7f1d1d"], [0.5, "#d97706"], [1, "#14532d"]],
         cmin: 0, cmax: 1, line: { width: 1, color: "#fff" },
       },
       tiling: { pad: 2 },
@@ -1162,14 +1162,17 @@ async function renderSector() {
   const multi = el(`<div class="card"><h2 class="sec-h">Hệ số Định giá theo Ngành</h2><div class="qgrid"></div></div>`);
   root.appendChild(multi);
   const mgrid = multi.querySelector(".qgrid");
+  // One flat colour per chart, as the original draws them. Colouring each bar
+  // green or red against the median put a value judgement on every sector in
+  // a chart whose job is just to rank them.
   const barSpecs = [
-    ["P/E trung vị theo Ngành", "pe", false, true],
-    ["P/B trung vị theo Ngành", "pb", false, true],
-    ["ROE trung vị theo Ngành", "roe", true, false],
-    ["Biên LN ròng trung vị theo Ngành", "nm", true, false],
+    ["P/E trung vị theo Ngành", "pe", false, "#5b9bd5"],
+    ["P/B trung vị theo Ngành", "pb", false, "#70ad47"],
+    ["ROE trung vị theo Ngành", "roe", true, "#f59e0b"],
+    ["Biên LN ròng trung vị theo Ngành", "nm", true, "#2ca02c"],
   ];
   const pending = [];
-  for (const [title, key, isPct, lowerBetter] of barSpecs) {
+  for (const [title, key, isPct, colour] of barSpecs) {
     const data = agg.filter((s) => F.isNum(s[key])).sort((a, b) => a[key] - b[key]);
     const box = el(`<div class="qchart"><div class="qtitle">${title}</div><div></div></div>`);
     mgrid.appendChild(box);
@@ -1178,12 +1181,7 @@ async function renderSector() {
       type: "bar", orientation: "h",
       x: data.map((s) => (isPct ? s[key] * 100 : s[key])),
       y: data.map((s) => s.sector),
-      marker: { color: data.map((s) => {
-        const vals = data.map((d) => d[key]);
-        const med = vals[Math.floor(vals.length / 2)];
-        const good = lowerBetter ? s[key] <= med : s[key] >= med;
-        return good ? "#70ad47" : "#c00000";
-      }) },
+      marker: { color: colour },
       hovertemplate: "%{y}: %{x:.2f}" + (isPct ? "%" : "×") + "<extra></extra>",
     }], {
       height: Math.max(280, data.length * 17), dragmode: false,
@@ -1237,13 +1235,15 @@ async function renderSector() {
       hovertemplate: "%{text}<br>" + m.label + ": %{x:.1f}<br>"
                    + "Quality %{y:.0f} · %{customdata[0]} mã<extra></extra>",
     }], {
-      height: 480, dragmode: false, margin: { l: 54, r: 14, t: 10, b: 46 },
+      height: 460, dragmode: false, margin: { l: 54, r: 14, t: 10, b: 46 },
       paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
       font: { family: "Fira Code, monospace", size: 10, color: "#0a121d" },
       xaxis: { title: { text: m.label, font: { size: 10 } },
                gridcolor: "rgba(148,163,184,0.22)", zeroline: true, zerolinecolor: "#94a3b8" },
-      yaxis: { title: { text: "Quality Score", font: { size: 10 } },
+      yaxis: { title: { text: "Median Quality Score", font: { size: 10 } },
                gridcolor: "rgba(148,163,184,0.22)", range: [0, 100] },
+      shapes: [{ type: "line", x0: 0, x1: 0, yref: "paper", y0: 0, y1: 1,
+                 line: { color: "#64748b", width: 1, dash: "dash" }, opacity: 0.5 }],
     }, { displayModeBar: false, responsive: true });
   };
 
@@ -1448,12 +1448,15 @@ async function renderMarket() {
   const idx = (market.vnindex || []).slice(-252);
   if (idx.length) {
     const closes = idx.map((d) => d.close);
-    const rising = closes[closes.length - 1] >= closes[0];
+    // The original draws this in one blue whichever way the year went; the
+    // direction is already stated in the caption above the chart, and a red
+    // line made a mildly negative year look like a crash.
+    const firstClose = closes[0];
     window.Plotly.react($("#vni-chart", top), [{
       type: "scatter", mode: "lines", x: idx.map((d) => d.date), y: closes,
-      line: { color: rising ? "#15803d" : "#b91c1c", width: 1.6 },
-      fill: "tozeroy", fillcolor: rising ? "rgba(21,128,61,0.07)" : "rgba(185,28,28,0.07)",
-      hovertemplate: "%{x}: %{y:,.2f}<extra></extra>",
+      line: { color: "#5b9bd5", width: 2 },
+      fill: "tozeroy", fillcolor: "rgba(91,155,213,0.08)",
+      hovertemplate: "%{y:,.2f}<extra></extra>",
     }], {
       height: 300, dragmode: false, margin: { l: 54, r: 12, t: 8, b: 28 },
       paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
@@ -1466,6 +1469,12 @@ async function renderMarket() {
         range: [Math.min(...closes) * 0.985, Math.max(...closes) * 1.015],
       },
       hovermode: "x unified",
+      shapes: [{ type: "line", xref: "paper", x0: 0, x1: 1, yref: "y",
+                 y0: firstClose, y1: firstClose,
+                 line: { color: "#cbd5e1", width: 1, dash: "dot" } }],
+      annotations: [{ xref: "paper", x: 1, y: firstClose, yanchor: "top", xanchor: "right",
+                      showarrow: false, text: `1 năm trước: ${Math.round(firstClose).toLocaleString("en-US")}`,
+                      font: { size: 11, color: "#475569" } }],
     }, { displayModeBar: false, responsive: true });
   }
 
@@ -1695,7 +1704,7 @@ async function renderMarket() {
       branchvalues: "remainder",
       marker: {
         colors: [...sectors.map(() => 0), ...top120.map((r) => Math.max(-0.07, Math.min(0.07, r.chg)))],
-        colorscale: [[0, "#ef4444"], [0.5, "#f1f5f9"], [1, "#22c55e"]],
+        colorscale: [[0, "#7f1d1d"], [0.5, "#d97706"], [1, "#14532d"]],
         cmin: -0.07, cmax: 0.07, line: { width: 1, color: "#fff" },
       },
       tiling: { pad: 2 },
