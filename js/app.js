@@ -1729,14 +1729,28 @@ async function renderMarket() {
   const heatRows = withChg.filter((r) => F.isNum(r.vol) && r.vol > 0);
   if (heatRows.length) {
     const top120 = [...heatRows].sort((a, b) => b.vol - a.vol).slice(0, 120);
-    const nUp = top120.filter((r) => r.chg > 0).length;
-    const nDn = top120.filter((r) => r.chg < 0).length;
-    const nFlat = top120.length - nUp - nDn;
+    // The band that decides ceiling and floor depends on the exchange, so look
+    // each ticker's up rather than thresholding the percentage.
+    const exOf = new Map(COMPANIES.map((c) => [c.ticker, c.exchange]));
+    const stateOf = (r) => {
+      const prev = F.isNum(r.close) && F.isNum(r.chg) ? r.close / (1 + r.chg) : null;
+      return priceState(exOf.get(r.ticker), r.close, prev);
+    };
+    const states = top120.map(stateOf);
+    const count = (k) => states.filter((st) => st === PRICE_STATES[k]).length;
+    const nCeil = count("ceiling"), nUp = count("up"), nFlat = count("flat"),
+          nDn = count("down"), nFloor = count("floor");
     const hc = el(`<div class="card"><h2 class="sec-h">Bản đồ nhiệt Thị trường Hôm nay</h2>
       <div id="mkt-heat"></div>
-      <div class="vb-note">▲ Tăng: ${nUp} · ▼ Giảm: ${nDn} · — Đứng: ${nFlat} · ${top120.length} mã cổ phiếu</div>
-      <div class="vb-note">🔴 Đỏ = giảm giá · ⚪ Xám = đi ngang (gần 0%) · 🟢 Xanh = tăng giá.
-        Màu càng đậm = mức tăng/giảm càng lớn (đậm nhất từ ±4% trở lên).
+      <div class="vb-note">
+        <span style="color:${PRICE_STATES.ceiling.c}">▲ Trần: ${nCeil}</span> ·
+        <span style="color:${PRICE_STATES.up.c}">▲ Tăng: ${nUp}</span> ·
+        <span style="color:${PRICE_STATES.flat.c}">— Tham chiếu: ${nFlat}</span> ·
+        <span style="color:${PRICE_STATES.down.c}">▼ Giảm: ${nDn}</span> ·
+        <span style="color:${PRICE_STATES.floor.c}">▼ Sàn: ${nFloor}</span> ·
+        ${top120.length} mã cổ phiếu</div>
+      <div class="vb-note">Màu theo quy ước bảng giá Việt Nam: tím = giá trần · xanh = tăng ·
+        vàng = tham chiếu · đỏ = giảm · xanh lơ = giá sàn.
         Kích thước ô = khối lượng giao dịch.</div></div>`);
     root.appendChild(hc);
     // Flat is flat: zero belongs at grey, not at the midpoint of a ramp whose
@@ -1753,9 +1767,8 @@ async function renderMarket() {
       hovertemplate: "<b>%{label}</b>  %{customdata[0]}<br>Giá: %{customdata[1]} VND<br>"
                    + "Thay đổi: %{customdata[2]}<extra></extra>",
       marker: {
-        colors: top120.map((r) => r.chg * 100),
-        colorscale: [[0, "#dc2626"], [0.5, "#555555"], [1, "#16a34a"]],
-        cmin: -4, cmax: 4, showscale: false,
+        // Five discrete states, not a ramp: a board is read by colour name.
+        colors: states.map((st) => st.c),
         line: { width: 1, color: "#0f172a" },
       },
       pathbar: { visible: false },
