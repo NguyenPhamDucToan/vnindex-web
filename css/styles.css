@@ -585,9 +585,13 @@ table.screen.cmp-heat tbody tr { cursor: default; }
 .cmp-heat tbody tr:nth-child(even):not(.cmp-grp) { background: rgba(0,0,0,0.025); }
 /* One rule between columns so a wide table still reads as columns. */
 .cmp-heat th + th, .cmp-heat td + td { border-left: 1px solid #eef2f7; }
+/* Rank shows through weight, not through fading the text out. The original
+   greys ranks 2+ to #64748b, but most cells are rank 2+, so the whole table
+   read washed out. Everything stays at full ink; only the leader takes its
+   column's colour. */
 .cmp-heat .cmp-r0 { font-weight: 700; font-size: 14px; }
-.cmp-heat .cmp-r1 { font-weight: 600; color: #374151; }
-.cmp-heat .cmp-r2 { font-weight: 400; color: #64748b; }
+.cmp-heat .cmp-r1 { font-weight: 600; color: var(--ink); }
+.cmp-heat .cmp-r2 { font-weight: 400; color: var(--ink); }
 .cmp-heat .cmp-grp td { border-left: 0; background: var(--accent-tint, #eef4ff); color: #1e3a5f; font-size: 11.5px;
               font-weight: 700; letter-spacing: .10em; text-transform: uppercase;
               padding: 8px 16px; border-top: 2px solid #bfdbfe; }

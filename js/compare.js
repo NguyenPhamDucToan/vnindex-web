@@ -17,6 +17,28 @@ const FONT = { family: "Fira Code, monospace", size: 10, color: "#0a121d" };
 // Same Excel-ish series palette the original uses for multi-ticker charts.
 const SERIES = ["#5b9bd5", "#f0ad4e", "#70ad47", "#7030a0", "#5bc0de", "#c00000"];
 
+// The series palette is tuned for chart marks on white; as 14px text on the
+// page background several of those hues land near 2.5:1. Darken toward black
+// until the contrast is readable, keeping the hue so a cell still reads as
+// belonging to its column.
+function readable(hex, bg = [242, 245, 251], target = 4.5) {
+  const rgb = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  const lum = (c) => {
+    const [r, g, b] = c.map((v) => {
+      const x = v / 255;
+      return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const ratio = (c) => {
+    const a = lum(c), b = lum(bg);
+    return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+  };
+  let out = rgb;
+  for (let k = 0; k < 20 && ratio(out) < target; k++) out = out.map((v) => Math.round(v * 0.9));
+  return "#" + out.map((v) => v.toString(16).padStart(2, "0")).join("");
+}
+
 export async function renderCompare(root, onPick) {
   root.innerHTML = `<div class="loading">Đang tải…</div>`;
   const screen = await loadScreener();
@@ -328,7 +350,7 @@ export async function renderCompare(root, onPick) {
           // column colour, runner-up darker, the rest grey. No cell fill.
           const best = r === 0 && valid.length > 1;
           const tier = best ? "cmp-r0" : r === 1 ? "cmp-r1" : "cmp-r2";
-          tr.appendChild(el(`<td class="num ${tier}"${best ? ` style="color:${cols[i].colour}"` : ""}>${
+          tr.appendChild(el(`<td class="num ${tier}"${best ? ` style="color:${readable(cols[i].colour)}"` : ""}>${
             F.escapeHtml(fmt(v) ?? "—")}${best ? ' <span class="cmp-star">★</span>' : ""}</td>`));
         });
         cmpBody.appendChild(tr);
