@@ -641,24 +641,73 @@ async function renderScreener() {
     side = el(`<div id="side-filters" class="side-filters"></div>`);
     $("#nav").after(side);
   }
+  // The sliders sit in two columns in the original, in this order.
+  const slider = ([id, label, lo, hi, step, def]) => `
+    <label class="sf-l"><span class="sf-k">${label}</span><span class="sf-v" id="${id}-v">${def}</span>
+      <input id="${id}" type="range" min="${lo}" max="${hi}" step="${step}" value="${def}" /></label>`;
+  const byId = Object.fromEntries(SCREEN_FILTERS.map((f) => [f[0], f]));
+  const colA = ["f-roe", "f-nm", "f-pb", "f-qs"].map((k) => slider(byId[k])).join("");
+  const colB = ["f-de", "f-pe", "f-up"].map((k) => slider(byId[k])).join("");
+
   side.innerHTML = `
     <div class="sf-h">Filters</div>
-    <label class="sf-l">Ngành
-      <select id="f-sector" multiple size="6">${sectors.map((x) =>
-        `<option>${F.escapeHtml(x)}</option>`).join("")}</select></label>
-    <label class="sf-l">Lọc theo Tín hiệu
-      <select id="f-signal" multiple size="7">${SIGNAL_ORDER.map((x) =>
-        `<option value="${x}">${SIGNAL_VI[x]}</option>`).join("")}</select></label>
-    ${SCREEN_FILTERS.map(([id, label, lo, hi, step, def]) => `
-      <label class="sf-l">${label} <span class="sf-v" id="${id}-v">${def}</span>
-        <input id="${id}" type="range" min="${lo}" max="${hi}" step="${step}" value="${def}" /></label>`).join("")}
-    <label class="sf-c"><input id="f-pinned" type="checkbox" /> Chỉ Theo dõi</label>
+    <div class="sf-l">Ngành<div class="sf-tags" id="f-sector"></div></div>
+    <div class="sf-cols"><div>${colA}</div><div>${colB}
+      <label class="sf-c"><input id="f-pinned" type="checkbox" /> Chỉ Theo dõi</label></div></div>
     <label class="sf-l">Sắp xếp theo
       <select id="f-sort">${SORT_OPTIONS.map(([n], i) =>
         `<option value="${i}">${n}</option>`).join("")}</select></label>
+    <div class="sf-l">Lọc theo Tín hiệu<div class="sf-tags" id="f-signal"></div></div>
     <button id="f-reset" class="range-btn sf-reset">Xóa lọc</button>
-    <button id="f-health" class="range-btn sf-reset">Kiểm tra đầy đủ dữ liệu</button>
-    <div id="f-health-out" class="sf-l"></div>`;
+    <details class="sf-exp"><summary>Kiểm tra Tình trạng Dữ liệu</summary>
+      <button id="f-health" class="range-btn sf-reset">Kiểm tra đầy đủ dữ liệu</button>
+      <div id="f-health-out" class="sf-l"></div></details>`;
+
+  // Compact tag pickers, in place of the tall list boxes. Selected values show
+  // as removable chips; typing filters an overlay list.
+  const tagPicker = (host, options, placeholder, onChange) => {
+    const chosen = new Set();
+    host.innerHTML = `<div class="tp-box"><span class="tp-chips"></span>
+      <input class="tp-in" placeholder="${placeholder}" autocomplete="off" spellcheck="false" />
+      </div><div class="tp-list hidden"></div>`;
+    const chips = host.querySelector(".tp-chips");
+    const input = host.querySelector(".tp-in");
+    const list = host.querySelector(".tp-list");
+    const draw = () => {
+      chips.innerHTML = "";
+      for (const v of chosen) {
+        const c = el(`<span class="tp-chip">${F.escapeHtml(v)}<button title="Bỏ">✕</button></span>`);
+        c.querySelector("button").onclick = (ev) => {
+          ev.stopPropagation();
+          chosen.delete(v); draw(); onChange([...chosen]);
+        };
+        chips.appendChild(c);
+      }
+      input.placeholder = chosen.size ? "" : placeholder;
+    };
+    const openList = () => {
+      const term = input.value.trim().toUpperCase();
+      const hits = options.filter((o) => !chosen.has(o) && o.toUpperCase().includes(term));
+      list.innerHTML = "";
+      for (const o of hits.slice(0, 40)) {
+        const it = el(`<div class="tp-opt">${F.escapeHtml(o)}</div>`);
+        it.onmousedown = (ev) => {
+          ev.preventDefault();
+          chosen.add(o); input.value = ""; draw(); openList(); onChange([...chosen]);
+        };
+        list.appendChild(it);
+      }
+      list.classList.toggle("hidden", !hits.length);
+    };
+    input.addEventListener("focus", openList);
+    input.addEventListener("input", openList);
+    input.addEventListener("blur", () => setTimeout(() => list.classList.add("hidden"), 150));
+    host.reset = () => { chosen.clear(); draw(); };
+    host.value = () => [...chosen];
+    host.setOnly = (v) => { chosen.clear(); if (v) chosen.add(v); draw(); };
+    draw();
+    return host;
+  };
 
   root.innerHTML = "";
   // On a phone the sidebar stacks above the content, so nine filters push the
@@ -688,6 +737,9 @@ async function renderScreener() {
   root.appendChild(card);
   const tb = $("tbody", card);
 
+  const secPick = tagPicker($("#f-sector"), sectors, "Tất cả ngành", () => apply());
+  const sigPick = tagPicker($("#f-signal"), SIGNAL_ORDER.slice(), "Tất cả tín hiệu", () => apply());
+
   const qs = $("#q-sector", card);
   for (const x of sectors) qs.appendChild(el(`<option>${F.escapeHtml(x)}</option>`));
 
@@ -697,10 +749,8 @@ async function renderScreener() {
     const b = el(`<button class="sig-c" data-sig="${sg}">
       <div class="sig-n">${n}</div><div class="sig-l">${sg}</div></button>`);
     b.onclick = () => {
-      const sel = $("#f-signal");
-      const on = [...sel.options].filter((o) => o.selected).map((o) => o.value);
-      const only = on.length === 1 && on[0] === sg;
-      for (const o of sel.options) o.selected = !only && o.value === sg;
+      const on = sigPick.value();
+      sigPick.setOnly(on.length === 1 && on[0] === sg ? null : sg);
       apply();
     };
     counts.appendChild(b);
@@ -717,15 +767,14 @@ async function renderScreener() {
     }
   };
 
-  const multi = (id) => [...$(id).options].filter((o) => o.selected).map((o) => o.value);
-  const slider = (id) => parseFloat($(id).value);
+  const sliderVal = (id) => parseFloat($(id).value);
 
   function apply() {
     for (const [id] of SCREEN_FILTERS) $(`#${id}-v`).textContent = $(`#${id}`).value;
-    const secs = multi("#f-sector"), sigs = multi("#f-signal");
-    const minRoe = slider("#f-roe"), minNm = slider("#f-nm"), maxPb = slider("#f-pb");
-    const minQs = slider("#f-qs"), maxDe = slider("#f-de"), maxPe = slider("#f-pe");
-    const minUp = slider("#f-up"), pinned = $("#f-pinned").checked;
+    const secs = secPick.value(), sigs = sigPick.value();
+    const minRoe = sliderVal("#f-roe"), minNm = sliderVal("#f-nm"), maxPb = sliderVal("#f-pb");
+    const minQs = sliderVal("#f-qs"), maxDe = sliderVal("#f-de"), maxPe = sliderVal("#f-pe");
+    const minUp = sliderVal("#f-up"), pinned = $("#f-pinned").checked;
     const watchOnly = pinned || currentScTab === "Theo dõi";
     const qTicker = ($("#q-ticker", card).value || "").trim().toUpperCase();
     const qSector = $("#q-sector", card).value;
@@ -790,11 +839,12 @@ async function renderScreener() {
     tabRow.appendChild(btn);
   }
 
-  side.querySelectorAll("select, input").forEach((c) => c.addEventListener("input", apply));
+  // The tag pickers fire apply() themselves; their own text inputs must not.
+  side.querySelectorAll("select, input[type=range], input[type=checkbox]")
+      .forEach((c) => c.addEventListener("input", apply));
   card.querySelectorAll("#q-ticker, #q-sector").forEach((c) => c.addEventListener("input", apply));
   $("#f-reset").onclick = () => {
-    for (const sel of ["#f-sector", "#f-signal"])
-      for (const o of $(sel).options) o.selected = false;
+    secPick.reset(); sigPick.reset();
     for (const [id, , , , , def] of SCREEN_FILTERS) $(`#${id}`).value = def;
     $("#f-pinned").checked = false;
     $("#f-sort").value = "0";
