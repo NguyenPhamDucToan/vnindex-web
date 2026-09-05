@@ -215,7 +215,8 @@ export async function renderCompare(root, onPick) {
     const radarCard = card("Hồ sơ tổng thể", "cmp-radar",
       `<div class="vb-note">Trục: ${axes.map((a) => a.label).join(" · ")}.
        Mỗi trục chuẩn hóa 0–100 theo ngưỡng tham chiếu; trục "càng thấp càng tốt"
-       được đảo chiều nên xa tâm luôn là tốt hơn. Hover để xem số thực.</div>`);
+       được đảo chiều nên xa tâm luôn là tốt hơn.
+       <b>Rê chuột dọc một trục</b> để xem toàn bộ mã đang so trên tiêu chí đó, xếp từ tốt nhất.</div>`);
 
     const traceFor = (name, vals, labels, color, dash, fillAlpha) => ({
       type: "scatterpolar", name, fill: "toself",
@@ -237,12 +238,47 @@ export async function renderCompare(root, onPick) {
                                   "#f97316", "dash", "1f"));
       }
     }
+    // Keep each name's raw values so the spoke summary can rank them.
+    const perName = [];
     for (const [i, x] of data.entries()) {
       const raws = axes.map((a) => { try { return a.calc(x); } catch { return null; } });
+      const colour = SERIES[i % SERIES.length];
+      perName.push({ name: x.t, raws, colour });
       radarTraces.push(traceFor(x.t, axes.map((a, k) => normalise(a, raws[k])),
-                                axes.map((a, k) => a.fmt(raws[k])),
-                                SERIES[i % SERIES.length], null, "33"));
+                                axes.map((a, k) => a.fmt(raws[k])), colour, null, "33"));
     }
+
+    // One summary per axis: every name on that criterion, best first, each with
+    // a swatch in its own colour. "Best" follows the axis, so a lowerBetter
+    // metric ranks ascending.
+    const spokeText = axes.map((a, k) => {
+      const rows = perName
+        .map((n) => ({ ...n, v: n.raws[k] }))
+        .filter((n) => F.isNum(n.v))
+        .sort((p2, q2) => (a.lowerBetter ? p2.v - q2.v : q2.v - p2.v));
+      if (industryAvg && F.isNum(industryAvg.raw[a.label])) {
+        rows.push({ name: `TB ngành (${industryAvg.n})`, colour: "#f97316",
+                    v: industryAvg.raw[a.label] });
+      }
+      const hint = a.lowerBetter ? " · càng thấp càng tốt" : "";
+      return `<b>${a.label}</b>${hint}<br>` + (rows.length
+        ? rows.map((n) => `<span style="color:${n.colour}">■</span> ${n.name}: <b>${a.fmt(n.v)}</b>`)
+              .join("<br>")
+        : "—");
+    });
+
+    // Invisible hit-points spread along each spoke, so the summary is reachable
+    // anywhere on the axis rather than only at its tip.
+    const hitR = [12, 30, 48, 66, 84, 99];
+    radarTraces.push({
+      type: "scatterpolar", mode: "markers", showlegend: false, hoverinfo: "text",
+      r: axes.flatMap(() => hitR),
+      theta: axes.flatMap((a) => hitR.map(() => a.label)),
+      text: axes.flatMap((_, k) => hitR.map(() => spokeText[k])),
+      marker: { size: 26, color: "rgba(0,0,0,0)" },
+      hoverlabel: { bgcolor: "#ffffff", bordercolor: "#e2e8f0", align: "left",
+                    font: { ...FONT, size: 12, color: "#0f172a" } },
+    });
     pending.push(() => window.Plotly.react(radarCard.querySelector("#cmp-radar"), radarTraces, {
       height: 440, dragmode: false, margin: { l: 60, r: 60, t: 20, b: 60 },
       paper_bgcolor: "rgba(0,0,0,0)", font: FONT,
