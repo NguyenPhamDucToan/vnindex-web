@@ -595,6 +595,17 @@ const saveWL = (set) => {
 };
 
 // Sliders, ranges and steps copied from the original's sidebar.
+// Tonal / filled pairs copied from the original's _QC_COLORS: [tint, ink].
+const QC_COLORS = {
+  "Strong Buy": ["#bbf7d0", "#14532d"],
+  "Buy": ["#dcfce7", "#166534"],
+  "Watch": ["#fef3c7", "#92400e"],
+  "Neutral": ["#f1f5f9", "#475569"],
+  "Reduce": ["#fef2f2", "#b91c1c"],
+  "Sell": ["#fee2e2", "#991b1b"],
+  "Strong Sell": ["#fecaca", "#7f1d1d"],
+};
+
 const SCREEN_FILTERS = [
   ["f-roe", "ROE tối thiểu (%)", -50, 50, 5, -50],
   ["f-nm", "Biên LN ròng tối thiểu (%)", -50, 50, 1, -50],
@@ -645,7 +656,9 @@ async function renderScreener() {
     <label class="sf-l">Sắp xếp theo
       <select id="f-sort">${SORT_OPTIONS.map(([n], i) =>
         `<option value="${i}">${n}</option>`).join("")}</select></label>
-    <button id="f-reset" class="range-btn sf-reset">Xóa lọc</button>`;
+    <button id="f-reset" class="range-btn sf-reset">Xóa lọc</button>
+    <button id="f-health" class="range-btn sf-reset">Kiểm tra đầy đủ dữ liệu</button>
+    <div id="f-health-out" class="sf-l"></div>`;
 
   root.innerHTML = "";
   // On a phone the sidebar stacks above the content, so nine filters push the
@@ -662,7 +675,11 @@ async function renderScreener() {
 
   const card = el(`<div class="card">
     <div class="sig-counts" id="sig-counts"></div>
-    <div class="sc-bar"><span id="f-count" class="fcount"></span></div>
+    <div class="sc-quick">
+      <input id="q-ticker" placeholder="Tìm mã, VD: DSN, NCT" autocomplete="off" spellcheck="false" />
+      <select id="q-sector"><option>Tất cả ngành</option></select>
+      <span id="f-count" class="fcount"></span>
+    </div>
     <div class="ta-scroll"><table class="screen screen-wide"><thead><tr>
       <th>★</th><th>Mã</th><th>Tín hiệu</th><th>Ngành</th><th>Giá (VND)</th><th>Avg Estimate</th>
       <th>Avg Upside</th><th>DCF Estimate</th><th>FCFE Estimate</th><th>Upside</th>
@@ -671,11 +688,14 @@ async function renderScreener() {
   root.appendChild(card);
   const tb = $("tbody", card);
 
+  const qs = $("#q-sector", card);
+  for (const x of sectors) qs.appendChild(el(`<option>${F.escapeHtml(x)}</option>`));
+
   const counts = $("#sig-counts", card);
   for (const sg of SIGNAL_ORDER) {
     const n = rows.filter((r) => r.sig === sg).length;
-    const b = el(`<button class="sig-c" data-sig="${sg}" style="border-top-color:${SIGNAL_COLOR[sg]}">
-      <div class="sig-n">${n}</div><div class="sig-l">${SIGNAL_VI[sg]}</div></button>`);
+    const b = el(`<button class="sig-c" data-sig="${sg}">
+      <div class="sig-n">${n}</div><div class="sig-l">${sg}</div></button>`);
     b.onclick = () => {
       const sel = $("#f-signal");
       const on = [...sel.options].filter((o) => o.selected).map((o) => o.value);
@@ -685,6 +705,17 @@ async function renderScreener() {
     };
     counts.appendChild(b);
   }
+
+  // Tonal when unselected, solid when selected -- the original's two-tier chip.
+  const paintTiles = (active) => {
+    for (const b of counts.querySelectorAll(".sig-c")) {
+      const [tint, ink] = QC_COLORS[b.dataset.sig] || ["#f1f5f9", "#475569"];
+      const on = active.includes(b.dataset.sig);
+      b.style.background = on ? ink : tint;
+      b.style.color = on ? "#ffffff" : ink;
+      b.style.border = `${on ? 2 : 1.5}px solid ${ink}`;
+    }
+  };
 
   const multi = (id) => [...$(id).options].filter((o) => o.selected).map((o) => o.value);
   const slider = (id) => parseFloat($(id).value);
@@ -696,10 +727,15 @@ async function renderScreener() {
     const minQs = slider("#f-qs"), maxDe = slider("#f-de"), maxPe = slider("#f-pe");
     const minUp = slider("#f-up"), pinned = $("#f-pinned").checked;
     const watchOnly = pinned || currentScTab === "Theo dõi";
+    const qTicker = ($("#q-ticker", card).value || "").trim().toUpperCase();
+    const qSector = $("#q-sector", card).value;
+    paintTiles(sigs);
 
     let out = rows.filter((r) =>
       (!secs.length || secs.includes(r.sector)) &&
       (!sigs.length || sigs.includes(r.sig)) &&
+      (!qTicker || r.ticker.includes(qTicker)) &&
+      (qSector === "Tất cả ngành" || r.sector === qSector) &&
       (!watchOnly || wl.has(r.ticker)) &&
       (F.isNum(r.roe) ? r.roe * 100 >= minRoe : minRoe <= -50) &&
       (F.isNum(r.net_margin) ? r.net_margin * 100 >= minNm : minNm <= -50) &&
@@ -755,14 +791,27 @@ async function renderScreener() {
   }
 
   side.querySelectorAll("select, input").forEach((c) => c.addEventListener("input", apply));
+  card.querySelectorAll("#q-ticker, #q-sector").forEach((c) => c.addEventListener("input", apply));
   $("#f-reset").onclick = () => {
     for (const sel of ["#f-sector", "#f-signal"])
       for (const o of $(sel).options) o.selected = false;
     for (const [id, , , , , def] of SCREEN_FILTERS) $(`#${id}`).value = def;
     $("#f-pinned").checked = false;
     $("#f-sort").value = "0";
+    $("#q-ticker", card).value = "";
+    $("#q-sector", card).value = "Tất cả ngành";
     apply();
   };
+  // The original recomputes completeness from the DB; here the exported files
+  // already say what is missing, so report on those.
+  $("#f-health").onclick = () => {
+    const need = rows.filter((r) => !F.isNum(r.pe) || !F.isNum(r.pb) || !F.isNum(r.roe));
+    $("#f-health-out").innerHTML = need.length
+      ? `<b>${need.length}</b> / ${rows.length} mã thiếu chỉ số: `
+        + `${need.slice(0, 12).map((r) => r.ticker).join(", ")}${need.length > 12 ? "…" : ""}`
+      : `Tất cả ${rows.length} mã đã có đầy đủ chỉ số.`;
+  };
+
   apply();
 
   screenerAnalytics(root, rows);

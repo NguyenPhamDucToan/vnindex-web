@@ -65,6 +65,9 @@ b, strong { font-weight: 600; }
   background: var(--paper); border-right: 1px solid var(--rule);
   padding: var(--space-lg) var(--space-md); position: sticky; top: 0; height: 100vh;
   display: flex; flex-direction: column; gap: var(--space-lg);
+  /* The screener's filter panel makes the sidebar taller than the viewport;
+     without this its lower controls are unreachable. */
+  overflow-y: auto; overscroll-behavior: contain;
 }
 .brand { font-family: var(--mono); font-weight: 700; font-size: 19px; letter-spacing: 1.5px; color: var(--primary); }
 .brand span { color: var(--ink); }
@@ -346,10 +349,16 @@ table.screen tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--pri
 
 /* screener signal-count row */
 .sig-counts { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin-bottom: var(--space-md); }
-.sig-c { border: 1px solid var(--rule); border-top: 3px solid; border-radius: 4px; background: var(--paper); padding: 10px 6px; cursor: pointer; text-align: center; font-family: var(--sans); transition: background var(--dur) var(--ease-out); }
+/* Two-tier chip: tonal when unselected, solid when selected. Colours are
+   set inline per signal (see QC_COLORS); a white card with a coloured top
+   rule is the design the original tried and rejected as washed out. */
+.sig-c { border-radius: 4px; padding: 8px 6px; min-height: 56px; cursor: pointer;
+         text-align: center; font-family: var(--sans); font-weight: 600; line-height: 1.25;
+         transition: filter var(--dur) var(--ease-out); }
+.sig-c:hover { filter: brightness(0.96); }
 .sig-c:hover { background: var(--paper-3); }
-.sig-n { font-family: var(--mono); font-size: 20px; font-weight: 700; color: var(--ink); }
-.sig-l { font-size: 11px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sig-n { font-family: var(--mono); font-size: 20px; font-weight: 700; color: inherit; }
+.sig-l { font-size: 11px; color: inherit; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @media (max-width: 900px) { .sig-counts { grid-template-columns: repeat(4, 1fr); } }
 @media (max-width: 560px) { .ff-stats { grid-template-columns: repeat(2, 1fr); } }
 
@@ -595,3 +604,11 @@ table.screen.cmp-heat tbody tr { cursor: default; }
   .hd-body { overflow-x: hidden; }
   .hd-split > div { min-width: 0; }
 }
+
+/* Ticker search + sector quick-select, directly above the table. */
+.sc-quick { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.sc-quick input, .sc-quick select { font-family: var(--sans); font-size: 13px; padding: 6px 10px;
+  border: 1px solid var(--rule); border-radius: 4px; background: var(--paper); color: var(--ink); }
+.sc-quick input { flex: 0 1 260px; }
+.sc-quick .fcount { margin-left: auto; }
+@media (max-width: 560px) { .sc-quick { flex-wrap: wrap; } .sc-quick input { flex: 1 1 100%; } }
