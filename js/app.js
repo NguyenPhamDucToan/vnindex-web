@@ -1728,30 +1728,40 @@ async function renderMarket() {
   // ── 6. Today's market heatmap ────────────────────────────────────
   const heatRows = withChg.filter((r) => F.isNum(r.vol) && r.vol > 0);
   if (heatRows.length) {
-    const hc = el(`<div class="card"><h2 class="sec-h">Bản đồ nhiệt Thị trường Hôm nay</h2>
-      <div class="vb-note">Kích thước ô = khối lượng giao dịch; màu = thay đổi giá hôm nay.</div>
-      <div id="mkt-heat"></div></div>`);
-    root.appendChild(hc);
     const top120 = [...heatRows].sort((a, b) => b.vol - a.vol).slice(0, 120);
-    const sectors = [...new Set(top120.map((r) => r.sector).filter(Boolean))];
+    const nUp = top120.filter((r) => r.chg > 0).length;
+    const nDn = top120.filter((r) => r.chg < 0).length;
+    const nFlat = top120.length - nUp - nDn;
+    const hc = el(`<div class="card"><h2 class="sec-h">Bản đồ nhiệt Thị trường Hôm nay</h2>
+      <div id="mkt-heat"></div>
+      <div class="vb-note">▲ Tăng: ${nUp} · ▼ Giảm: ${nDn} · — Đứng: ${nFlat} · ${top120.length} mã cổ phiếu</div>
+      <div class="vb-note">🔴 Đỏ = giảm giá · ⚪ Xám = đi ngang (gần 0%) · 🟢 Xanh = tăng giá.
+        Màu càng đậm = mức tăng/giảm càng lớn (đậm nhất từ ±4% trở lên).
+        Kích thước ô = khối lượng giao dịch.</div></div>`);
+    root.appendChild(hc);
+    // Flat is flat: zero belongs at grey, not at the midpoint of a ramp whose
+    // middle happens to be orange. Saturates at +/-4%, as the original does.
     window.Plotly.react($("#mkt-heat", hc), [{
       type: "treemap",
-      labels: [...sectors, ...top120.map((r) => r.ticker)],
-      parents: [...sectors.map(() => ""), ...top120.map((r) => r.sector || "")],
-      values: [...sectors.map(() => 0), ...top120.map((r) => r.vol)],
-      text: [...sectors.map(() => ""), ...top120.map((r) => F.pctSigned(r.chg * 100))],
-      texttemplate: "%{label}<br>%{text}",
-      hovertemplate: "%{label} %{text}<extra></extra>",
-      branchvalues: "remainder",
+      labels: top120.map((r) => r.ticker),
+      parents: top120.map(() => ""),
+      values: top120.map((r) => Math.max(1, r.vol || 1)),
+      text: top120.map((r) => F.pctSigned(r.chg * 100)),
+      texttemplate: "<b>%{label}</b><br>%{text}",
+      textfont: { size: 11, color: "#ffffff" },
+      customdata: top120.map((r) => [r.name || "", F.priceVND(r.close), F.pctSigned(r.chg * 100)]),
+      hovertemplate: "<b>%{label}</b>  %{customdata[0]}<br>Giá: %{customdata[1]} VND<br>"
+                   + "Thay đổi: %{customdata[2]}<extra></extra>",
       marker: {
-        colors: [...sectors.map(() => 0), ...top120.map((r) => Math.max(-0.07, Math.min(0.07, r.chg)))],
-        colorscale: [[0, "#7f1d1d"], [0.5, "#d97706"], [1, "#14532d"]],
-        cmin: -0.07, cmax: 0.07, line: { width: 1, color: "#fff" },
+        colors: top120.map((r) => r.chg * 100),
+        colorscale: [[0, "#dc2626"], [0.5, "#555555"], [1, "#16a34a"]],
+        cmin: -4, cmax: 4, showscale: false,
+        line: { width: 1, color: "#0f172a" },
       },
-      tiling: { pad: 2 },
+      pathbar: { visible: false },
     }], {
-      height: 540, margin: { l: 0, r: 0, t: 0, b: 0 },
-      paper_bgcolor: "rgba(0,0,0,0)",
+      height: 430, margin: { l: 0, r: 0, t: 0, b: 0 }, dragmode: false,
+      paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(255,255,255,0)",
       font: { family: "Fira Code, monospace", size: 10, color: "#0a121d" },
     }, { displayModeBar: false, responsive: true });
   }
