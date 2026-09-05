@@ -4,7 +4,7 @@
 // performance, an overall radar profile, a financial-metric comparison, five
 // years of revenue/net income, and a detail table. Everything is derived from
 // the exported per-ticker files plus the screener snapshot, so no new data.
-import { loadTicker, loadScreener } from "./data.js";
+import { loadTicker, loadScreener, loadMarket } from "./data.js";
 import { computeQualityScore, classifySignal, SIGNAL_VI, SIGNAL_COLOR } from "./signals.js";
 import { computeTTM } from "./ttm.js";
 import { axesFor, normalise, SECTOR_AXES } from "./sector-metrics.js";
@@ -473,6 +473,165 @@ export async function renderCompare(root, onPick) {
     // (The transposed metric table that used to sit here is gone: the
     // grouped, rank-shaded comparison table above shows the same rows with
     // the sector's own metrics folded in.)
+
+    // ── 5. Margins over five years ───────────────────────────────────
+    // Revenue and profit levels are above; margins say whether the growth came
+    // with operating leverage or was bought.
+    const marginCard = el(`<div class="card"><h2 class="sec-h">Biên lợi nhuận (5 năm)</h2>
+      <div class="vb-note">Biên gộp và biên EBIT trống với ngân hàng và bảo hiểm — hai ngành
+        không có giá vốn hàng bán theo nghĩa thông thường.</div>
+      <div class="qgrid"></div></div>`);
+    body.appendChild(marginCard);
+    const marginChart = (title, id, pick) => {
+      const box = el(`<div class="qchart"><div class="qtitle">${title}</div><div id="${id}"></div></div>`);
+      marginCard.querySelector(".qgrid").appendChild(box);
+      const tr = data.map((x, i) => {
+        const ann = annOf(x);
+        return {
+          type: "scatter", mode: "lines+markers", name: x.t, x: years,
+          y: years.map((y) => { const r = ann.get(y); const v = r ? pick(r) : null; return F.isNum(v) ? v * 100 : null; }),
+          line: { color: SERIES[i % SERIES.length], width: 1.8 }, marker: { size: 5 },
+          connectgaps: true,
+          hovertemplate: `${x.t} %{x}: %{y:.1f}%<extra></extra>`,
+        };
+      }).filter((t) => t.y.some(F.isNum));
+      if (!tr.length) { box.remove(); return; }
+      pending.push(() => window.Plotly.react(marginCard.querySelector("#" + id), tr, {
+        height: 320, dragmode: false, margin: { l: 52, r: 14, t: 26, b: 34 },
+        paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: FONT,
+        legend: { orientation: "h", y: 1.1, x: 0, font: { size: 10 } },
+        xaxis: { type: "category", showgrid: false, tickfont: { size: 10 } },
+        yaxis: { gridcolor: "rgba(148,163,184,0.22)", tickfont: { size: 9 }, ticksuffix: "%" },
+        hovermode: "x unified",
+      }, { displayModeBar: false, responsive: true }));
+    };
+    marginChart("Biên gộp", "cmp-gm", (r) => (r.revenue ? r.gross_profit / r.revenue : null));
+    marginChart("Biên EBIT", "cmp-em", (r) => (r.revenue ? r.ebit / r.revenue : null));
+    marginChart("Biên LN ròng", "cmp-nm", (r) => (r.revenue ? r.net_income / r.revenue : null));
+
+    // ── 6. Risk and return ───────────────────────────────────────────
+    const market = await loadMarket().catch(() => null);
+    const idxByDate = new Map(((market || {}).vnindex || []).map((r) => [r.date, r.close]));
+    const rets = (px) => {
+      const out = [];
+      for (let i = 1; i < px.length; i++) {
+        const a = px[i - 1].close, b = px[i].close;
+        if (a > 0 && b > 0) out.push({ date: px[i].date, r: b / a - 1 });
+      }
+      return out;
+    };
+    const TRADING_DAYS = 252, RF = 0.05;   // config.py's VN risk-free rate
+    const riskRows = data.map((x, i) => {
+      const px = (x.d.prices || []).slice(-TRADING_DAYS);
+      if (px.length < 30) return null;
+      const rr = rets(px);
+      const total = px[px.length - 1].close / px[0].close - 1;
+      const mean = rr.reduce((a, b) => a + b.r, 0) / rr.length;
+      const sd = Math.sqrt(rr.reduce((a, b) => a + (b.r - mean) ** 2, 0) / (rr.length - 1));
+      const vol = sd * Math.sqrt(TRADING_DAYS);
+      // Peak-to-trough, walked forward -- the worst loss a holder actually sat through.
+      let peak = px[0].close, mdd = 0;
+      for (const q of px) { peak = Math.max(peak, q.close); mdd = Math.min(mdd, q.close / peak - 1); }
+      // Beta needs the two series on the same days; the index file is shorter.
+      const pairs = rr.map((q, k) => {
+        const prev = idxByDate.get(rr[k - 1] ? rr[k - 1].date : null);
+        const cur = idxByDate.get(q.date);
+        return (k > 0 && prev > 0 && cur > 0) ? [q.r, cur / prev - 1] : null;
+      }).filter(Boolean);
+      let beta = null;
+      if (pairs.length > 60) {
+        const mx = pairs.reduce((a, b) => a + b[0], 0) / pairs.length;
+        const my = pairs.reduce((a, b) => a + b[1], 0) / pairs.length;
+        const cov = pairs.reduce((a, b) => a + (b[0] - mx) * (b[1] - my), 0) / (pairs.length - 1);
+        const varM = pairs.reduce((a, b) => a + (b[1] - my) ** 2, 0) / (pairs.length - 1);
+        beta = varM > 0 ? cov / varM : null;
+      }
+      const sharpe = vol > 0 ? (total - RF) / vol : null;
+      return { t: x.t, colour: SERIES[i % SERIES.length], total, vol, mdd, beta, sharpe };
+    }).filter(Boolean);
+
+    if (riskRows.length) {
+      const pctS = (v) => (F.isNum(v) ? `${v >= 0 ? "+" : ""}${(v * 100).toFixed(1)}%` : "—");
+      const pct = (v) => (F.isNum(v) ? `${(v * 100).toFixed(1)}%` : "—");
+      const num = (v) => (F.isNum(v) ? v.toFixed(2) : "—");
+      const RISK = [
+        ["Lợi nhuận 1 năm", (r) => r.total, pctS, true],
+        ["Biến động (năm hóa)", (r) => r.vol, pct, false],
+        ["Sụt giảm tối đa", (r) => r.mdd, pctS, true],
+        ["Beta vs VN-Index", (r) => r.beta, num, null],
+        ["Sharpe (Rf 5%)", (r) => r.sharpe, num, true],
+      ];
+      const rc = el(`<div class="card"><h2 class="sec-h">Rủi ro &amp; Hiệu suất <span class="ta-sub">· 1 năm</span></h2>
+        <div class="vb-note">So sánh nền tảng thôi thì chưa đủ: hai mã cùng mức lãi có thể đi kèm
+          mức biến động rất khác nhau. Beta &gt; 1 = dao động mạnh hơn VN-Index.
+          Sharpe = lợi nhuận vượt lãi suất phi rủi ro trên mỗi đơn vị biến động.</div>
+        <div class="ta-scroll"><table class="screen cmp-heat"><thead><tr><th>Chỉ số</th>${
+          riskRows.map((r) => `<th style="color:${r.colour};border-top:3px solid ${r.colour}">${r.t}</th>`).join("")
+        }</tr></thead><tbody></tbody></table></div></div>`);
+      const rb = rc.querySelector("tbody");
+      for (const [label, get, fmt, higherBetter] of RISK) {
+        const vals = riskRows.map(get);
+        const valid = vals.map((v, i) => [v, i]).filter(([v]) => F.isNum(v));
+        let bestIdx = -1;
+        if (higherBetter !== null && valid.length > 1) {
+          bestIdx = valid.slice().sort((a, b) => (higherBetter ? b[0] - a[0] : a[0] - b[0]))[0][1];
+        }
+        const tr = el(`<tr><td class="dim">${label}</td></tr>`);
+        vals.forEach((v, i) => {
+          const best = i === bestIdx;
+          tr.appendChild(el(best
+            ? `<td class="num cmp-r0" style="color:${readable(riskRows[i].colour)};background:${riskRows[i].colour}22">${
+                F.escapeHtml(fmt(v))} <span class="cmp-star">★</span></td>`
+            : `<td class="num cmp-r2">${F.escapeHtml(fmt(v))}</td>`));
+        });
+        rb.appendChild(tr);
+      }
+      body.appendChild(rc);
+    }
+
+    // ── 7. Price correlation ─────────────────────────────────────────
+    // Four names in one sector often move as one; that caps how much a basket
+    // of them actually diversifies, and nothing else here shows it.
+    if (data.length > 1) {
+      const series = data.map((x) => new Map(rets((x.d.prices || []).slice(-TRADING_DAYS)).map((q) => [q.date, q.r])));
+      const corr = (a, b) => {
+        const xs = [], ys = [];
+        for (const [d, v] of a) if (b.has(d)) { xs.push(v); ys.push(b.get(d)); }
+        if (xs.length < 30) return null;
+        const mx = xs.reduce((p2, q2) => p2 + q2, 0) / xs.length;
+        const my = ys.reduce((p2, q2) => p2 + q2, 0) / ys.length;
+        let sxy = 0, sxx = 0, syy = 0;
+        for (let i = 0; i < xs.length; i++) {
+          sxy += (xs[i] - mx) * (ys[i] - my);
+          sxx += (xs[i] - mx) ** 2; syy += (ys[i] - my) ** 2;
+        }
+        return (sxx && syy) ? sxy / Math.sqrt(sxx * syy) : null;
+      };
+      const names = data.map((x) => x.t);
+      const z = series.map((a) => series.map((b) => corr(a, b)));
+      const cc = el(`<div class="card"><h2 class="sec-h">Tương quan giá <span class="ta-sub">· 1 năm</span></h2>
+        <div class="vb-note">Hệ số tương quan lợi suất theo ngày. Gần 1 = hai mã gần như đi cùng nhau,
+          nên nắm cả hai ít giảm rủi ro; gần 0 = độc lập.</div>
+        <div id="cmp-corr"></div></div>`);
+      body.appendChild(cc);
+      pending.push(() => window.Plotly.react(cc.querySelector("#cmp-corr"), [{
+        type: "heatmap", x: names, y: names, z,
+        zmin: -1, zmax: 1, colorscale: "RdBu", reversescale: true,
+        hovertemplate: "%{y} vs %{x}: %{z:.2f}<extra></extra>",
+        colorbar: { thickness: 10, len: 0.8, tickfont: { size: 9 } },
+      }], {
+        height: Math.max(280, names.length * 62), dragmode: false,
+        margin: { l: 90, r: 20, t: 14, b: 60 },
+        paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: FONT,
+        xaxis: { type: "category", tickfont: { size: 11 } },
+        yaxis: { type: "category", tickfont: { size: 11 }, autorange: "reversed" },
+        annotations: names.flatMap((rn, i) => names.map((cn, j) => ({
+          x: cn, y: rn, text: F.isNum(z[i][j]) ? z[i][j].toFixed(2) : "—",
+          showarrow: false,
+          font: { ...FONT, size: 12, color: Math.abs(z[i][j] ?? 0) > 0.6 ? "#ffffff" : "#0f172a" },
+        }))),
+      }, { displayModeBar: false, responsive: true }));
+    }
 
     // (The detail table that used to close this view is gone: it repeated
     // the comparison table's numbers transposed.)
