@@ -22,10 +22,10 @@ COLLECT = r"""() => {
       .map(e => n(e.textContent)).filter(t => t && t.length <= cap);
   return {
     heads: take('h1,h2,h3,.sec-h,.view-title', 70),
-    charts: take('.gtitle,.qtitle', 90),
+    charts: take('.gtitle,.qtitle,.chart-sub', 90),
     controls: [...document.querySelectorAll(
         'button[kind],[data-testid="stBaseButton-secondary"],[role="radio"],'
-        + '.range-btn,.sig-c,.nav-item,label,option')]
+        + '.range-btn,.sig-c,.nav-item,label,option,.sel-lab')]
         .map(e => n(e.textContent)).filter(t => t && t.length <= 44),
     cols: [...document.querySelectorAll('table')].map(t =>
         [...t.querySelectorAll('th')].map(h => n(h.textContent)).filter(Boolean).join(' | '))

@@ -509,9 +509,10 @@ export async function renderCompare(root, onPick) {
     marginChart("Biên EBIT", "cmp-em", (r) => (r.revenue ? r.ebit / r.revenue : null));
     marginChart("Biên LN ròng", "cmp-nm", (r) => (r.revenue ? r.net_income / r.revenue : null));
 
-    // ── 6. Risk and return ───────────────────────────────────────────
+    // ── 6. Risk, return, market sensitivity and liquidity ────────────
     const market = await loadMarket().catch(() => null);
-    const idxByDate = new Map(((market || {}).vnindex || []).map((r) => [r.date, r.close]));
+    const idxSeries = ((market || {}).vnindex || []);
+    const idxByDate = new Map(idxSeries.map((r) => [r.date, r.close]));
     const rets = (px) => {
       const out = [];
       for (let i = 1; i < px.length; i++) {
@@ -521,85 +522,149 @@ export async function renderCompare(root, onPick) {
       return out;
     };
     const TRADING_DAYS = 252, RF = 0.05;   // config.py's VN risk-free rate
+    const mean = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
+    const sd = (a) => {
+      if (a.length < 2) return null;
+      const m = mean(a);
+      return Math.sqrt(a.reduce((x, y) => x + (y - m) ** 2, 0) / (a.length - 1));
+    };
+    const horizonReturn = (px, days) => {
+      if (px.length < days + 1) return null;
+      const a = px[px.length - 1 - days].close, b = px[px.length - 1].close;
+      return (a > 0 && b > 0) ? b / a - 1 : null;
+    };
+
     const riskRows = data.map((x, i) => {
-      const px = (x.d.prices || []).slice(-TRADING_DAYS);
-      if (px.length < 30) return null;
+      const all = x.d.prices || [];
+      const px = all.slice(-TRADING_DAYS);
+      if (px.length < 60) return null;
       const rr = rets(px);
+      const rs = rr.map((q) => q.r);
       const total = px[px.length - 1].close / px[0].close - 1;
-      const mean = rr.reduce((a, b) => a + b.r, 0) / rr.length;
-      const sd = Math.sqrt(rr.reduce((a, b) => a + (b.r - mean) ** 2, 0) / (rr.length - 1));
-      const vol = sd * Math.sqrt(TRADING_DAYS);
-      // Peak-to-trough, walked forward -- the worst loss a holder actually sat through.
-      let peak = px[0].close, mdd = 0;
-      for (const q of px) { peak = Math.max(peak, q.close); mdd = Math.min(mdd, q.close / peak - 1); }
-      // Beta needs the two series on the same days; the index file is shorter.
-      const pairs = rr.map((q, k) => {
-        const prev = idxByDate.get(rr[k - 1] ? rr[k - 1].date : null);
-        const cur = idxByDate.get(q.date);
-        return (k > 0 && prev > 0 && cur > 0) ? [q.r, cur / prev - 1] : null;
-      }).filter(Boolean);
-      let beta = null;
+      const vol = sd(rs) * Math.sqrt(TRADING_DAYS);
+      // Downside deviation: only the days that lost money, which is the risk a
+      // holder actually minds. A plain SD punishes upside moves equally.
+      const down = rs.filter((v) => v < 0);
+      const dvol = down.length > 1 ? sd(down) * Math.sqrt(TRADING_DAYS) : null;
+      // Peak-to-trough walked forward -- the loss actually sat through.
+      let peak = px[0].close, mdd = 0, troughIdx = 0, peakIdx = 0, curPeak = 0;
+      px.forEach((q, k) => {
+        if (q.close > peak) { peak = q.close; curPeak = k; }
+        const dd = q.close / peak - 1;
+        if (dd < mdd) { mdd = dd; troughIdx = k; peakIdx = curPeak; }
+      });
+      // Days since the trough that the price has still not reclaimed the peak.
+      let recovery = null;
+      if (mdd < 0) {
+        const target = px[peakIdx].close;
+        const after = px.slice(troughIdx).findIndex((q) => q.close >= target);
+        recovery = after >= 0 ? after : null;   // null = not recovered yet
+      }
+      // Beta and correlation need both series on the same days.
+      const pairs = [];
+      for (let k = 1; k < rr.length; k++) {
+        const prev = idxByDate.get(rr[k - 1].date), cur = idxByDate.get(rr[k].date);
+        if (prev > 0 && cur > 0) pairs.push([rr[k].r, cur / prev - 1]);
+      }
+      let beta = null, alpha = null, corrIdx = null;
       if (pairs.length > 60) {
-        const mx = pairs.reduce((a, b) => a + b[0], 0) / pairs.length;
-        const my = pairs.reduce((a, b) => a + b[1], 0) / pairs.length;
-        const cov = pairs.reduce((a, b) => a + (b[0] - mx) * (b[1] - my), 0) / (pairs.length - 1);
-        const varM = pairs.reduce((a, b) => a + (b[1] - my) ** 2, 0) / (pairs.length - 1);
-        beta = varM > 0 ? cov / varM : null;
+        const xs = pairs.map((q) => q[0]), ys = pairs.map((q) => q[1]);
+        const mx = mean(xs), my = mean(ys);
+        const cov = pairs.reduce((a, q) => a + (q[0] - mx) * (q[1] - my), 0) / (pairs.length - 1);
+        const vy = pairs.reduce((a, q) => a + (q[1] - my) ** 2, 0) / (pairs.length - 1);
+        beta = vy > 0 ? cov / vy : null;
+        const sx = sd(xs), sy = sd(ys);
+        corrIdx = (sx && sy) ? cov / (sx * sy) : null;
+        // Jensen's alpha, annualised: return earned beyond what the beta
+        // exposure alone would have produced.
+        if (F.isNum(beta)) {
+          const mktTotal = my * pairs.length;
+          alpha = (total - RF) - beta * (mktTotal - RF);
+        }
       }
       const sharpe = vol > 0 ? (total - RF) / vol : null;
-      return { t: x.t, colour: SERIES[i % SERIES.length], total, vol, mdd, beta, sharpe };
+      const sortino = dvol > 0 ? (total - RF) / dvol : null;
+      const winRate = rs.length ? rs.filter((v) => v > 0).length / rs.length : null;
+      // Traded value per session, in billions: price is thousands VND.
+      const liq = mean(px.map((q) => (q.close || 0) * (q.volume || 0) / 1e6));
+      return { t: x.t, colour: SERIES[i % SERIES.length],
+               r3: horizonReturn(all, 63), r6: horizonReturn(all, 126), total,
+               vol, dvol, mdd, recovery, beta, alpha, corrIdx, sharpe, sortino, winRate, liq };
     }).filter(Boolean);
 
     if (riskRows.length) {
       const pctS = (v) => (F.isNum(v) ? `${v >= 0 ? "+" : ""}${(v * 100).toFixed(1)}%` : "—");
       const pct = (v) => (F.isNum(v) ? `${(v * 100).toFixed(1)}%` : "—");
       const num = (v) => (F.isNum(v) ? v.toFixed(2) : "—");
-      const RISK = [
-        ["Lợi nhuận 1 năm", (r) => r.total, pctS, true],
-        ["Biến động (năm hóa)", (r) => r.vol, pct, false],
-        ["Sụt giảm tối đa", (r) => r.mdd, pctS, true],
-        ["Beta vs VN-Index", (r) => r.beta, num, null],
-        ["Sharpe (Rf 5%)", (r) => r.sharpe, num, true],
+      const days = (v) => (F.isNum(v) ? `${v} phiên` : "chưa hồi");
+      const bn = (v) => (F.isNum(v) ? `${v.toFixed(1)} tỷ` : "—");
+      // [label, get, format, higherBetter]  -- null means neither is "better".
+      const RISK_GROUPS = [
+        ["Lợi nhuận", [
+          ["3 tháng", (r) => r.r3, pctS, true],
+          ["6 tháng", (r) => r.r6, pctS, true],
+          ["1 năm", (r) => r.total, pctS, true],
+        ]],
+        ["Rủi ro", [
+          ["Biến động (năm hóa)", (r) => r.vol, pct, false],
+          ["Biến động giảm giá", (r) => r.dvol, pct, false],
+          ["Sụt giảm tối đa", (r) => r.mdd, pctS, true],
+          ["Thời gian hồi phục", (r) => r.recovery, days, false],
+          ["Tỷ lệ phiên tăng", (r) => r.winRate, pct, true],
+        ]],
+        ["Hiệu quả điều chỉnh rủi ro", [
+          ["Sharpe (Rf 5%)", (r) => r.sharpe, num, true],
+          ["Sortino (Rf 5%)", (r) => r.sortino, num, true],
+        ]],
+        ["Nhạy cảm thị trường", [
+          ["Beta vs VN-Index", (r) => r.beta, num, null],
+          ["Alpha (năm hóa)", (r) => r.alpha, pctS, true],
+          ["Tương quan VN-Index", (r) => r.corrIdx, num, null],
+        ]],
+        ["Thanh khoản", [
+          ["GTGD bình quân/phiên", (r) => r.liq, bn, true],
+        ]],
       ];
       const rc = el(`<div class="card"><h2 class="sec-h">Rủi ro &amp; Hiệu suất <span class="ta-sub">· 1 năm</span></h2>
-        <div class="vb-note">So sánh nền tảng thôi thì chưa đủ: hai mã cùng mức lãi có thể đi kèm
-          mức biến động rất khác nhau. Beta &gt; 1 = dao động mạnh hơn VN-Index.
-          Sharpe = lợi nhuận vượt lãi suất phi rủi ro trên mỗi đơn vị biến động.</div>
+        <div class="vb-note">Beta &gt; 1 = dao động mạnh hơn VN-Index. Alpha = phần lãi vượt trên
+          mức mà riêng độ nhạy beta đã giải thích được. Sortino giống Sharpe nhưng chỉ tính biến
+          động của các phiên giảm — thứ rủi ro người cầm thực sự bận tâm.
+          Beta và tương quan không chấm ★: cao hay thấp tốt hơn còn tùy mục đích nắm giữ.</div>
         <div class="ta-scroll"><table class="screen cmp-heat"><thead><tr><th>Chỉ số</th>${
           riskRows.map((r) => `<th style="color:${r.colour};border-top:3px solid ${r.colour}">${r.t}</th>`).join("")
         }</tr></thead><tbody></tbody></table></div></div>`);
       const rb = rc.querySelector("tbody");
-      for (const [label, get, fmt, higherBetter] of RISK) {
-        const vals = riskRows.map(get);
-        const valid = vals.map((v, i) => [v, i]).filter(([v]) => F.isNum(v));
-        let bestIdx = -1;
-        if (higherBetter !== null && valid.length > 1) {
-          bestIdx = valid.slice().sort((a, b) => (higherBetter ? b[0] - a[0] : a[0] - b[0]))[0][1];
+      for (const [group, rows] of RISK_GROUPS) {
+        rb.appendChild(el(`<tr class="cmp-grp"><td colspan="${riskRows.length + 1}">${group}</td></tr>`));
+        for (const [label, get, fmt, higherBetter] of rows) {
+          const vals = riskRows.map(get);
+          const valid = vals.map((v, i) => [v, i]).filter(([v]) => F.isNum(v));
+          let bestIdx = -1;
+          if (higherBetter !== null && valid.length > 1) {
+            bestIdx = valid.slice().sort((a, b) => (higherBetter ? b[0] - a[0] : a[0] - b[0]))[0][1];
+          }
+          const tr = el(`<tr><td class="dim">${label}</td></tr>`);
+          vals.forEach((v, i) => {
+            const best = i === bestIdx;
+            tr.appendChild(el(best
+              ? `<td class="num cmp-r0" style="color:${readable(riskRows[i].colour)};background:${riskRows[i].colour}22">${
+                  F.escapeHtml(fmt(v))} <span class="cmp-star">★</span></td>`
+              : `<td class="num cmp-r2">${F.escapeHtml(fmt(v))}</td>`));
+          });
+          rb.appendChild(tr);
         }
-        const tr = el(`<tr><td class="dim">${label}</td></tr>`);
-        vals.forEach((v, i) => {
-          const best = i === bestIdx;
-          tr.appendChild(el(best
-            ? `<td class="num cmp-r0" style="color:${readable(riskRows[i].colour)};background:${riskRows[i].colour}22">${
-                F.escapeHtml(fmt(v))} <span class="cmp-star">★</span></td>`
-            : `<td class="num cmp-r2">${F.escapeHtml(fmt(v))}</td>`));
-        });
-        rb.appendChild(tr);
       }
       body.appendChild(rc);
     }
 
     // ── 7. Price correlation ─────────────────────────────────────────
-    // Four names in one sector often move as one; that caps how much a basket
-    // of them actually diversifies, and nothing else here shows it.
     if (data.length > 1) {
       const series = data.map((x) => new Map(rets((x.d.prices || []).slice(-TRADING_DAYS)).map((q) => [q.date, q.r])));
       const corr = (a, b) => {
         const xs = [], ys = [];
         for (const [d, v] of a) if (b.has(d)) { xs.push(v); ys.push(b.get(d)); }
         if (xs.length < 30) return null;
-        const mx = xs.reduce((p2, q2) => p2 + q2, 0) / xs.length;
-        const my = ys.reduce((p2, q2) => p2 + q2, 0) / ys.length;
+        const mx = mean(xs), my = mean(ys);
         let sxy = 0, sxx = 0, syy = 0;
         for (let i = 0; i < xs.length; i++) {
           sxy += (xs[i] - mx) * (ys[i] - my);
@@ -608,28 +673,51 @@ export async function renderCompare(root, onPick) {
         return (sxx && syy) ? sxy / Math.sqrt(sxx * syy) : null;
       };
       const names = data.map((x) => x.t);
-      const z = series.map((a) => series.map((b) => corr(a, b)));
-      const cc = el(`<div class="card"><h2 class="sec-h">Tương quan giá <span class="ta-sub">· 1 năm</span></h2>
-        <div class="vb-note">Hệ số tương quan lợi suất theo ngày. Gần 1 = hai mã gần như đi cùng nhau,
-          nên nắm cả hai ít giảm rủi ro; gần 0 = độc lập.</div>
+      const n = names.length;
+      // Lower triangle only: the upper half is its mirror and the diagonal is
+      // a row of 1.00 that earns none of the attention it takes.
+      const z = names.map((_, i) => names.map((__, j) => (j < i ? corr(series[i], series[j]) : null)));
+      const flat = z.flat().filter(F.isNum);
+      const avg = mean(flat);
+      const lo = Math.min(...flat), hi = Math.max(...flat);
+
+      const verdict = avg > 0.7 ? "gần như đi cùng nhau — nắm cả nhóm ít giảm được rủi ro"
+        : avg > 0.4 ? "cùng chiều ở mức vừa phải"
+        : "khá độc lập — nắm cả nhóm có tác dụng phân tán";
+      const cc = el(`<div class="card"><h2 class="sec-h">Tương quan giá <span class="ta-sub">· lợi suất ngày, 1 năm</span></h2>
+        <div class="vb-note">Tương quan trung bình <b>${avg.toFixed(2)}</b> — ${verdict}.
+          Chỉ hiện nửa dưới: nửa trên là ảnh gương, đường chéo luôn bằng 1.
+          Thang màu co theo dải thực tế (${lo.toFixed(2)}–${hi.toFixed(2)}) để thấy rõ chênh lệch.</div>
         <div id="cmp-corr"></div></div>`);
       body.appendChild(cc);
+      // Fit the ramp to the data: equity correlations cluster in 0.3-0.8 and a
+      // fixed -1..1 scale renders every one of them the same pale shade.
+      const pad = Math.max(0.05, (hi - lo) * 0.1);
       pending.push(() => window.Plotly.react(cc.querySelector("#cmp-corr"), [{
         type: "heatmap", x: names, y: names, z,
-        zmin: -1, zmax: 1, colorscale: "RdBu", reversescale: true,
-        hovertemplate: "%{y} vs %{x}: %{z:.2f}<extra></extra>",
-        colorbar: { thickness: 10, len: 0.8, tickfont: { size: 9 } },
+        zmin: Math.max(-1, lo - pad), zmax: Math.min(1, hi + pad),
+        colorscale: [[0, "#eff6ff"], [0.5, "#7ba7d7"], [1, "#1e3a8a"]],
+        xgap: 3, ygap: 3, hoverongaps: false,
+        hovertemplate: "%{y} vs %{x}: <b>%{z:.2f}</b><extra></extra>",
+        colorbar: { thickness: 9, len: 0.7, outlinewidth: 0, tickfont: { size: 9 },
+                    title: { text: "hệ số", font: { size: 9 } } },
       }], {
-        height: Math.max(280, names.length * 62), dragmode: false,
-        margin: { l: 90, r: 20, t: 14, b: 60 },
+        // Square cells: a correlation matrix read as rectangles looks arbitrary.
+        height: Math.max(260, n * 74), dragmode: false,
+        margin: { l: 74, r: 20, t: 10, b: 54 },
         paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: FONT,
-        xaxis: { type: "category", tickfont: { size: 11 } },
-        yaxis: { type: "category", tickfont: { size: 11 }, autorange: "reversed" },
-        annotations: names.flatMap((rn, i) => names.map((cn, j) => ({
-          x: cn, y: rn, text: F.isNum(z[i][j]) ? z[i][j].toFixed(2) : "—",
-          showarrow: false,
-          font: { ...FONT, size: 12, color: Math.abs(z[i][j] ?? 0) > 0.6 ? "#ffffff" : "#0f172a" },
-        }))),
+        xaxis: { type: "category", tickfont: { size: 12 }, showgrid: false,
+                 side: "bottom", constrain: "domain" },
+        yaxis: { type: "category", tickfont: { size: 12 }, showgrid: false,
+                 autorange: "reversed", scaleanchor: "x", constrain: "domain" },
+        annotations: names.flatMap((rn, i) => names.map((cn, j) => {
+          const v = z[i][j];
+          if (!F.isNum(v)) return null;
+          // White above the midpoint of the fitted ramp, ink below it.
+          const mid = (Math.max(-1, lo - pad) + Math.min(1, hi + pad)) / 2;
+          return { x: cn, y: rn, text: v.toFixed(2), showarrow: false,
+                   font: { ...FONT, size: 13, color: v > mid ? "#ffffff" : "#0f172a" } };
+        }).filter(Boolean)),
       }, { displayModeBar: false, responsive: true }));
     }
 

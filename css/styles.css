@@ -681,3 +681,6 @@ table.screen.cmp-heat tbody tr { cursor: default; }
 
 /* Leader cell: a soft tint of its column's colour, one per row. */
 .cmp-heat .cmp-r0 { border-radius: 3px; }
+
+/* Label above a row of selector chips, as the original captions its radios. */
+.sel-lab { font-size: 12px; color: var(--muted); margin-bottom: 6px; }

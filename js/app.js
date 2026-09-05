@@ -1105,6 +1105,7 @@ async function renderSector() {
 
   const heat = el(`<div class="card">
     <h2 class="sec-h">Bản đồ nhiệt theo Ngành</h2>
+    <div class="sel-lab">Màu / Sắp xếp theo:</div>
     <div class="range-row" id="sec-metric"></div>
     <div class="vb-note" id="sec-cap"></div>
     <div id="sec-tree"></div></div>`);
@@ -1209,6 +1210,7 @@ async function renderSector() {
 
   const scat = el(`<div class="card">
     <h2 class="sec-h" id="sec-sc-h">Quality Score vs ${scName}</h2>
+    <div class="sel-lab">X axis:</div>
     <div class="range-row" id="sec-sc-metric"></div>
     <div class="vb-note">Mỗi bong bóng là một ngành; kích thước theo số mã, màu theo ROE trung vị.</div>
     <div id="sec-scatter"></div></div>`);
@@ -1491,7 +1493,7 @@ async function renderMarket() {
   const hist = await fetch("data/market_history.json").then((r) => r.json()).catch(() => []);
   if (hist.length > 3) {
     const wrap = el(`<div class="card">
-      <h2 class="sec-h">Định giá Thị trường so với Lịch sử</h2>
+      <h2 class="sec-h">Định giá Thị trường (P/E &amp; P/B) so với Lịch sử</h2>
       <div class="mkt-pair"><div id="mkt-pe"></div><div id="mkt-pb"></div></div>
       <div class="vb-note" id="mkt-hist-note"></div></div>`);
     root.appendChild(wrap);
@@ -1576,26 +1578,43 @@ async function renderMarket() {
   // ── 3. Market-wide foreign net trading ───────────────────────────
   const ff = market.foreign || [];
   if (ff.length > 2) {
-    const c = el(`<div class="card"><h2 class="sec-h">Giá trị Giao dịch ròng Nước ngoài</h2>
+    // The original charts the last 15 sessions and puts the latest net figure
+    // in the title, coloured by side.
+    const ff15 = ff.slice(-15);
+    const y = ff15.map((d) => d.net_val / 1e9);
+    const lastNet = y[y.length - 1];
+    const sum15 = y.reduce((a, b) => a + b, 0);
+    const tone = (v) => (v >= 0 ? "#15803d" : "#b91c1c");
+    const signed = (v) => `${v >= 0 ? "+" : "−"}${Math.abs(v).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+    // The original carries both: a section heading and, inside the plot, a
+    // title with the latest net figure.
+    const c = el(`<div class="card">
+      <h2 class="sec-h">Giá trị Giao dịch ròng Nước ngoài</h2>
+      <div class="chart-sub">Mua-bán ròng nước ngoài · 15 phiên gần nhất
+        <span style="color:${tone(lastNet)}">(gần nhất ${signed(lastNet)} tỷ)</span></div>
       <div id="ff-mkt"></div>
-      <div class="vb-note">GTNN = giá trị giao dịch ròng của nhà đầu tư nước ngoài trên toàn thị trường.</div></div>`);
+      <div class="vb-note">Mua ròng = xanh, bán ròng = đỏ. Lũy kế 15 phiên:
+        <b style="color:${tone(sum15)}">${signed(sum15)} tỷ VND</b>.
+        Nguồn: VNDirect (NN = nhà đầu tư nước ngoài).</div></div>`);
     root.appendChild(c);
-    const y = ff.map((d) => d.net_val / 1e9);
     window.Plotly.react($("#ff-mkt", c), [{
       type: "bar",
-      x: ff.map((d) => String(d.date).slice(5).split("-").reverse().join("/")), y,
+      x: ff15.map((d) => String(d.date).slice(5).split("-").reverse().join("/")), y,
       marker: { color: y.map((v) => (v >= 0 ? "#22c55e" : "#ef4444")) },
-      hovertemplate: "%{x}: %{y:,.0f} tỷ<extra></extra>",
+      customdata: ff15.map((d) => [(d.buy_val || 0) / 1e9, (d.sell_val || 0) / 1e9]),
+      hovertemplate: "<b>%{x}</b><br>Mua-Bán: %{y:,.1f} tỷ<br>"
+                   + "Mua: %{customdata[0]:,.1f} tỷ<br>Bán: %{customdata[1]:,.1f} tỷ<extra></extra>",
     }], {
       height: 300, dragmode: false, margin: { l: 60, r: 12, t: 8, b: 30 },
+      shapes: [{ type: "line", xref: "paper", x0: 0, x1: 1, y0: 0, y1: 0,
+                 line: { color: "#cbd5e1", width: 1 } }],
       paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
       font: { family: "Fira Code, monospace", size: 10, color: "#0a121d" },
       xaxis: { type: "category", showgrid: false, tickfont: { size: 9 } },
       yaxis: {
-        gridcolor: "rgba(148,163,184,0.22)", tickfont: { size: 9 }, zeroline: true,
+        gridcolor: "rgba(148,163,184,0.22)", tickfont: { size: 9 }, zeroline: false,
         title: { text: "Giá trị ròng (tỷ VND)", font: { size: 10 } },
       },
-      hovermode: "x unified",
     }, { displayModeBar: false, responsive: true });
   }
 
