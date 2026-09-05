@@ -67,7 +67,9 @@ export async function renderCompare(root, onPick) {
         <div id="cmp-sugg" class="hidden"></div>
         <div id="cmp-chips" class="cmp-chips"></div>
       </div>
-      <label class="cmp-ind"><input type="checkbox" id="cmp-industry" />
+      <label class="cmp-ind">
+        <input type="checkbox" id="cmp-industry" class="sw-in" />
+        <span class="sw" aria-hidden="true"></span>
         Toàn ngành <span class="dim">· so mã đầu tiên với tất cả công ty cùng ngành</span></label>
     </div>
     <div id="cmp-body"></div>
@@ -350,7 +352,12 @@ export async function renderCompare(root, onPick) {
           // column colour, runner-up darker, the rest grey. No cell fill.
           const best = r === 0 && valid.length > 1;
           const tier = best ? "cmp-r0" : r === 1 ? "cmp-r1" : "cmp-r2";
-          tr.appendChild(el(`<td class="num ${tier}"${best ? ` style="color:${readable(cols[i].colour)}"` : ""}>${
+          // Only the leader is tinted -- one cell per row, so the table stays
+          // calm while the winner is unmissable. Text and tint share the hue.
+          const style = best
+            ? ` style="color:${readable(cols[i].colour)};background:${cols[i].colour}22"`
+            : "";
+          tr.appendChild(el(`<td class="num ${tier}"${style}>${
             F.escapeHtml(fmt(v) ?? "—")}${best ? ' <span class="cmp-star">★</span>' : ""}</td>`));
         });
         cmpBody.appendChild(tr);

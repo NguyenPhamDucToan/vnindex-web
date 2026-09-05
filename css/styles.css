@@ -499,7 +499,7 @@ table.screen-wide { min-width: 1100px; }
 .wl-star { border: 0; background: none; cursor: pointer; font-size: 14px; color: var(--rule); line-height: 1; padding: 0; }
 .wl-star.on { color: #f59e0b; }
 
-.cmp-ind { display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 13px; color: var(--ink); }
+.cmp-ind { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 13px; color: var(--ink); cursor: pointer; }
 .cmp-ind .dim { color: var(--muted); font-size: 12px; }
 
 /* P/E and P/B sit side by side, as two st.columns in the original. */
@@ -666,3 +666,18 @@ table.screen.cmp-heat tbody tr { cursor: default; }
 .sf-cols .sf-l { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; }
 .sf-k { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 .sf-cols .sf-l input[type="range"] { flex: 1 1 100%; margin-top: 2px; }
+
+/* Switch, matching the original's st.toggle. The checkbox stays in the DOM
+   for keyboard and screen-reader behaviour; only its rendering is replaced. */
+.sw-in { position: absolute; opacity: 0; width: 0; height: 0; }
+.sw { position: relative; flex: 0 0 auto; width: 34px; height: 20px; border-radius: 10px;
+      background: var(--rule-strong, #ced5df); transition: background var(--dur) var(--ease-out); }
+.sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+             border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(15,23,42,0.25);
+             transition: transform var(--dur) var(--ease-out); }
+.sw-in:checked + .sw { background: var(--primary); }
+.sw-in:checked + .sw::after { transform: translateX(14px); }
+.sw-in:focus-visible + .sw { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Leader cell: a soft tint of its column's colour, one per row. */
+.cmp-heat .cmp-r0 { border-radius: 3px; }
