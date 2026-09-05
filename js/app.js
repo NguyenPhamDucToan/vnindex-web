@@ -1121,22 +1121,61 @@ async function renderSector() {
       return m.asc ? 1 - t : t;
     };
     const fmtV = (v) => m.pct ? F.pctSigned(v * 100) : v.toFixed(2) + "×";
+
+    // Colour ramp taken from the original: dark red -> amber -> dark green,
+    // over an upside range of -80%..+150%. Written out rather than left to a
+    // Plotly colorscale because sector headers need a fixed colour that sits
+    // outside the ramp.
+    const upsideHex = (pctVal) => {
+      const t = Math.max(0, Math.min(1, (pctVal + 80) / 230));
+      const mix = (a, b, k) => Math.round(a + (b - a) * k);
+      const [r, g, b] = t <= 0.5
+        ? [mix(127, 217, t * 2), mix(29, 119, t * 2), mix(29, 6, t * 2)]
+        : [mix(217, 20, (t - 0.5) * 2), mix(119, 83, (t - 0.5) * 2), mix(6, 45, (t - 0.5) * 2)];
+      return `#${[r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("")}`;
+    };
+    const SECTOR_HDR = "#1e293b";
+
+    // Two levels: a sector box holding one box per ticker in it.
+    const shown = new Set(data.map((s) => s.sector));
+    const leaves = rows.filter((r) => shown.has(r.sector) && F.isNum(r.mcap) && r.mcap > 0);
+    const ids = [], labels = [], parents = [], values = [], colours = [], texts = [], custom = [];
+    const secTotal = {};
+    for (const r of leaves) secTotal[r.sector] = (secTotal[r.sector] || 0) + r.mcap;
+    for (const sec of data.map((s) => s.sector)) {
+      if (!secTotal[sec]) continue;          // no sized children -> no box
+      ids.push(sec); labels.push(sec); parents.push(""); values.push(secTotal[sec]);
+      colours.push(SECTOR_HDR); texts.push(sec);
+      custom.push([sec, "", "", "", ""]);
+    }
+    for (const r of leaves) {
+      const mv = r[m.key === "up" ? "upFrac" : m.key === "dcfUp" ? "upside_pct" : m.key];
+      ids.push(`${r.sector}_${r.ticker}`);
+      labels.push(r.ticker);
+      parents.push(r.sector);
+      values.push(r.mcap);
+      colours.push(upsideHex((r.upFrac ?? 0) * 100));
+      texts.push(F.isNum(mv) ? `${r.ticker}<br>${m.pct ? F.pctSigned(mv * 100) : mv.toFixed(1)}` : r.ticker);
+      custom.push([r.ticker, F.isNum(mv) ? (m.pct ? `${(mv * 100).toFixed(1)}%` : mv.toFixed(2)) : "—",
+                   F.isNum(r.pe) ? `${r.pe.toFixed(1)}×` : "—",
+                   F.isNum(r.pb) ? `${r.pb.toFixed(2)}×` : "—",
+                   F.isNum(r.roe) ? `${(r.roe * 100).toFixed(1)}%` : "—"]);
+    }
     window.Plotly.react($("#sec-tree", heat), [{
-      type: "treemap",
-      labels: data.map((s) => s.sector),
-      parents: data.map(() => ""),
-      values: data.map((s) => s.n),
-      text: data.map((s) => fmtV(s[m.key])),
-      texttemplate: "%{label}<br>%{value} mã · %{text}",
-      hovertemplate: "%{label}<br>%{value} mã · " + m.label + " %{text}<extra></extra>",
+      type: "treemap", ids, labels, parents, values,
+      customdata: custom, text: texts, texttemplate: "%{text}",
+      textposition: "middle center", textfont: { size: 12, color: "#ffffff" },
+      hovertemplate: "<b>%{customdata[0]}</b><br>" + m.label + ": %{customdata[1]}<br>"
+                   + "P/E: %{customdata[2]}<br>P/B: %{customdata[3]}<br>ROE: %{customdata[4]}<extra></extra>",
       marker: {
-        colors: data.map((s) => norm(s[m.key])),
-        colorscale: [[0, "#7f1d1d"], [0.5, "#d97706"], [1, "#14532d"]],
-        cmin: 0, cmax: 1, line: { width: 1, color: "#fff" },
+        colors: colours, showscale: false,
+        pad: { t: 22, l: 2, r: 2, b: 2 },
+        line: { width: 1, color: "#0f172a" },
       },
-      tiling: { pad: 2 },
+      branchvalues: "total",
+      tiling: { squarifyratio: 1 },
     }], {
-      height: 430, margin: { l: 0, r: 0, t: 0, b: 0 },
+      height: 1000, margin: { l: 0, r: 0, t: 0, b: 0 }, dragmode: false,
       paper_bgcolor: "rgba(0,0,0,0)",
       font: { family: "'Fira Code', monospace", size: 11, color: "#0a121d" },
     }, { displayModeBar: false, responsive: true });
@@ -1159,7 +1198,9 @@ async function renderSector() {
   drawTree();
 
   // ── 2. Valuation multiples by sector — four ranked bar charts ─────
-  const multi = el(`<div class="card"><h2 class="sec-h">Hệ số Định giá theo Ngành</h2><div class="qgrid"></div></div>`);
+  // Four charts on a 2x2, as the original lays them out. .qgrid is three wide
+  // (that matches the financial report), which left this card at 3+1.
+  const multi = el(`<div class="card"><h2 class="sec-h">Hệ số Định giá theo Ngành</h2><div class="qgrid grid-2"></div></div>`);
   root.appendChild(multi);
   const mgrid = multi.querySelector(".qgrid");
   // One flat colour per chart, as the original draws them. Colouring each bar

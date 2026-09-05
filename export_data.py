@@ -304,20 +304,29 @@ def main() -> None:
         # Carry forward whatever export_analyst.py already fetched. Without
         # this, every re-export silently wipes the analyst column and the ~22
         # minute throttled fetch has to be repeated from scratch.
-        analyst = None
+        # Everything the throttled side-loaders produce lives only in these
+        # files, so a re-export must carry it forward or it is destroyed:
+        # analyst (~22 min), detail + news_events (~80 min) and holders
+        # (~40 min). This has bitten once already, on analyst alone.
+        carried = {"analyst": None, "detail": None, "news_events": None, "holders": None}
         _prev = OUT / "ticker" / f"{t}.json"
         if _prev.exists():
             try:
-                analyst = json.loads(_prev.read_text(encoding="utf-8")).get("analyst")
+                _old = json.loads(_prev.read_text(encoding="utf-8"))
+                for k in carried:
+                    carried[k] = _old.get(k)
             except (ValueError, OSError):
-                analyst = None
+                pass
 
         obj = {
             "company": {k: _clean(co[k]) for k in
                         ("ticker", "name", "sector", "industry", "exchange")},
             "valuation": (_records(vg)[0] if vg is not None and len(vg) else None),
             "model": model,
-            "analyst": analyst,
+            "analyst": carried["analyst"],
+            "detail": carried["detail"],
+            "news_events": carried["news_events"],
+            "holders": carried["holders"],
             "foreign": foreign,
             "financials": _records(fin_by_ticker[t]) if t in fin_by_ticker else [],
             "prices": _records(px_by_ticker[t][["date", "open", "high", "low",

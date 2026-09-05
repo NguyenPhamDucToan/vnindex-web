@@ -701,3 +701,7 @@ table.screen.cmp-heat tbody tr { cursor: default; }
   .cr-pair { grid-area: pair; } .cr-val { grid-area: val; }
   .cr-track { grid-area: track; } .cr-lab { grid-area: lab; }
 }
+
+/* Four charts read better two-up than three-plus-one. */
+.qgrid.grid-2 { grid-template-columns: repeat(2, 1fr); }
+@media (max-width: 900px) { .qgrid.grid-2 { grid-template-columns: 1fr; } }
