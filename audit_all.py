@@ -50,7 +50,11 @@ PROBE = r"""(viewId) => {
     if (e.closest('.js-plotly-plot')) continue;
     const st = getComputedStyle(e);
     if (st.overflowX === 'auto' || st.overflowX === 'scroll') continue;
-    if (e.scrollWidth > e.clientWidth + 4 && e.clientWidth > 0) {
+    // Plotly sizes its <svg> to the container's fractional width (230.297 in a
+    // 230px box), and SVG text boxes inflate scrollWidth further. That shows up
+    // as a few pixels of phantom overflow with nothing actually cut, so only
+    // report a gap wide enough to be visible.
+    if (e.scrollWidth > e.clientWidth + 8 && e.clientWidth > 0) {
       clipped++;
       if (clippedList.length < 4) clippedList.push(e.className || e.tagName);
     }

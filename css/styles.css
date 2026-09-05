@@ -198,7 +198,11 @@ b, strong { font-weight: 600; }
    a different component entirely. The value is Source Sans here, not the mono
    used elsewhere, and the ▲/▼ percentage uses the bright pair. */
 .vp-card { background: var(--paper-2); border: 1px solid #334155; border-radius: 4px; padding: 12px 14px; min-width: 0; }
-.vp-k { font-size: 12px; font-weight: 400; color: var(--muted); margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Method names run long ("FCFE / Dòng tiền vốn chủ") and the right column
+   narrows with the viewport; wrap instead of truncating with an ellipsis,
+   which hid which method a card was showing. */
+.vp-k { font-size: 12px; font-weight: 400; color: var(--muted); margin-bottom: 6px;
+        line-height: 1.35; overflow-wrap: anywhere; }
 .vp-v { font-family: var(--sans); font-size: 21px; font-weight: 800; color: var(--ink); letter-spacing: .3px; }
 .vp-cur { font-size: 13px; font-weight: 600; color: var(--muted); }
 .vp-u { font-size: 12px; font-weight: 700; margin-top: 4px; }
@@ -225,8 +229,11 @@ b, strong { font-weight: 600; }
    Mua/Bán tally beside the gauge, pivot table, indicator table, MA table. */
 .ta-sub { color: var(--muted); font-size: 13px; font-weight: 400; }
 .ta-head { font-family: var(--mono); font-size: 17px; font-weight: 800; letter-spacing: .3px; margin-bottom: 8px; }
-.ta-top { display: grid; grid-template-columns: 1fr 150px; gap: 8px; align-items: center; }
-.ta-top > div { min-width: 0; overflow: hidden; }
+/* minmax(0, 1fr), not 1fr: a bare fr track floors at the content min-width,
+   so the tally table (181px min-content) plus the 150px gauge and the gap
+   overflowed a 330px column instead of the table shrinking. */
+.ta-top { display: grid; grid-template-columns: minmax(0, 1fr) 150px; gap: 8px; align-items: center; }
+.ta-top > * { min-width: 0; overflow: hidden; }
 .ta-h2 { font-size: 13px; font-weight: 700; color: var(--ink); margin: 14px 0 6px; }
 .ta-note { font-size: 11px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
 .ta-scroll { overflow-x: auto; }
@@ -539,11 +546,12 @@ table.screen-wide { min-width: 1100px; }
   .main { min-width: 0; }
 }
 
-/* Between 821 and 1200px the right column is only ~420px wide, so the signal
-   tally and the gauge stop fitting side by side. */
-@media (max-width: 1200px) and (min-width: 821px) {
+/* Measured: the right column is ~230px at a 1250px viewport and ~420px at
+   1100px, so the tally table and the 150px gauge stop fitting side by side
+   well before the old 1200px cut-off. Stack them up to 1360px. */
+@media (max-width: 1360px) and (min-width: 821px) {
   .ta-top { grid-template-columns: 1fr; }
-  .ta-top > div { justify-self: center; }
+  .ta-top > * { justify-self: center; }
   .ta-count { width: 100%; }
 }
 

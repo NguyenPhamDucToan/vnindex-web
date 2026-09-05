@@ -234,7 +234,9 @@ export function technicalPanel(prices) {
   card.renderGauge = () => {
     window.Plotly.react(card.querySelector("#ta-gauge"), [{
       type: "indicator", mode: "gauge+number", value: score,
-      number: { valueformat: ".2f", font: { size: 20 } },
+      // 20px overflowed the gauge box once the right column narrowed below
+      // ~1300px, pushing the whole panel wider than its column.
+      number: { valueformat: ".2f", font: { size: 17 } },
       gauge: {
         axis: { range: [-1, 1], visible: false },
         bar: { color: "rgba(0,0,0,0)" },
@@ -253,14 +255,25 @@ export function technicalPanel(prices) {
       paper_bgcolor: "rgba(0,0,0,0)",
       font: { color: "#0f172a", family: "Source Sans 3, sans-serif" },
     }, { displayModeBar: false, responsive: true });
-    // Plotly measures the container at draw time, and at narrower viewports the
-    // grid around this panel has not settled yet -- the gauge then keeps a
-    // stale (much wider) size and spills out of the column. Re-measure once
-    // layout is done.
-    requestAnimationFrame(() => {
-      const node = card.querySelector("#ta-gauge");
-      if (node && window.Plotly && window.Plotly.Plots) window.Plotly.Plots.resize(node);
-    });
+    // Plotly measures the container at draw time, and the grid around this
+    // panel has not settled then -- the gauge keeps a stale (much wider) size
+    // and spills out of the column. A single rAF re-measure fixed one layout
+    // but not others, so watch the box instead: any later change to the
+    // column's width re-measures too.
+    const node = card.querySelector("#ta-gauge");
+    const remeasure = () => {
+      if (node && node.isConnected && window.Plotly && window.Plotly.Plots) {
+        window.Plotly.Plots.resize(node);
+      }
+    };
+    requestAnimationFrame(remeasure);
+    if (window.ResizeObserver && node && node.parentElement) {
+      let w = 0;
+      new ResizeObserver((entries) => {
+        const nw = Math.round(entries[0].contentRect.width);
+        if (nw && nw !== w) { w = nw; remeasure(); }
+      }).observe(node.parentElement);
+    }
   };
   return card;
 }
