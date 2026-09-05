@@ -348,17 +348,21 @@ table.screen tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--pri
 .vb-note { font-size: 12.5px; color: var(--neutral); margin-top: 8px; line-height: 1.6; }
 
 /* screener signal-count row */
-.sig-counts { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin-bottom: var(--space-md); }
+.sig-counts { display: grid; grid-template-columns: repeat(7, 1fr); gap: 16px; margin-bottom: var(--space-md); }
 /* Two-tier chip: tonal when unselected, solid when selected. Colours are
    set inline per signal (see QC_COLORS); a white card with a coloured top
    rule is the design the original tried and rejected as washed out. */
-.sig-c { border-radius: 4px; padding: 8px 6px; min-height: 56px; cursor: pointer;
-         text-align: center; font-family: var(--sans); font-weight: 600; line-height: 1.25;
+/* Measured against the original: one uniform 16px/600 sans face on both
+   lines, 20px line-height, 4px 12px padding, 56px tall. A big mono number
+   over a small label made the chip top-heavy and mismatched. */
+.sig-c { border-radius: 4px; padding: 4px 12px; height: 56px; cursor: pointer;
+         text-align: center; font-family: var(--sans); font-size: 16px; font-weight: 600;
+         line-height: 20px; display: flex; flex-direction: column; justify-content: center;
          transition: filter var(--dur) var(--ease-out); }
 .sig-c:hover { filter: brightness(0.96); }
 .sig-c:hover { background: var(--paper-3); }
-.sig-n { font-family: var(--mono); font-size: 20px; font-weight: 700; color: inherit; }
-.sig-l { font-size: 11px; color: inherit; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sig-n { font: inherit; color: inherit; }
+.sig-l { font: inherit; color: inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @media (max-width: 900px) { .sig-counts { grid-template-columns: repeat(4, 1fr); } }
 @media (max-width: 560px) { .ff-stats { grid-template-columns: repeat(2, 1fr); } }
 

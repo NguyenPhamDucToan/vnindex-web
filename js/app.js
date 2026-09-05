@@ -844,30 +844,57 @@ function screenerAnalytics(root, rows) {
   }, { displayModeBar: false, responsive: true }));
 
   // ── buy opportunities by sector ─────────────────────────────────
-  const BUYS = ["Strong Buy", "Buy"];
-  const bySec = {};
+  // Counts as a stack, median upside as a line on a second axis, ordered by
+  // that upside. Ordering by count alone would put a big sector with weak
+  // upside above a cheap small one.
+  const secStats = {};
   for (const r of rows) {
-    if (!r.sector || !BUYS.includes(r.sig)) continue;
-    (bySec[r.sector] ||= { "Strong Buy": 0, "Buy": 0 })[r.sig]++;
+    if (!r.sector) continue;
+    const t = (secStats[r.sector] ||= { sb: 0, buy: 0, ups: [] });
+    if (r.sig === "Strong Buy") t.sb++;
+    else if (r.sig === "Buy") t.buy++;
+    if (F.isNum(r.upFrac)) t.ups.push(r.upFrac * 100);
   }
-  const secs = Object.entries(bySec)
-    .sort((a, b) => (b[1]["Strong Buy"] + b[1]["Buy"]) - (a[1]["Strong Buy"] + a[1]["Buy"]))
-    .slice(0, 18);
+  const secs = Object.entries(secStats)
+    .map(([sector, t]) => ({ sector, sb: t.sb, buy: t.buy, up: median(t.ups) }))
+    .filter((x) => F.isNum(x.up))
+    .sort((a, b) => b.up - a.up);
   if (secs.length) {
     const oc = card("Cơ hội theo Ngành", "sc-opps",
-      `<div class="vb-note">Số mã đang ở tín hiệu Mua / Mua mạnh trong mỗi ngành.</div>`);
-    pend.push(() => window.Plotly.react(oc.querySelector("#sc-opps"), BUYS.map((s) => ({
-      type: "bar", orientation: "h", name: SIGNAL_VI[s],
-      y: secs.map((x) => x[0]).reverse(), x: secs.map((x) => x[1][s]).reverse(),
-      marker: { color: SIGNAL_COLOR[s] },
-      hovertemplate: "%{y} · " + SIGNAL_VI[s] + ": %{x} mã<extra></extra>",
-    })), {
-      height: Math.max(320, secs.length * 24), barmode: "stack", dragmode: false,
-      margin: { l: 150, r: 20, t: 30, b: 30 },
+      `<div class="vb-note">Cột = số mã Mua mạnh / Mua trong ngành (trục trái).
+        Đường = upside trung vị của ngành (trục phải); ngành xếp theo upside giảm dần.</div>`);
+    const maxCnt = Math.max(...secs.map((x) => x.sb + x.buy)) + 1;
+    const upMin = Math.min(...secs.map((x) => x.up));
+    const upMax = Math.max(...secs.map((x) => x.up));
+    const x = secs.map((s2) => s2.sector);
+    pend.push(() => window.Plotly.react(oc.querySelector("#sc-opps"), [
+      { type: "bar", name: "Strong Buy", x, y: secs.map((s2) => s2.sb),
+        marker: { color: "#15803d" }, yaxis: "y",
+        hovertemplate: "%{x}: %{y} Strong Buy<extra></extra>" },
+      { type: "bar", name: "Buy", x, y: secs.map((s2) => s2.buy),
+        marker: { color: "#4ade80" }, yaxis: "y",
+        hovertemplate: "%{x}: %{y} Buy<extra></extra>" },
+      { type: "scatter", mode: "lines+markers", name: "Upside trung vị %", x,
+        y: secs.map((s2) => s2.up), yaxis: "y2",
+        line: { color: "#3b82f6", width: 2 },
+        marker: { size: 9, color: secs.map((s2) => (s2.up >= 0 ? "#22c55e" : "#ef4444")),
+                  line: { width: 1.5, color: "#1d4ed8" } },
+        hovertemplate: "%{x}: %{y:.1f}% upside<extra></extra>" },
+    ], {
+      height: 560, barmode: "stack", dragmode: false,
+      // Long Vietnamese sector names run vertically; they need real room.
+      margin: { l: 46, r: 50, t: 20, b: 200 },
       paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: P,
-      legend: { orientation: "h", y: 1.06, x: 0, font: { size: 10 } },
-      xaxis: { gridcolor: GRID, tickfont: { size: 9 } },
-      yaxis: { tickfont: { size: 9 }, automargin: true },
+      legend: { orientation: "h", y: -0.55, x: 0, font: { size: 11 } },
+      hovermode: "x unified",
+      hoverlabel: { bgcolor: "white", font: { size: 12, color: "#374151" } },
+      xaxis: { gridcolor: GRID, tickangle: -90, automargin: true, tickfont: { size: 11 } },
+      yaxis: { title: { text: "Số mã", font: { size: 10 } }, dtick: 1, tick0: 0,
+               range: [0, maxCnt + 0.5], gridcolor: GRID },
+      yaxis2: { title: { text: "Upside (%)", font: { size: 10 } }, overlaying: "y", side: "right",
+                range: [Math.min(0, upMin) - Math.max(5, Math.abs(upMin) * 0.1),
+                        upMax > 0 ? upMax * 1.25 : 10],
+                showgrid: false, zeroline: true, zerolinecolor: GRID },
     }, { displayModeBar: false, responsive: true }));
   }
 
@@ -897,18 +924,40 @@ function screenerAnalytics(root, rows) {
   }, { displayModeBar: false, responsive: true }));
 
   // ── upside distribution ─────────────────────────────────────────
-  const ups = rows.map((r) => r.upFrac).filter(F.isNum).map((v) => Math.max(-100, Math.min(300, v * 100)));
-  if (ups.length > 10) {
-    const hc = card("Phân bố Avg Upside", "sc-hist");
+  // Unclamped: the chart reports how many fall outside its window rather than
+  // stacking them onto the end bars.
+  const rawUps = rows.map((r) => r.upFrac).filter(F.isNum).map((v) => v * 100);
+  if (rawUps.length > 10) {
+    // Fixed 10% bins across a -100..+150 window, coloured by side of zero.
+    const LO = -100, HI = 150, STEP = 10;
+    const edges = [];
+    for (let e = LO; e <= HI; e += STEP) edges.push(e);
+    const counts = new Array(edges.length - 1).fill(0);
+    let off = 0;
+    for (const v of rawUps) {
+      if (v < LO || v > HI) { off++; continue; }
+      const k = Math.min(counts.length - 1, Math.floor((v - LO) / STEP));
+      counts[k]++;
+    }
+    const centres = counts.map((_, i) => (edges[i] + edges[i + 1]) / 2);
+    const hc = card("Phân bố Avg Upside", "sc-hist",
+      `<div class="vb-note">Mỗi cột = số mã có mức upside trong khoảng đó.
+        🟢 Xanh (bên phải vạch 0) = đang bị định giá thấp, có thể tăng giá.
+        🔴 Đỏ (bên trái vạch 0) = đang đắt hơn giá trị ước tính, có thể giảm giá.${
+        off ? ` — ${off} mã có upside ngoài khoảng ${LO}%…${HI}% không hiển thị.` : ""}</div>`);
     pend.push(() => window.Plotly.react(hc.querySelector("#sc-hist"), [{
-      type: "histogram", x: ups, nbinsx: 40, marker: { color: "#5b9bd5" },
-      hovertemplate: "%{x}%: %{y} mã<extra></extra>",
+      type: "bar", x: centres, y: counts, width: STEP * 0.9,
+      marker: { color: centres.map((c) => (c < 0 ? "#ef4444" : "#22c55e")) },
+      customdata: counts.map((_, i) => [edges[i], edges[i + 1]]),
+      hovertemplate: "%{customdata[0]:.0f}% đến %{customdata[1]:.0f}%: %{y} mã<extra></extra>",
     }], {
-      height: 320, dragmode: false, margin: { l: 50, r: 14, t: 12, b: 36 },
+      height: 300, dragmode: false, bargap: 0.05, margin: { l: 50, r: 14, t: 12, b: 40 },
       paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: P,
-      xaxis: { title: { text: "Avg Upside %", font: { size: 10 } }, gridcolor: GRID, ticksuffix: "%" },
+      xaxis: { title: { text: "Avg Upside %", font: { size: 10 } }, gridcolor: GRID,
+               range: [LO, HI], ticksuffix: "%" },
       yaxis: { title: { text: "Số mã", font: { size: 10 } }, gridcolor: GRID },
-      shapes: [{ type: "line", x0: 0, x1: 0, yref: "paper", y0: 0, y1: 1, line: { color: "#b91c1c", width: 1.5, dash: "dot" } }],
+      shapes: [{ type: "line", x0: 0, x1: 0, yref: "paper", y0: 0, y1: 1,
+                 line: { color: "#64748b", width: 1, dash: "dot" }, opacity: 0.6 }],
     }, { displayModeBar: false, responsive: true }));
   }
 
