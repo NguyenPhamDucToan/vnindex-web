@@ -705,3 +705,17 @@ table.screen.cmp-heat tbody tr { cursor: default; }
 /* Four charts read better two-up than three-plus-one. */
 .qgrid.grid-2 { grid-template-columns: repeat(2, 1fr); }
 @media (max-width: 900px) { .qgrid.grid-2 { grid-template-columns: 1fr; } }
+
+/* The four headline macro readings belong on one row; .metrics is three wide
+   for the ticker header, which wrapped them 3 + 1. */
+.metrics.metrics-4 { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 1100px) { .metrics.metrics-4 { grid-template-columns: repeat(2, 1fr); } }
+
+/* Macro groups: a full-width lead chart, then rows sized so none is orphaned. */
+.mc-row { display: grid; gap: var(--space-md); margin-bottom: var(--space-md); }
+.mc-1 { grid-template-columns: 1fr; }
+.mc-2 { grid-template-columns: repeat(2, 1fr); }
+.mc-3 { grid-template-columns: repeat(3, 1fr); }
+.mc-row > .qchart { min-width: 0; }
+@media (max-width: 1200px) { .mc-3 { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 820px) { .mc-2, .mc-3 { grid-template-columns: 1fr; } }

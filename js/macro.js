@@ -99,13 +99,13 @@ export async function renderMacro(root) {
     <h2 class="view-title">Kinh tế vĩ mô</h2>
     <div class="vb-note">Nguồn: Tổng cục Thống kê (nso.gov.vn)</div>
     <div class="card"><h2 class="sec-h">Các chỉ số quan trọng nhất hiện nay</h2>
-      <div class="metrics" id="macro-kpi"></div>
+      <div class="metrics metrics-4" id="macro-kpi"></div>
       <div class="vb-note">💡 Lạm phát = giá cả tăng nhanh bao nhiêu so với năm trước, cao quá thì
         tiền mất giá nhanh. GDP = quy mô sản xuất của cả nước, tăng = kinh tế đang phát triển.
         Cán cân thương mại dương = xuất khẩu nhiều hơn nhập khẩu (có lợi cho VND).</div>
     </div>
     <div class="range-row macro-tabs"></div>
-    <div class="card"><div class="qgrid" id="macro-grid"></div></div>
+    <div class="card"><div id="macro-grid"></div></div>
     <div class="vb-note">Nguồn: Tổng cục Thống kê (nso.gov.vn), Ngân hàng Nhà nước, World Bank.</div>
   </div>`);
   root.appendChild(shell);
@@ -140,9 +140,18 @@ export async function renderMacro(root) {
     </div>`));
   }
 
+  // Groups whose first chart is the theme's headline series and runs the full
+  // width in the original. The overview is the exception: six equal charts.
+  const LEAD = {
+    "Tổng quan kinh tế": 0, "Tăng trưởng kinh tế": 1, "Giá cả & Lạm phát": 1,
+    "Đầu tư & Tiết kiệm": 1, "Xuất nhập khẩu": 1, "Lao động & Việc làm": 1,
+    "Tiền tệ & Tỷ giá": 1, "Tiêu dùng": 1, "Lãi suất": 1,
+  };
+
   const draw = () => {
     grid.innerHTML = "";
     const pending = [];
+    const drawn = [];
     for (const spec of GROUPS[active]) {
       // Only plot series that actually have data, so an empty indicator shows
       // as a missing line rather than an empty chart frame.
@@ -152,7 +161,7 @@ export async function renderMacro(root) {
       if (!series.length) continue;
 
       const box = el(`<div class="qchart"><div class="qtitle">${spec.title}</div><div></div></div>`);
-      grid.appendChild(box);
+      drawn.push(box);
       const canvas = box.lastElementChild;
       const annual = series.every(([, pts]) => isAnnual(pts));
       const traces = series.map(([label, pts, colour]) => ({
@@ -180,7 +189,34 @@ export async function renderMacro(root) {
         hovermode: "x unified",
       }, { displayModeBar: false, responsive: true }));
     }
-    if (!grid.children.length) grid.innerHTML = `<div class="loading">Chưa có dữ liệu cho nhóm này.</div>`;
+    // Place the boxes now that the count is known. Charts with no data drop
+    // out above, so sizing the row off the spec list would leave gaps.
+    const lead = Math.min(LEAD[active] ?? 1, drawn.length);
+    for (let i = 0; i < lead; i++) {
+      const wrap = el(`<div class="mc-row mc-1"></div>`);
+      wrap.appendChild(drawn[i]);
+      grid.appendChild(wrap);
+    }
+    const rest = drawn.slice(lead);
+    if (rest.length) {
+      // Pick the column count that divides evenly, so no row is left with a
+      // single stranded chart.
+      const cols = rest.length % 3 === 0 ? 3
+        : rest.length % 2 === 0 ? 2
+        : rest.length > 3 ? 3 : rest.length;
+      // Chunk first, then size each row by what actually landed in it. A five
+      // chart group splits 3 + 2, and that trailing pair stretches to fill
+      // rather than sitting in two of three columns with the third empty.
+      for (let i = 0; i < rest.length; i += cols) {
+        const chunk = rest.slice(i, i + cols);
+        const row = el(`<div class="mc-row mc-${chunk.length}"></div>`);
+        for (const box of chunk) row.appendChild(box);
+        grid.appendChild(row);
+      }
+    }
+    // Checked on `drawn`, not on grid.children: the boxes are appended just
+    // above, so testing the grid before placement always reported empty.
+    if (!drawn.length) grid.innerHTML = `<div class="loading">Chưa có dữ liệu cho nhóm này.</div>`;
     pending.forEach((fn) => fn());
   };
 
