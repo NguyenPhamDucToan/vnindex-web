@@ -1,0 +1,96 @@
+name: Weekly refresh of the slow side-loaded data
+
+# deploy.yml rebuilds the fast-moving files every weekday, but four blocks come
+# from throttled VCI/Yahoo calls that take far too long for a daily job:
+#
+#   detail + news_events   ~80 min   (20 quarters of income/balance per ticker)
+#   holders                ~40 min   (shareholders + officers per ticker)
+#   commodities             ~1 min   (14 Yahoo futures series)
+#
+# They also change slowly -- a shareholder register or a quarter's detail moves
+# once a quarter at most -- so weekly is the right cadence. Unlike deploy.yml
+# these DO commit, because export_data.py carries them forward from the
+# committed data/ on every later run; if they lived only in an artifact they
+# would be lost on the next daily deploy.
+on:
+  schedule:
+    # 18:00 UTC Saturday = 01:00 ICT Sunday. Off-hours, and clear of the
+    # weekday refresh so the two never contend for the same rate limit.
+    - cron: "0 18 * * 6"
+  workflow_dispatch:
+    inputs:
+      field:
+        description: "Which block to backfill (detail field or top-level key)"
+        default: "holders"
+        type: choice
+        options: [holders, payables, fvtpl, all]
+
+concurrency:
+  group: slow-refresh
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    # backfill.py restarts export_detailed.py until nothing is left, and the
+    # VCI Guest tier throttles with SystemExit and 57s penalties, so a healthy
+    # full sweep is well over an hour.
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: vnindex-web
+
+      - uses: actions/checkout@v4
+        with:
+          repository: NguyenPhamDucToan/vnindex_valuation
+          path: vnindex-valuation
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install -r vnindex-web/requirements.txt
+          pip install -r vnindex-valuation/requirements.txt
+
+      - name: Commodity prices
+        working-directory: vnindex-web
+        env:
+          PYTHONIOENCODING: utf-8
+        # Cheap and independent of the DB, so it runs first and is never the
+        # thing a long throttled sweep runs out of time before reaching.
+        run: python export_commodities.py
+
+      - name: Backfill the throttled blocks
+        working-directory: vnindex-web
+        env:
+          PYTHONIOENCODING: utf-8
+        # backfill.py stops on its own when a round makes no progress, so a
+        # field the source genuinely has no data for does not spin the job.
+        run: |
+          FIELD='${{ inputs.field }}'
+          if [ -z "$FIELD" ] || [ "$FIELD" = "all" ]; then
+            python backfill.py holders
+            python backfill.py payables
+          else
+            python backfill.py "$FIELD"
+          fi
+
+      - name: Commit whatever changed
+        working-directory: vnindex-web
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data
+          if git diff --cached --quiet; then
+            echo "nothing changed"
+          else
+            git commit -m "Weekly refresh of side-loaded data"
+            git push
+          fi
