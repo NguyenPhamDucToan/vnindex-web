@@ -157,10 +157,23 @@ export async function renderMacro(root) {
     for (const spec of GROUPS[active]) {
       // Only plot series that actually have data, so an empty indicator shows
       // as a missing line rather than an empty chart frame.
-      const series = spec.series
+      let series = spec.series
         .map(([label, key, colour]) => [label, (macro[key] || []).filter((p) => F.isNum(p.value)), colour])
         .filter(([, pts]) => pts.length > 1);
       if (!series.length) continue;
+      // Series on one chart rarely start on the same date -- core inflation
+      // begins years after headline CPI, for instance. Left alone, the shorter
+      // line appears to start in mid-air and the overlap that is worth
+      // comparing gets squeezed to the right. Trim every series to the latest
+      // start they share, as the original does.
+      if (series.length > 1) {
+        const start = series.reduce(
+          (a, [, pts]) => (String(pts[0].period) > a ? String(pts[0].period) : a), "");
+        series = series
+          .map(([label, pts, colour]) => [label, pts.filter((q) => String(q.period) >= start), colour])
+          .filter(([, pts]) => pts.length > 1);
+        if (!series.length) continue;
+      }
 
       const box = el(`<div class="qchart"><div class="qtitle">${spec.title}</div><div></div></div>`);
       drawn.push(box);
