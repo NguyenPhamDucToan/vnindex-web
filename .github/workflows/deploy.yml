@@ -1,0 +1,113 @@
+name: Build data and deploy to Pages
+
+# The static site is only as fresh as data/, so a deploy is an export plus a
+# publish. Runs after HOSE closes on weekdays, on every push to master, and on
+# demand.
+on:
+  schedule:
+    # 09:20 UTC = 16:20 ICT, Mon-Fri. The sibling repo's refresh.yml starts at
+    # 09:03 and writes prices + valuations to the DB; this reads what it wrote,
+    # so it must not overtake it.
+    - cron: "20 9 * * 1-5"
+  push:
+    branches: [master]
+  workflow_dispatch: {}
+
+# One deploy at a time; a queued run should wait rather than race, but an
+# in-flight deploy is not worth cancelling half-finished.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # export_data.py imports config, valuation/* and models/* from the
+      # sibling project and finds it at ../vnindex-valuation, so both repos
+      # are checked out side by side under the workspace to recreate that
+      # layout.
+      - uses: actions/checkout@v4
+        with:
+          path: vnindex-web
+
+      - uses: actions/checkout@v4
+        with:
+          repository: NguyenPhamDucToan/vnindex_valuation
+          path: vnindex-valuation
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install -r vnindex-web/requirements.txt
+          pip install -r vnindex-valuation/requirements.txt
+
+      - name: Export data from the database
+        working-directory: vnindex-web
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          PYTHONIOENCODING: utf-8
+        # Rewrites the fast-moving files (prices, valuations, screener, macro).
+        # The slow side-loaded blocks -- detail, news_events, holders, analyst --
+        # are carried forward from the committed data/ by export_data.py itself;
+        # refresh-slow.yml is what updates those.
+        run: python export_data.py
+
+      - name: Add market cap for the sector heat map
+        working-directory: vnindex-web
+        run: python add_mcap.py
+
+      - name: Sanity-check the export
+        working-directory: vnindex-web
+        # A deploy that publishes an empty or half-written data set is worse
+        # than one that fails: the site would look fine and be wrong.
+        run: |
+          python - <<'PY'
+          import json, sys
+          from pathlib import Path
+          data = Path("data")
+          screener = json.loads((data / "screener.json").read_text(encoding="utf-8"))
+          tickers = list((data / "ticker").glob("*.json"))
+          macro = json.loads((data / "macro.json").read_text(encoding="utf-8"))
+          print(f"screener rows: {len(screener)}")
+          print(f"ticker files : {len(tickers)}")
+          print(f"macro series : {len(macro)}")
+          bad = []
+          if len(screener) < 300:
+              bad.append(f"screener has only {len(screener)} rows")
+          if len(tickers) < 300:
+              bad.append(f"only {len(tickers)} ticker files")
+          if len(macro) < 30:
+              bad.append(f"only {len(macro)} macro indicators")
+          if not any(r.get("mcap") for r in screener):
+              bad.append("no market cap on any screener row")
+          if bad:
+              sys.exit("Export looks wrong: " + "; ".join(bad))
+          print("export looks sane")
+          PY
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: vnindex-web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

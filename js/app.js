@@ -405,7 +405,7 @@ function scorecard(co, v, ttm) {
              d: isBank ? "Lãi còn lại sau chi phí vận hành nhưng trước khi trích lập dự phòng nợ xấu"
                        : "Lợi nhuận sau chi phí bán hàng & quản lý, trước lãi vay và thuế",
              g: "≥ 15%", w: "5 – 15%", b: "< 5%" } },
-    { label: "Biên LN ròng", value: F.pct(v.net_margin), color: R(v.net_margin, 0.10, 0.05) , tip: { f: "Lợi nhuận sau thuế / Doanh thu", d: "Tỷ suất sinh lời thực tế cuối cùng giữ lại cho cổ đông", g: "≥ 10%", w: "5 – 10%", b: "< 5%" } },
+    { label: "Biên lợi nhuận ròng", value: F.pct(v.net_margin), color: R(v.net_margin, 0.10, 0.05) , tip: { f: "Lợi nhuận sau thuế / Doanh thu", d: "Tỷ suất sinh lời thực tế cuối cùng giữ lại cho cổ đông", g: "≥ 10%", w: "5 – 10%", b: "< 5%" } },
     { label: "ROE", value: F.pct(v.roe), color: R(v.roe, 0.15, 0.10) , tip: { f: "Lợi nhuận ròng / Vốn chủ sở hữu", d: "Đo mức sinh lời trên đồng vốn cổ đông bỏ ra", g: "≥ 15%", w: "10 – 15%", b: "< 10%" } },
     // Banks earn 1-2% on a deposit-funded asset base by design; scoring against
     // the 8%/5% industrial band would paint every bank red.
@@ -432,7 +432,7 @@ function scorecard(co, v, ttm) {
     const lev = div(ttm.total_assets, ttm.equity);
     const dep = div(ttm.payables, ttm.total_assets);
     card.appendChild(scoreRow("CƠ CẤU VỐN & NGUỒN VỐN", [
-      { label: "Đòn bẩy (TS / VCSH)", value: F.mult(lev), color: R(lev, 12, 15, false) , tip: { f: "Tổng tài sản / Vốn chủ sở hữu", d: "Đòn bẩy thật của ngân hàng. Đây mới là con số phản ánh rủi ro, không phải D/E", g: "≤ 12x", w: "12 – 15x", b: "> 15x" } },
+      { label: "Đòn bẩy (Tài sản / Vốn chủ sở hữu)", value: F.mult(lev), color: R(lev, 12, 15, false) , tip: { f: "Tổng tài sản / Vốn chủ sở hữu", d: "Đòn bẩy thật của ngân hàng. Đây mới là con số phản ánh rủi ro, không phải D/E", g: "≤ 12x", w: "12 – 15x", b: "> 15x" } },
       { label: "Tiền gửi KH / Tổng TS", value: F.pct(dep), color: R(dep, 0.60, 0.45) , tip: { f: "Tiền gửi khách hàng / Tổng tài sản", d: "Bao nhiêu phần nguồn vốn đến từ tiền gửi. Cao thì nguồn vốn ổn định và rẻ", g: "≥ 60%", w: "45 – 60%", b: "< 45%" } },
       { label: "Vay liên NH / Vốn chủ", value: F.mult(v.debt_to_equity), color: R(v.debt_to_equity, 2, 4, false) , tip: { f: "Vay liên ngân hàng & NHNN / Vốn chủ sở hữu", d: "Mức phụ thuộc nguồn vốn bán buôn ngoài tiền gửi. Nguồn này rút nhanh hơn tiền gửi", g: "≤ 2x", w: "2 – 4x", b: "> 4x" } },
     ]));
@@ -455,13 +455,13 @@ function scorecard(co, v, ttm) {
       { label: "Current ratio", value: F.mult(v.current_ratio), color: R(v.current_ratio, 2, 1) , tip: { f: "Tài sản ngắn hạn / Nợ ngắn hạn", d: "Khả năng trả nợ ngắn hạn bằng tài sản lưu động", g: "≥ 2x", w: "1 – 2x", b: "< 1x" } },
       { label: "Quick ratio", value: F.mult(v.quick_ratio), color: R(v.quick_ratio, 1, 0.5) , tip: { f: "(Tài sản ngắn hạn − Hàng tồn kho) / Nợ ngắn hạn", d: "Loại trừ hàng tồn kho để đo thanh khoản thực tế hơn", g: "≥ 1x", w: "0.5 – 1x", b: "< 0.5x" } },
       { label: "OCF / Nợ ngắn hạn", value: F.mult(v.ocf_to_current_liab), color: R(v.ocf_to_current_liab, 0.4, 0.2) , tip: { f: "Dòng tiền hoạt động / Nợ ngắn hạn", d: "Khả năng trả nợ từ tiền kinh doanh tạo ra", g: "≥ 0.4x", w: "0.2 – 0.4x", b: "< 0.2x" } },
-      { label: "Đòn bẩy (TS/VCSH)", value: F.mult(v.financial_leverage), color: R(v.financial_leverage, 2.5, 4, false) , tip: { f: "Tổng tài sản / Vốn chủ sở hữu", d: "Mỗi đồng vốn chủ đang gánh bao nhiêu đồng tài sản", g: "≤ 2.5x", w: "2.5 – 4x", b: "> 4x" } },
+      { label: "Đòn bẩy (Tài sản / Vốn chủ sở hữu)", value: F.mult(v.financial_leverage), color: R(v.financial_leverage, 2.5, 4, false) , tip: { f: "Tổng tài sản / Vốn chủ sở hữu", d: "Mỗi đồng vốn chủ đang gánh bao nhiêu đồng tài sản", g: "≤ 2.5x", w: "2.5 – 4x", b: "> 4x" } },
     ]));
     card.appendChild(scoreRow("ĐÒN BẨY & DÒNG TIỀN", [
       { label: "Nợ / Vốn chủ (D/E)", value: F.mult(v.debt_to_equity), color: R(v.debt_to_equity, 1, 2, false) , tip: { f: "Tổng nợ vay / Vốn chủ sở hữu", d: "Mức độ đòn bẩy tài chính", g: "≤ 1x", w: "1 – 2x", b: "> 2x" } },
       { label: "Nợ / Tổng tài sản", value: F.pct(v.debt_to_assets), color: R(v.debt_to_assets, 0.30, 0.60, false) , tip: { f: "Tổng nợ vay / Tổng tài sản", d: "Tỷ trọng nợ trong cơ cấu vốn", g: "≤ 30%", w: "30 – 60%", b: "> 60%" } },
       { label: "Biên FCF", value: F.pct(v.fcf_margin), color: R(v.fcf_margin, 0.10, 0.0) , tip: { f: "Dòng tiền tự do (FCF) / Doanh thu", d: "Khả năng tạo tiền thực sau đầu tư CAPEX", g: "≥ 10%", w: "0 – 10%", b: "< 0%" } },
-      { label: "Chất lượng LN", value: F.mult(v.profit_quality), color: R(v.profit_quality, 1, 0.8) , tip: { f: "Dòng tiền hoạt động / Lợi nhuận ròng", d: "> 1x: lợi nhuận được bảo chứng bằng tiền mặt thực", g: "≥ 1x", w: "0.8 – 1x", b: "< 0.8x" } },
+      { label: "Chất lượng lợi nhuận", value: F.mult(v.profit_quality), color: R(v.profit_quality, 1, 0.8) , tip: { f: "Dòng tiền hoạt động / Lợi nhuận ròng", d: "> 1x: lợi nhuận được bảo chứng bằng tiền mặt thực", g: "≥ 1x", w: "0.8 – 1x", b: "< 0.8x" } },
     ]));
     // Property developers hold years of project inventory by design, so the
     // DIO/CCC bands widen for them.
@@ -608,7 +608,7 @@ const QC_COLORS = {
 
 const SCREEN_FILTERS = [
   ["f-roe", "ROE tối thiểu (%)", -50, 50, 5, -50],
-  ["f-nm", "Biên LN ròng tối thiểu (%)", -50, 50, 1, -50],
+  ["f-nm", "Biên lợi nhuận ròng tối thiểu (%)", -50, 50, 1, -50],
   ["f-pb", "Max P/B (×)", 0, 10, 0.1, 10],
   ["f-qs", "Quality tối thiểu", 0, 100, 5, 0],
   ["f-de", "D/E tối đa (x)", 0, 30, 0.5, 30],
@@ -1018,7 +1018,7 @@ function screenerAnalytics(root, rows) {
       `<div class="vb-note">Lợi nhuận trung bình sau 1 năm kể từ khi tín hiệu xuất hiện, tính trên toàn bộ lịch sử — kiểm chứng xem thang tín hiệu có thực sự phân biệt được hay không.</div>`);
     const order = bt.slice().sort((a, b) => SIGNAL_ORDER.indexOf(a.signal) - SIGNAL_ORDER.indexOf(b.signal));
     window.Plotly.react(bc.querySelector("#sc-bt"), [
-      { type: "bar", name: "LN TB 1 năm", x: order.map((r) => SIGNAL_VI[r.signal] || r.signal),
+      { type: "bar", name: "Lợi nhuận trung bình 1 năm", x: order.map((r) => SIGNAL_VI[r.signal] || r.signal),
         y: order.map((r) => r.mean_return),
         marker: { color: order.map((r) => (r.mean_return >= 0 ? "#22c55e" : "#ef4444")) },
         hovertemplate: "%{x}: %{y:.1f}%<extra></extra>" },

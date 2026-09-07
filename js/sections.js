@@ -65,7 +65,7 @@ export function dupontSection(v) {
   return el(`<div class="card">
     <h2 class="sec-h">DuPont</h2>
     <div class="dp-row">
-      ${card("Biên LN ròng", F.pct(m), ratingColor(m, 0.10, 0.05), "LN ròng / Doanh thu")}
+      ${card("Biên lợi nhuận ròng", F.pct(m), ratingColor(m, 0.10, 0.05), "LN ròng / Doanh thu")}
       ${op("×")}
       ${card("Hiệu suất tài sản", F.mult(t), ratingColor(t, 1.0, 0.5), "Doanh thu / Tổng TS")}
       ${op("×")}

@@ -37,7 +37,7 @@ const SCORE = (v) => (F.isNum(v) ? `${v.toFixed(0)}/100` : "—");
 // ── shared axis builders ─────────────────────────────────────────
 const A = {
   roe: { label: "ROE", max: 0.30, fmt: PCT, calc: (c) => num(c.v.roe) },
-  netMargin: { label: "Biên LN ròng", max: 0.25, fmt: PCT, calc: (c) => num(c.v.net_margin) },
+  netMargin: { label: "Biên lợi nhuận ròng", max: 0.25, fmt: PCT, calc: (c) => num(c.v.net_margin) },
   fcfMargin: { label: "Biên FCF", max: 0.20, fmt: PCT, calc: (c) => num(c.v.fcf_margin) },
   quality: { label: "Chất lượng", max: 100, fmt: SCORE, calc: (c) => num(c.q) },
   upside: { label: "Upside", max: 1.0, fmt: PCT, calc: (c) => num(c.upFrac) },
@@ -46,7 +46,7 @@ const A = {
   ebitdaMargin: { label: "Biên EBITDA", max: 0.35, fmt: PCT,
     calc: (c) => div(c.ttm.ebitda ?? ((c.ttm.ebit || 0) + (c.ttm.depreciation || 0)), c.ttm.revenue) },
   de: { label: "D/E", max: 2.0, fmt: NUM, lowerBetter: true, calc: (c) => num(c.v.debt_to_equity) },
-  assetTurn: { label: "Vòng quay TS", max: 2.0, fmt: NUM,
+  assetTurn: { label: "Vòng quay tài sản", max: 2.0, fmt: NUM,
     calc: (c) => div(c.ttm.revenue, c.ttm.total_assets) },
   invTurn: { label: "Vòng quay tồn kho", max: 8.0, fmt: NUM,
     calc: (c) => div(abs(c.ttm.cogs), c.ttm.inventory) },
@@ -60,9 +60,9 @@ const A = {
       if (dio === null || dso === null) return null;
       return (dio + dso - (dpo ?? 0)) * 365;
     } },
-  ocfToNi: { label: "Dòng tiền HĐKD/LNST", max: 2.0, fmt: NUM,
+  ocfToNi: { label: "Dòng tiền kinh doanh / Lợi nhuận sau thuế", max: 2.0, fmt: NUM,
     calc: (c) => div(c.ttm.operating_cf, c.ttm.net_income) },
-  invToAssets: { label: "Tồn kho/Tổng TS", max: 0.60, fmt: PCT, lowerBetter: true,
+  invToAssets: { label: "Hàng tồn kho / Tổng tài sản", max: 0.60, fmt: PCT, lowerBetter: true,
     calc: (c) => div(c.ttm.inventory, c.ttm.total_assets) },
   capexToRev: { label: "CAPEX/Doanh thu", max: 0.30, fmt: PCT, lowerBetter: true,
     calc: (c) => div(abs(c.ttm.capex), c.ttm.revenue) },
@@ -77,7 +77,7 @@ const A = {
       const now = sum(qs.slice(-4)), prev = sum(qs.slice(-8, -4));
       return prev > 0 ? now / prev - 1 : null;
     } },
-  profitQuality: { label: "Chất lượng LN", max: 2.0, fmt: NUM,
+  profitQuality: { label: "Chất lượng lợi nhuận", max: 2.0, fmt: NUM,
     calc: (c) => num(c.v.profit_quality) },
   leverage: { label: "Đòn bẩy", max: 5.0, fmt: NUM, lowerBetter: true,
     calc: (c) => div(c.ttm.total_assets, c.ttm.equity) },
@@ -94,14 +94,14 @@ const BANK = [
     calc: (c) => div(abs(c.ttm.cogs), c.ttm.receivables) },
   { label: "LDR", max: 1.2, fmt: NUM, calc: (c) => div(c.ttm.receivables, c.ttm.payables) },
   A.roe,
-  { label: "Vốn chủ/Tổng TS", max: 0.15, fmt: PCT, calc: (c) => div(c.ttm.equity, c.ttm.total_assets) },
+  { label: "Vốn chủ sở hữu / Tổng tài sản", max: 0.15, fmt: PCT, calc: (c) => div(c.ttm.equity, c.ttm.total_assets) },
 ];
 
 // ── securities ───────────────────────────────────────────────────
 const SECURITIES = [
-  { label: "TS tài chính/Tổng TS", max: 0.80, fmt: PCT,
+  { label: "Tài sản tài chính / Tổng tài sản", max: 0.80, fmt: PCT,
     calc: (c) => div(dLast(c.d, "balance", "fvtpl"), c.ttm.total_assets) },
-  { label: "Dư nợ margin/Vốn chủ", max: 2.0, fmt: NUM,
+  { label: "Dư nợ margin / Vốn chủ sở hữu", max: 2.0, fmt: NUM,
     // Brokers leave the TTM receivables column empty; the margin book is on
     // the detail balance sheet instead.
     calc: (c) => div(c.ttm.receivables ?? dLast(c.d, "balance", "receivables_trade"), c.ttm.equity) },
@@ -115,7 +115,7 @@ const SECURITIES = [
 // but a six-spoke radar is already at its readable limit, so they appear in
 // the bar grid and the per-ticker table instead.
 const INSURANCE = [
-  { label: "Đầu tư/Tổng TS", max: 1.0, fmt: PCT,
+  { label: "Đầu tư / Tổng tài sản", max: 1.0, fmt: PCT,
     calc: (c) => div((dLast(c.d, "balance", "ins_st_invest") || 0)
                    + (dLast(c.d, "balance", "ins_lt_invest") || 0), c.ttm.total_assets) },
   A.netMargin, A.roe, A.leverage, A.profitQuality, A.upside,

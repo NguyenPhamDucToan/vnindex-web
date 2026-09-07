@@ -324,7 +324,7 @@ export async function renderCompare(root, onPick) {
       ["Sinh lời", [
         ["Biên gộp", (x) => (x.ttm.revenue ? x.ttm.gross_profit / x.ttm.revenue : null), true, pct1],
         ["Biên EBIT", (x) => (x.ttm.revenue ? x.ttm.ebit / x.ttm.revenue : null), true, pct1],
-        ["Biên LN ròng", (x) => x.v.net_margin, true, pct1],
+        ["Biên lợi nhuận ròng", (x) => x.v.net_margin, true, pct1],
         ["Biên FCF", (x) => x.v.fcf_margin, true, pct1],
         ["ROE", (x) => x.v.roe, true, pct1],
       ]],
@@ -507,7 +507,7 @@ export async function renderCompare(root, onPick) {
     };
     marginChart("Biên gộp", "cmp-gm", (r) => (r.revenue ? r.gross_profit / r.revenue : null));
     marginChart("Biên EBIT", "cmp-em", (r) => (r.revenue ? r.ebit / r.revenue : null));
-    marginChart("Biên LN ròng", "cmp-nm", (r) => (r.revenue ? r.net_income / r.revenue : null));
+    marginChart("Biên lợi nhuận ròng", "cmp-nm", (r) => (r.revenue ? r.net_income / r.revenue : null));
 
     // ── 6. Risk, return, market sensitivity and liquidity ────────────
     const market = await loadMarket().catch(() => null);
