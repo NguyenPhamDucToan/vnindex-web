@@ -11,6 +11,20 @@ import { renderCompare } from "./compare.js";
 import { renderMacro } from "./macro.js";
 import * as F from "./format.js";
 
+// Plotly truncates a trace name in the hover box at 15 characters and appends
+// an ellipsis, so "Tổng thu nhập hoạt động" read as "Tổng thu nhậ...". There is
+// no global default for it, and setting hoverlabel on every layout in the app
+// would leave the next chart to forget it -- so wrap react() once, here, before
+// any module draws. A layout's own hoverlabel still wins on any key it sets.
+if (window.Plotly && !window.Plotly.__namelengthPatched) {
+  const react = window.Plotly.react.bind(window.Plotly);
+  window.Plotly.react = (node, data, layout = {}, config) => react(
+    node, data,
+    { ...layout, hoverlabel: { namelength: -1, ...(layout.hoverlabel || {}) } },
+    config);
+  window.Plotly.__namelengthPatched = true;
+}
+
 const $ = (sel, root = document) => root.querySelector(sel);
 const el = (html) => { const t = document.createElement("template"); t.innerHTML = html.trim(); return t.content.firstElementChild; };
 

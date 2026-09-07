@@ -54,7 +54,13 @@ function base(height = 300) {
     // top it wraps onto two lines and eats the plot area.
     legend: { orientation: "h", y: -0.25, x: 0, yanchor: "top", font: { ...FONT, size: 11 } },
     xaxis: { type: "category", tickfont: { ...FONT, size: 9 }, showgrid: false },
-    yaxis: { gridcolor: RULE, tickfont: { ...FONT, size: 9 }, zeroline: true, zerolinecolor: RULE },
+    yaxis: {
+      gridcolor: RULE, tickfont: { ...FONT, size: 9 }, zeroline: true, zerolinecolor: RULE,
+      // The unit goes on every tick rather than in an axis title, so a number
+      // is never read without it. automargin because the widest label decides
+      // the gutter: VCB's deposits reach 2,000,000 tỷ and were clipping.
+      tickformat: ",.0f", hoverformat: ",.0f", ticksuffix: " tỷ", automargin: true,
+    },
     hovermode: "x unified",
   };
 }
@@ -288,11 +294,17 @@ export function quarterlyCharts(parent, co, financials, detail, prices, valHisto
     // Share of total funding, not absolute -- matches the original's fig_b3.
     const fundTot = qs.map((q) => (q.payables || 0) + (q.debt || 0));
     const fundPct = (k) => qs.map((q, i) => (fundTot[i] ? (q[k] || 0) / fundTot[i] * 100 : null));
+    // Share of funding, so both bars sum to 100. Equity used to sit here too,
+    // still in billions -- a 49,144 bar on a 0-100 axis flattened the two
+    // percentage bars into a hairline and the chart read as one colour. Equity
+    // belongs on "Cơ cấu nguồn vốn", which is in absolute terms.
     add("Cấu trúc nguồn huy động", [
-      { type: "bar", name: "Tiền gửi khách hàng", x, y: fundPct("payables"), marker: { color: SKY} },
-      { type: "bar", name: "Liên ngân hàng & NHNN", x, y: fundPct("debt"), marker: { color: "#1e3a5f" } },
-      { type: "bar", name: "Vốn chủ sở hữu", x, y: col("equity"), marker: { color: GREEN2} },
-    ], Object.assign(base(), { barmode: "stack" }));
+      { type: "bar", name: "Tiền gửi khách hàng", x, y: fundPct("payables"), marker: { color: SKY},
+        hovertemplate: "%{y:.1f}%<extra></extra>" },
+      { type: "bar", name: "Liên ngân hàng & NHNN", x, y: fundPct("debt"), marker: { color: "#1e3a5f" },
+        hovertemplate: "%{y:.1f}%<extra></extra>" },
+    ], Object.assign(base(), { barmode: "stack",
+      yaxis: { gridcolor: RULE, tickfont: { ...FONT, size: 9 }, ticksuffix: "%", range: [0, 100] } }));
 
     add("Cơ cấu thu nhập", [
       { type: "bar", name: "Thu nhập lãi thuần", x, y: col("gross_profit"), marker: { color: BLUE} },
@@ -357,7 +369,11 @@ export function quarterlyCharts(parent, co, financials, detail, prices, valHisto
     add("Chỉ số vốn", [
       { type: "scatter", mode: "lines+markers", name: "Vốn chủ sở hữu / Tổng tài sản", x, y: ratio("equity", "total_assets"), line: { color: BLUE, width: 1.6 }, marker: { size: 4 } },
       { type: "scatter", mode: "lines+markers", name: "Đòn bẩy (Tài sản / Vốn chủ sở hữu)", x, y: ratio("total_assets", "equity"), yaxis: "y2", line: { color: DRED, width: 1.5 }, marker: { size: 4 } },
-    ], numAxis(pctY(base())));
+    ], numAxis(Object.assign(pctY(base()), {
+      // The band here is a couple of points wide; ".0%" printed "9%" twice.
+      yaxis: { gridcolor: RULE, tickfont: { ...FONT, size: 9 }, tickformat: ".1%",
+               zeroline: false, title: { text: "%", font: { ...FONT, size: 10 } } },
+    })));
 
   } else {
     add("Cấu trúc tài sản", [
@@ -488,7 +504,11 @@ export function quarterlyCharts(parent, co, financials, detail, prices, valHisto
       add("Định giá (P/E & P/B)", [
         { type: "scatter", mode: "lines+markers", name: "P/E", x: x.slice(firstOk), y: pe.slice(firstOk), line: { color: PE_GREEN, width: 1.6 }, marker: { size: 4 } },
         { type: "scatter", mode: "lines+markers", name: "P/B", x: x.slice(firstOk), y: pb.slice(firstOk), yaxis: "y2", line: { color: PB_ORANGE, width: 1.6 }, marker: { size: 4 } },
-      ], numAxis(base()));
+      ], numAxis(Object.assign(base(), {
+        yaxis: { gridcolor: RULE, tickfont: { ...FONT, size: 9 }, zeroline: false,
+                 tickformat: ".1f", hoverformat: ".2f",
+                 title: { text: "P/E (lần)", font: { ...FONT, size: 10 } } },
+      })));
     }
   }
 
@@ -577,6 +597,7 @@ export function quarterlyCharts(parent, co, financials, detail, prices, valHisto
       ], Object.assign(base(), {
         xaxis: { tickfont: { ...FONT, size: 9 }, showgrid: false },
         yaxis: { gridcolor: RULE, tickfont: { ...FONT, size: 9 },
+                 tickformat: ",.0f", hoverformat: ",.0f",
                  title: { text: "Giá (VND)", font: { ...FONT, size: 10 } } },
       }));
     }
@@ -643,6 +664,7 @@ export function quarterlyCharts(parent, co, financials, detail, prices, valHisto
       margin: { l: 58, r: 14, t: 26, b: 96 },
       xaxis: { tickangle: -30, tickfont: { ...FONT, size: 9 }, automargin: true },
       yaxis: { gridcolor: RULE, tickfont: { ...FONT, size: 9 },
+               tickformat: ",.0f", hoverformat: ",.0f",
                title: { text: "VND", font: { ...FONT, size: 10 } } },
     }));
   }
