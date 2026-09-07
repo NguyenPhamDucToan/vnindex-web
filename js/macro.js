@@ -28,6 +28,7 @@ const GROUPS = {
     { title: "Quy mô GDP (World Bank, theo năm)", kind: "line", unit: "USD", series: [["Quy mô GDP", "wb_gdp_usd", BLUE]] },
     { title: "GDP bình quân đầu người (World Bank, theo năm)", kind: "line", unit: "USD", series: [["GDP/người", "wb_gdp_per_capita", TEAL]] },
     { title: "Tăng trưởng vốn đầu tư toàn xã hội (so với cùng kỳ)", kind: "line", unit: "%", series: [["Vốn đầu tư", "investment_growth", PURPLE]] },
+    { title: "Tăng trưởng GDP dài hạn (World Bank, 1985–nay)", kind: "line", unit: "%", series: [["Tăng trưởng GDP (World Bank)", "wb_gdp_growth", BLUE]] },
   ],
   "Giá cả & Lạm phát": [
     { title: "Lạm phát (so với cùng kỳ năm trước)", kind: "line", unit: "%", series: [
@@ -39,7 +40,8 @@ const GROUPS = {
   ],
   "Đầu tư & Tiết kiệm": [
     { title: "Tăng trưởng vốn đầu tư toàn xã hội", kind: "line", unit: "%", series: [["Vốn đầu tư", "investment_growth", BLUE]] },
-    { title: "Vốn đầu tư nước ngoài (FDI đăng ký)", kind: "bar", unit: "tr USD", series: [["FDI", "fdi", TEAL]] },
+    { title: "Vốn đầu tư nước ngoài (FDI đăng ký)", kind: "line", unit: "tr USD", series: [
+      ["FDI theo quý", "fdi", TEAL], ["FDI lũy kế", "fdi_cumulative", BLUE]] },
     { title: "Tổng vốn hình thành gộp (% GDP, World Bank)", kind: "line", unit: "%", series: [["Vốn hình thành", "wb_capital_formation", ORANGE]] },
     { title: "Tổng tiết kiệm (% GDP, World Bank)", kind: "line", unit: "%", series: [["Tiết kiệm", "wb_gross_savings", GREEN]] },
   ],

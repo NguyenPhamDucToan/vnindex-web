@@ -375,7 +375,7 @@ def main() -> None:
         # Giá cả & Lạm phát
         "core_inflation_yoy", "cpi_food", "cpi_transport", "ppi_yoy",
         # Đầu tư & Tiết kiệm
-        "wb_capital_formation", "wb_gross_savings", "wb_fdi",
+        "wb_capital_formation", "wb_gross_savings", "wb_fdi", "fdi_cumulative",
         # Xuất nhập khẩu
         "exports", "imports", "wb_current_account_gdp", "wb_trade_pct_gdp",
         # Lao động & Việc làm
