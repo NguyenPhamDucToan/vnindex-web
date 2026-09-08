@@ -44,19 +44,29 @@ export async function renderCompare(root, onPick) {
   const screen = await loadScreener();
   const byTicker = new Map(screen.map((r) => [r.ticker, r]));
 
-  // Default to the ticker being viewed plus its most-traded sector peers, as the
-  // original does -- opening this on a steel stock should compare steel names,
-  // not a fixed blue-chip list.
-  const current = new URLSearchParams(location.search).get("ticker");
-  let picked;
-  const cur = current && byTicker.get(current);
-  if (cur && cur.sector) {
-    const peers = screen.filter((r) => r.sector === cur.sector && r.ticker !== current)
-      .sort((a, b) => (b.vol ?? 0) - (a.vol ?? 0)).slice(0, 3).map((r) => r.ticker);
-    picked = [current, ...peers];
-  } else {
-    picked = screen.slice().sort((a, b) => (b.vol ?? 0) - (a.vol ?? 0)).slice(0, 4).map((r) => r.ticker);
-  }
+  // Nothing is chosen for you: pre-filling four names meant anyone who wanted a
+  // different set had to clear someone else's choices first. What you last
+  // compared comes back instead, so the view is empty only on a first visit.
+  const CMP_KEY = "vnindex.compare";
+  const readState = () => {
+    try {
+      const s = JSON.parse(localStorage.getItem(CMP_KEY) || "{}");
+      return {
+        picked: (s.picked || []).filter((t) => byTicker.has(t)).slice(0, 6),
+        industry: !!s.industry,
+      };
+    } catch {
+      // Private window, cleared site data, or a browser refusing storage.
+      return { picked: [], industry: false };
+    }
+  };
+  const saveState = () => {
+    try {
+      localStorage.setItem(CMP_KEY, JSON.stringify({ picked, industry: industryMode }));
+    } catch { /* nothing to do; the view still works for this visit */ }
+  };
+  const saved = readState();
+  let picked = saved.picked;
 
   root.innerHTML = "";
   const shell = el(`<div>
@@ -65,7 +75,10 @@ export async function renderCompare(root, onPick) {
       <div class="cmp-pick">
         <input id="cmp-input" placeholder="Thêm mã… (tối đa 6)" autocomplete="off" spellcheck="false" />
         <div id="cmp-sugg" class="hidden"></div>
-        <div id="cmp-chips" class="cmp-chips"></div>
+        <div class="cmp-chiprow">
+          <div id="cmp-chips" class="cmp-chips"></div>
+          <button id="cmp-clear" class="range-btn cmp-clear hidden">Xoá hết</button>
+        </div>
       </div>
       <label class="cmp-ind">
         <input type="checkbox" id="cmp-industry" class="sw-in" />
@@ -82,16 +95,31 @@ export async function renderCompare(root, onPick) {
   // "Toàn ngành": overlay the sector average on the radar and widen the table
   // to the whole sector, as the original's toggle does.
   const indBox = shell.querySelector("#cmp-industry");
-  let industryMode = false;
-  indBox.addEventListener("change", () => { industryMode = indBox.checked; rebuild(); });
+  let industryMode = saved.industry;
+  indBox.checked = industryMode;
+  indBox.addEventListener("change", () => {
+    industryMode = indBox.checked;
+    saveState();
+    rebuild();
+  });
+
+  const clearBtn = shell.querySelector("#cmp-clear");
+  clearBtn.addEventListener("click", () => {
+    picked = [];
+    saveState();
+    drawChips();
+    rebuild();
+  });
 
   const drawChips = () => {
     chips.innerHTML = "";
+    // Only worth showing once there is more than one chip to remove.
+    shell.querySelector("#cmp-clear").classList.toggle("hidden", picked.length < 2);
     for (const t of picked) {
       const c = el(`<span class="cmp-chip">${t}<button title="Bỏ">✕</button></span>`);
       c.querySelector("button").onclick = () => {
         picked = picked.filter((x) => x !== t);
-        drawChips(); rebuild();
+        saveState(); drawChips(); rebuild();
       };
       chips.appendChild(c);
     }
@@ -108,7 +136,7 @@ export async function renderCompare(root, onPick) {
         if (picked.length >= 6) return;
         picked.push(r.ticker);
         input.value = ""; sugg.classList.add("hidden");
-        drawChips(); rebuild();
+        saveState(); drawChips(); rebuild();
       };
       sugg.appendChild(it);
     }
@@ -119,7 +147,14 @@ export async function renderCompare(root, onPick) {
 
   async function rebuild() {
     const body = shell.querySelector("#cmp-body");
-    if (picked.length < 1) { body.innerHTML = `<div class="loading">Chọn ít nhất 1 mã để so sánh.</div>`; return; }
+    if (picked.length < 1) {
+      body.innerHTML = `<div class="card cmp-empty">
+        <div class="cmp-empty-t">Chưa chọn mã nào</div>
+        <div class="vb-note">Gõ mã vào ô phía trên để thêm (tối đa 6 mã).
+          Chọn nhiều mã cùng ngành sẽ hiện thêm bộ chỉ số riêng của ngành đó.
+          Lựa chọn của bạn được nhớ cho lần sau.</div></div>`;
+      return;
+    }
     body.innerHTML = `<div class="loading">Đang tải ${picked.length} mã…</div>`;
 
     const data = [];

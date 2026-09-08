@@ -1,4 +1,4 @@
-name: Build data and deploy to Pages
+name: Build data and deploy to Cloudflare Pages
 
 # The static site is only as fresh as data/, so a deploy is an export plus a
 # publish. Runs after HOSE closes on weekdays, on every push to master, and on
@@ -18,20 +18,16 @@ on:
 # One deploy at a time; a queued run should wait rather than race, but an
 # in-flight deploy is not worth cancelling half-finished.
 concurrency:
-  group: pages
+  group: deploy
   cancel-in-progress: false
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     steps:
       # export_data.py imports config, valuation/* and models/* from the
       # sibling project and finds it at ../vnindex-valuation, so both repos
@@ -106,27 +102,10 @@ jobs:
       # a 15-minute export leaves no room under. Skipped when the secrets are
       # absent, so the workflow keeps working before Cloudflare is set up.
       - name: Deploy to Cloudflare Pages
-        if: ${{ env.CF_TOKEN != '' }}
         env:
           # wrangler reads these two names specifically.
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         working-directory: vnindex-web
-        run: npx --yes wrangler@3 pages deploy . --project-name="${{ vars.CF_PROJECT || 'vnindex' }}" --branch=main --commit-dirty=true
-        continue-on-error: true
+        run: npx --yes wrangler@3 pages deploy . --project-name="${{ vars.CF_PROJECT || 'vnindex-valuation' }}" --branch=main --commit-dirty=true
 
-      - uses: actions/configure-pages@v5
-
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: vnindex-web
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
