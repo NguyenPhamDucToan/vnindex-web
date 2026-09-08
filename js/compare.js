@@ -75,10 +75,7 @@ export async function renderCompare(root, onPick) {
       <div class="cmp-pick">
         <input id="cmp-input" placeholder="Thêm mã… (tối đa 6)" autocomplete="off" spellcheck="false" />
         <div id="cmp-sugg" class="hidden"></div>
-        <div class="cmp-chiprow">
-          <div id="cmp-chips" class="cmp-chips"></div>
-          <button id="cmp-clear" class="range-btn cmp-clear hidden">Xoá hết</button>
-        </div>
+        <div id="cmp-chips" class="cmp-chips"></div>
       </div>
       <label class="cmp-ind">
         <input type="checkbox" id="cmp-industry" class="sw-in" />
@@ -103,7 +100,10 @@ export async function renderCompare(root, onPick) {
     rebuild();
   });
 
-  const clearBtn = shell.querySelector("#cmp-clear");
+  // Lives inside the chip row rather than off at the edge of the card: it acts
+  // on the chips, so it reads as the last one in the line instead of a stray
+  // page button you have to go looking for.
+  const clearBtn = el(`<button id="cmp-clear" class="cmp-clear" title="Bỏ chọn tất cả">✕ Xoá hết</button>`);
   clearBtn.addEventListener("click", () => {
     picked = [];
     saveState();
@@ -113,8 +113,6 @@ export async function renderCompare(root, onPick) {
 
   const drawChips = () => {
     chips.innerHTML = "";
-    // Only worth showing once there is more than one chip to remove.
-    shell.querySelector("#cmp-clear").classList.toggle("hidden", picked.length < 2);
     for (const t of picked) {
       const c = el(`<span class="cmp-chip">${t}<button title="Bỏ">✕</button></span>`);
       c.querySelector("button").onclick = () => {
@@ -123,6 +121,10 @@ export async function renderCompare(root, onPick) {
       };
       chips.appendChild(c);
     }
+    // Shown from the first chip. Gating it at two made it undiscoverable now
+    // that the view starts empty -- you had to add two names before the way to
+    // undo appeared.
+    if (picked.length) chips.appendChild(clearBtn);
   };
 
   const renderSugg = (q) => {
