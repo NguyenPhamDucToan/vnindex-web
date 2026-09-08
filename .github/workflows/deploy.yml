@@ -28,6 +28,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     steps:
       # export_data.py imports config, valuation/* and models/* from the
       # sibling project and finds it at ../vnindex-valuation, so both repos
@@ -95,6 +97,21 @@ jobs:
               sys.exit("Export looks wrong: " + "; ".join(bad))
           print("export looks sane")
           PY
+
+      # Cloudflare Pages, for a URL without a username in it. Direct upload
+      # rather than Cloudflare's git integration: the export already ran here,
+      # and their build image would have to redo it inside a 20-minute cap that
+      # a 15-minute export leaves no room under. Skipped when the secrets are
+      # absent, so the workflow keeps working before Cloudflare is set up.
+      - name: Deploy to Cloudflare Pages
+        if: ${{ env.CF_TOKEN != '' }}
+        env:
+          # wrangler reads these two names specifically.
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        working-directory: vnindex-web
+        run: npx --yes wrangler@3 pages deploy . --project-name="${{ vars.CF_PROJECT || 'vnindex' }}" --branch=main --commit-dirty=true
+        continue-on-error: true
 
       - uses: actions/configure-pages@v5
 
