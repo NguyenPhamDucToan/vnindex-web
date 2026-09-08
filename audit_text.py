@@ -11,8 +11,12 @@ are in the DOM at a time, so a single pass at the end sees just the last one.
 
     python audit_text.py [TICKER ...]
 """
+import os
 import sys
 from playwright.sync_api import sync_playwright
+
+# Override to audit a deployed site:  BASE=https://... python audit_all.py
+BASE = os.environ.get("BASE", "http://localhost:8777").rstrip("/")
 
 TICKERS = sys.argv[1:] or ["VCB", "VIB", "VNM", "SSI"]
 TABS = ["Kết quả KD", "Cân đối KT", "Dòng tiền & Tỷ số"]
@@ -64,7 +68,7 @@ with sync_playwright() as pw:
         pg = b.new_page(viewport={"width": 1600, "height": 1200})
         errs = []
         pg.on("pageerror", lambda e: errs.append(str(e)))
-        pg.goto(f"http://localhost:8777/?ticker={tk}", wait_until="networkidle", timeout=60000)
+        pg.goto(f"{BASE}/?ticker={tk}", wait_until="networkidle", timeout=60000)
         pg.wait_for_timeout(5000)
         for _ in range(18):
             pg.mouse.wheel(0, 800)

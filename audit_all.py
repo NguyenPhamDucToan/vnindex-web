@@ -5,8 +5,12 @@ anything that reads as broken -- JS errors, empty or zero-size plots, junk text
 
     python audit_all.py [WIDTH ...]
 """
+import os
 import sys
 from playwright.sync_api import sync_playwright
+
+# Override to audit a deployed site:  BASE=https://... python audit_all.py
+BASE = os.environ.get("BASE", "http://localhost:8777").rstrip("/")
 
 WIDTHS = [int(w) for w in (sys.argv[1:] or [1600, 390])]
 VIEWS = ["stock", "screen", "compare", "sector", "market"]
@@ -70,7 +74,7 @@ with sync_playwright() as pw:
         pg = b.new_page(viewport={"width": w, "height": 1200})
         errs = []
         pg.on("pageerror", lambda e: errs.append(str(e)))
-        pg.goto("http://localhost:8777/?ticker=VCB", wait_until="networkidle", timeout=90000)
+        pg.goto(f"{BASE}/?ticker=VCB", wait_until="networkidle", timeout=90000)
         pg.wait_for_timeout(4000)
         for v in VIEWS:
             try:
