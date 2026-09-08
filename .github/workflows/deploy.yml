@@ -5,10 +5,12 @@ name: Build data and deploy to Pages
 # demand.
 on:
   schedule:
-    # 09:20 UTC = 16:20 ICT, Mon-Fri. The sibling repo's refresh.yml starts at
-    # 09:03 and writes prices + valuations to the DB; this reads what it wrote,
-    # so it must not overtake it.
-    - cron: "20 9 * * 1-5"
+    # 10:30 UTC = 17:30 ICT, Mon-Fri. The sibling repo's refresh.yml starts at
+    # 09:03 and needs ~51 minutes for 641 tickers, so this has to wait it out:
+    # at the 09:20 I first picked, the export would have read a database that
+    # was still being written, and published a half-updated site every day.
+    # 87 minutes of clearance covers a healthy run with real headroom.
+    - cron: "30 10 * * 1-5"
   push:
     branches: [master]
   workflow_dispatch: {}
