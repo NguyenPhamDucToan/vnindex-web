@@ -1601,7 +1601,11 @@ async function renderMarket() {
                      + `${diff >= 0 ? "+" : ""}${diff.toFixed(0)}% so TB</span><br>`
                      + `<span style="font-size:12.5px;color:${clr}"><b>${verdict}</b></span>`,
                  font: { size: 13 } },
-        xaxis: { type: "category", nticks: 8, showgrid: false, tickfont: { size: 11 }, tickangle: -45 },
+        // automargin, not a hand-picked bottom margin: a -45° "Q1/2022" is
+        // taller than an upright one, and 34px of bottom margin cut every
+        // label by 12px at every width.
+        xaxis: { type: "category", nticks: 8, showgrid: false, tickfont: { size: 11 },
+                 tickangle: -45, automargin: true },
         yaxis: { title: { text: `${label} (lần)`, font: { size: 10 } },
                  gridcolor: "#e2e8f0", zeroline: false, range: [ymin, ymax], tickfont: { size: 11 } },
         shapes: [

@@ -633,7 +633,8 @@ export function quarterlyCharts(parent, co, financials, detail, prices, valHisto
       line: { color, width: 2, dash: isInput ? "dash" : "solid" },
       hovertemplate: `${name}: %{y:.1f}<extra></extra>`,
     })), Object.assign(base(), {
-      xaxis: { type: "category", tickangle: -45, nticks: 8, tickfont: { ...FONT, size: 9 } },
+      xaxis: { type: "category", tickangle: -45, nticks: 8, tickfont: { ...FONT, size: 9 },
+               automargin: true },
       yaxis: { gridcolor: RULE, tickfont: { ...FONT, size: 9 },
                title: { text: "Chỉ số (gốc=100)", font: { ...FONT, size: 10 } } },
     }));

@@ -42,17 +42,64 @@ jobs:
           repository: NguyenPhamDucToan/vnindex_valuation
           path: vnindex-valuation
 
+      # Which day's data are we allowed to reuse? ICT, because that is the day
+      # boundary the market -- and therefore the export -- actually runs on.
+      - name: Today in ICT
+        id: day
+        run: echo "d=$(date -u -d '+7 hours' +%F)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore today's export if one exists
+        id: data-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: vnindex-web/data
+          restore-keys: data-${{ steps.day.outputs.d }}-
+          key: data-${{ steps.day.outputs.d }}-${{ github.run_id }}
+
+      # A CSS or JS push has no reason to spend 15 minutes re-reading 641
+      # tickers out of the database. It exports only when the data could
+      # actually differ: a scheduled or manual run (refreshing data is the
+      # entire point of those), a push that touches the pipeline, or a day
+      # with no export cached yet.
+      - name: Decide whether a fresh export is needed
+        id: plan
+        run: |
+          if [ "${{ github.event_name }}" != "push" ]; then
+            echo "reason=not a push -- always export"; NEED=yes
+          elif [ -z "${{ steps.data-cache.outputs.cache-matched-key }}" ]; then
+            echo "reason=no export cached for ${{ steps.day.outputs.d }}"; NEED=yes
+          else
+            NEED=$(python3 - <<'PY'
+          import json, os, re
+          ev = json.load(open(os.environ["GITHUB_EVENT_PATH"], encoding="utf-8"))
+          files = set()
+          for c in ev.get("commits", []):
+              files |= set(c.get("added", []) + c.get("modified", []) + c.get("removed", []))
+          # An empty list means the payload told us nothing, so assume the worst.
+          # data/ counts: refresh-slow.yml commits it, and that push must export
+          # rather than restore a cache that predates the new side-loaded blocks.
+          pat = re.compile(r"\.py$|requirements\.txt|^\.github/workflows/|^data/")
+          print("yes" if not files or any(pat.search(f) for f in files) else "no")
+          PY
+          )
+            echo "reason=pipeline files changed? $NEED"
+          fi
+          echo "export=$NEED" >> "$GITHUB_OUTPUT"
+          echo "### Export: $NEED (cache: ${{ steps.data-cache.outputs.cache-matched-key || 'none' }})" >> "$GITHUB_STEP_SUMMARY"
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: "pip"
 
       - name: Install dependencies
+        if: steps.plan.outputs.export == 'yes'
         run: |
           pip install -r vnindex-web/requirements.txt
           pip install -r vnindex-valuation/requirements.txt
 
       - name: Export data from the database
+        if: steps.plan.outputs.export == 'yes'
         working-directory: vnindex-web
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -63,6 +110,16 @@ jobs:
         # refresh-slow.yml is what updates those.
         run: python export_data.py
 
+      # Only a fresh export is worth storing; re-saving a restored copy under a
+      # new key would push 40MB into the cache on every CSS tweak.
+      - name: Cache the export for the rest of the day
+        if: steps.plan.outputs.export == 'yes'
+        uses: actions/cache/save@v4
+        with:
+          path: vnindex-web/data
+          key: data-${{ steps.day.outputs.d }}-${{ github.run_id }}
+
+      # Reads only local files, so it is safe (and cheap) on a restored export.
       - name: Add market cap for the sector heat map
         working-directory: vnindex-web
         run: python add_mcap.py
