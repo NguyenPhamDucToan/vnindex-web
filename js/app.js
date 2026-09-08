@@ -18,12 +18,36 @@ import * as F from "./format.js";
 // any module draws. A layout's own hoverlabel still wins on any key it sets.
 if (window.Plotly && !window.Plotly.__namelengthPatched) {
   const react = window.Plotly.react.bind(window.Plotly);
-  window.Plotly.react = (node, data, layout = {}, config) => react(
-    node, data,
-    { ...layout, hoverlabel: { namelength: -1, ...(layout.hoverlabel || {}) } },
-    config);
+  window.Plotly.react = (node, data, layout = {}, config) => {
+    // Writing names out in full is what makes an "x unified" label wide, and on
+    // a 390px screen the widest of them (Giao dịch Nước ngoài & Tự doanh) ran
+    // 93px past the left edge with its first line unreadable. Shrinking the
+    // hover font on narrow screens keeps the names whole and the box on-screen;
+    // truncating them back would undo the fix it was written for.
+    const narrow = window.innerWidth < 560;
+    return react(node, data, {
+      ...layout,
+      hoverlabel: {
+        namelength: -1,
+        ...(narrow ? { font: { size: 9 } } : {}),
+        ...(layout.hoverlabel || {}),
+      },
+    }, config);
+  };
   window.Plotly.__namelengthPatched = true;
 }
+
+// The scorecard tooltips were CSS :hover only, so on a phone there was no way
+// to reach them at all -- a touch device never hovers. One delegated listener,
+// installed once here because the scorecard is rebuilt on every ticker change:
+// tap a tile to open its explanation, tap anywhere else to close it.
+document.addEventListener("click", (e) => {
+  const cell = e.target.closest && e.target.closest(".ttm-cell");
+  for (const open of document.querySelectorAll(".ttm-cell.tip-open")) {
+    if (open !== cell) open.classList.remove("tip-open");
+  }
+  if (cell) cell.classList.toggle("tip-open");
+});
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const el = (html) => { const t = document.createElement("template"); t.innerHTML = html.trim(); return t.content.firstElementChild; };

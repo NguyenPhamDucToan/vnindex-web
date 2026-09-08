@@ -17,6 +17,17 @@ const FONT = { family: "Fira Code, monospace", size: 10, color: "#0a121d" };
 // Same Excel-ish series palette the original uses for multi-ticker charts.
 const SERIES = ["#5b9bd5", "#f0ad4e", "#70ad47", "#7030a0", "#5bc0de", "#c00000"];
 
+// The sector yardstick is a median, not a mean. Measured on the 20 most-traded
+// banks: mean P/E 10.9 against a median of 7.6, because EIB at 44x and STB at
+// 30x drag the average 43% above where the sector actually trades. A reference
+// column two outliers can move is not a reference.
+const median = (xs) => {
+  const v = xs.filter(F.isNum).sort((a, b) => a - b);
+  if (!v.length) return null;
+  const m = v.length >> 1;
+  return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2;
+};
+
 // The series palette is tuned for chart marks on white; as 14px text on the
 // page background several of those hues land near 2.5:1. Darken toward black
 // until the contrast is readable, keeping the hue so a cell still reads as
@@ -178,12 +189,15 @@ export async function renderCompare(root, onPick) {
     // per-ticker files, so cap at the twenty most-traded names -- enough for a
     // stable mean, and the label says how many went into it.
     let industryAvg = null;
+    // The loaded peers themselves, kept so the table and the five-year charts
+    // can average anything -- not just the six radar axes.
+    let industryPeers = [];
     if (industryMode && data[0] && data[0].sector) {
       const sectorAxes = axesFor([data[0].sector]);
       const peers = screen.filter((r) => r.sector === data[0].sector)
         .sort((a, b) => (b.vol ?? 0) - (a.vol ?? 0)).slice(0, 20);
-      const acc = {}, cnt = {};
-      for (const a of sectorAxes) { acc[a.label] = 0; cnt[a.label] = 0; }
+      const bag = {};
+      for (const a of sectorAxes) bag[a.label] = [];
       let n = 0;
       for (const r of peers) {
         let pd;
@@ -197,16 +211,17 @@ export async function renderCompare(root, onPick) {
           ttm: computeTTM(pd.financials || []) || {},
         };
         n++;
+        industryPeers.push(ctx);
         for (const a of sectorAxes) {
           let raw = null;
           try { raw = a.calc(ctx); } catch { raw = null; }
-          if (F.isNum(raw)) { acc[a.label] += raw; cnt[a.label]++; }
+          if (F.isNum(raw)) bag[a.label].push(raw);
         }
       }
       if (n) {
         const raw = {}, norm = {};
         for (const a of sectorAxes) {
-          raw[a.label] = cnt[a.label] ? acc[a.label] / cnt[a.label] : null;
+          raw[a.label] = median(bag[a.label]);
           norm[a.label] = normalise(a, raw[a.label]);
         }
         industryAvg = { n, raw, norm };
@@ -271,7 +286,7 @@ export async function renderCompare(root, onPick) {
       if (peers.length > 1 && industryAvg) {
         const vals = axes.map((a) => industryAvg.norm[a.label] ?? 0);
         const labels = axes.map((a) => a.fmt(industryAvg.raw[a.label]));
-        radarTraces.push(traceFor(`TB ngành (${industryAvg.n} CP)`, vals, labels,
+        radarTraces.push(traceFor(`Trung vị ngành (${industryAvg.n} CP)`, vals, labels,
                                   "#f97316", "dash", "1f"));
       }
     }
@@ -294,7 +309,7 @@ export async function renderCompare(root, onPick) {
         .filter((n) => F.isNum(n.v))
         .sort((p2, q2) => (a.lowerBetter ? p2.v - q2.v : q2.v - p2.v));
       if (industryAvg && F.isNum(industryAvg.raw[a.label])) {
-        rows.push({ name: `TB ngành (${industryAvg.n})`, colour: "#f97316",
+        rows.push({ name: `Trung vị ngành (${industryAvg.n})`, colour: "#f97316",
                     v: industryAvg.raw[a.label] });
       }
       const hint = a.lowerBetter ? " · càng thấp càng tốt" : "";
@@ -388,14 +403,21 @@ export async function renderCompare(root, onPick) {
 
     const cmpCard = el(`<div class="card">
       <h2 class="sec-h">So sánh chỉ số tài chính${sAxes ? ` <span class="ta-sub">· gồm chỉ số riêng của ${F.escapeHtml(sectorNames[0])}</span>` : ""}</h2>
-      <div class="vb-note">★ = dẫn đầu hàng đó, tô theo màu của mã; hạng nhì đậm hơn phần còn lại.</div>
+      <div class="vb-note">★ = dẫn đầu hàng đó, tô theo màu của mã; hạng nhì đậm hơn phần còn lại.${industryAvg ? ` Cột <b style="color:#b45309">Trung vị ngành</b> lấy trên ${industryAvg.n} mã thanh khoản nhất cùng ngành. Trung vị chứ không phải trung bình, để vài mã ngoại lai không kéo lệch cả cột; đây là mốc tham chiếu nên không xếp hạng và không nhận ★.` : ""}</div>
       <div class="ta-scroll"><table class="screen cmp-heat"><thead><tr><th>Chỉ số</th></tr></thead><tbody></tbody></table></div>
     </div>`);
     body.appendChild(cmpCard);
 
     // Columns: the picked tickers, then the sector mean when it is on.
     const cols = data.map((x, i) => ({ label: x.t, ctx: x, colour: SERIES[i % SERIES.length] }));
-    if (industryAvg) cols.push({ label: `TB ngành (${industryAvg.n})`, avg: true, colour: "#f97316" });
+    if (industryAvg) cols.push({ label: `Trung vị ngành (${industryAvg.n})`, avg: true, colour: "#f97316" });
+
+    // Mean of a getter across the sector sample. The column used to read
+    // industryAvg.raw[label], which only ever held the six radar axes, so
+    // every other row -- vốn hóa, P/E, biên gộp, D/E, Quality -- showed a dash.
+    const peerMid = (get) => median(industryPeers.map((ctx) => {
+      try { return get(ctx); } catch { return null; }
+    }));
 
     const head = cmpCard.querySelector("thead tr");
     for (const c of cols) {
@@ -410,15 +432,22 @@ export async function renderCompare(root, onPick) {
       for (const [label, get, higherBetter, fmt] of rows) {
         const vals = cols.map((c) => {
           if (!c.avg) { try { return get(c.ctx); } catch { return null; } }
-          return industryAvg && F.isNum(industryAvg.raw[label]) ? industryAvg.raw[label] : null;
+          return peerMid(get);
         });
-        const valid = vals.map((v, i) => [v, i]).filter(([v]) => F.isNum(v));
+        // The sector mean is a yardstick, not a contender: it is drawn but
+        // never ranked, so the ★ always marks a real company.
+        const valid = vals.map((v, i) => [v, i])
+          .filter(([v, i]) => F.isNum(v) && !cols[i].avg);
         // Rank inside the row, so shading answers "best here", not "biggest".
         const order = valid.slice().sort((a, b) => (higherBetter ? b[0] - a[0] : a[0] - b[0]));
         const rank = new Map(order.map(([, i], r) => [i, r]));
         const tr = el(`<tr><td class="dim">${F.escapeHtml(label)}</td></tr>`);
         vals.forEach((v, i) => {
           if (!F.isNum(v)) { tr.appendChild(el(`<td class="num dim">—</td>`)); return; }
+          if (cols[i].avg) {
+            tr.appendChild(el(`<td class="num cmp-avg">${F.escapeHtml(fmt(v) ?? "—")}</td>`));
+            return;
+          }
           const r = rank.get(i) ?? valid.length;
           if (valid.length > 1) rankLog[i].push({ label, rank: r, of: valid.length });
           // Three text tiers, as the original grades them: leader in its own
@@ -439,7 +468,7 @@ export async function renderCompare(root, onPick) {
 
     // ── 3b. Who wins where ───────────────────────────────────────────
     // The sector average is a yardstick, not a contender, so it is excluded
-    // from the win count -- otherwise "TB ngành" would appear to compete.
+    // from the win count -- otherwise the sector median would appear to compete.
     const contenders = cols.map((c, i) => ({ ...c, i }))
       .filter((c) => !c.avg && rankLog[c.i].length);
     if (contenders.length > 1) {
@@ -476,6 +505,16 @@ export async function renderCompare(root, onPick) {
     const annOf = (x) => new Map((x.d.financials || []).filter((f) => f.period_type === "Y")
       .map((f) => [String(f.period).slice(0, 4), f]));
 
+    // The sector's own five-year line, averaged the same way the table is:
+    // each peer's value for a year, then the mean of those. Averaging per peer
+    // rather than summing keeps a peer that is missing an early year from
+    // showing up as a drop in the sector's history.
+    const IND = "#f97316";
+    const peerYearMid = (pick) => years.map((y) => median(industryPeers.map((px) => {
+      const ann = annOf(px);
+      try { return pick(ann.get(y), ann, y); } catch { return null; }
+    })));
+
     const annCard = el(`<div class="card"><h2 class="sec-h">Doanh thu &amp; Lợi nhuận ròng (5 năm)</h2><div class="qgrid"></div></div>`);
     body.appendChild(annCard);
     const annualChart = (title, id, pick, suffix) => {
@@ -490,6 +529,15 @@ export async function renderCompare(root, onPick) {
           hovertemplate: `${x.t} %{x}: %{y:,.1f}${suffix}<extra></extra>`,
         };
       });
+      if (industryPeers.length) {
+        const y = peerYearMid(pick);
+        if (y.some(F.isNum)) {
+          tr.push({ type: "bar", name: `Trung vị ngành (${industryPeers.length})`, x: years, y,
+            marker: { color: IND, pattern: { shape: "/", size: 4, solidity: 0.25,
+                                             fgcolor: "#ffffff", bgcolor: IND } },
+            hovertemplate: `Trung vị ngành %{x}: %{y:,.1f}${suffix}<extra></extra>` });
+        }
+      }
       pending.push(() => window.Plotly.react(c.querySelector("#" + id), tr, {
         height: 340, dragmode: false, barmode: "group", margin: { l: 58, r: 14, t: 26, b: 34 },
         paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: FONT,
@@ -532,6 +580,16 @@ export async function renderCompare(root, onPick) {
           hovertemplate: `${x.t} %{x}: %{y:.1f}%<extra></extra>`,
         };
       }).filter((t) => t.y.some(F.isNum));
+      if (industryPeers.length) {
+        // Dashed, so the yardstick never reads as one more company.
+        const y = peerYearMid((r) => { const v = r ? pick(r) : null; return F.isNum(v) ? v * 100 : null; });
+        if (y.some(F.isNum)) {
+          tr.push({ type: "scatter", mode: "lines", name: `Trung vị ngành (${industryPeers.length})`,
+            x: years, y, connectgaps: true,
+            line: { color: IND, width: 2, dash: "dash" },
+            hovertemplate: `Trung vị ngành %{x}: %{y:.1f}%<extra></extra>` });
+        }
+      }
       if (!tr.length) { box.remove(); return; }
       pending.push(() => window.Plotly.react(marginCard.querySelector("#" + id), tr, {
         height: 320, dragmode: false, margin: { l: 52, r: 14, t: 26, b: 34 },

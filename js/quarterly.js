@@ -731,7 +731,10 @@ export function foreignSection(parent, foreign, prices) {
       { type: "bar", x, y, name: "GTNN mua ròng (tỷ)",
         marker: { color: y.map((v) => ((v ?? 0) >= 0 ? MARK_UP : MARK_DOWN)) },
         customdata: fx.map((d) => [(d.buy_val || 0) / 1e9, (d.sell_val || 0) / 1e9]),
-        hovertemplate: "Net: %{y:,.2f} tỷ · Buy: %{customdata[0]:,.2f} tỷ · "
+        // One line per figure rather than three joined by dots: on a phone the
+        // single-line form was 21px wider than the screen, so the label opened
+        // with its left edge cut off. Stacked, it fits and reads faster.
+        hovertemplate: "Net: %{y:,.2f} tỷ<br>Buy: %{customdata[0]:,.2f} tỷ<br>"
                      + "Sell: %{customdata[1]:,.2f} tỷ<extra>GTNN ròng</extra>" },
     ];
     if (closes.some(isN)) {

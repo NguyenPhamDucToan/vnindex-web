@@ -443,7 +443,16 @@ table.screen tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--pri
   border-radius: 4px; padding: 12px 14px; width: 240px; z-index: 40;
   box-shadow: 0 6px 24px rgba(10, 18, 29, 0.18); pointer-events: none; text-align: left;
 }
-.ttm-cell:hover .ttm-tooltip { display: block; }
+.ttm-cell:hover .ttm-tooltip, .ttm-cell.tip-open .ttm-tooltip { display: block; }
+/* Desktop keeps the original's bare tile: hover is discoverable there. A touch
+   device has no hover at all, so it gets a mark saying the tile can be opened
+   -- guarded by (hover: none) so the mouse layout is untouched. */
+@media (hover: none) {
+  .ttm-cell { cursor: pointer; }
+  .ttm-cell .sc-k::after { content: " ⓘ"; color: var(--rule-strong); font-size: 10px; }
+  .ttm-cell.tip-open { background: var(--paper-2); }
+  .ttm-cell.tip-open .sc-k::after { color: var(--primary); }
+}
 .tt-f { font-size: 11px; color: var(--neutral); margin-bottom: 4px; font-style: italic; }
 .tt-d { font-size: 12px; color: var(--neutral); margin-bottom: 10px; line-height: 1.45; }
 .tt-bands { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--neutral); }
@@ -592,6 +601,11 @@ table.screen.cmp-heat tbody tr { cursor: default; }
 .cmp-heat .cmp-r0 { font-weight: 700; font-size: 14px; }
 .cmp-heat .cmp-r1 { font-weight: 600; color: var(--ink); }
 .cmp-heat .cmp-r2 { font-weight: 400; color: var(--ink); }
+/* The sector mean is a reference, not a rival: its own hue, never ranked,
+   never starred, and set apart by a rule so the eye reads it as the margin
+   of the table rather than one more column of contenders. */
+.cmp-heat .cmp-avg { font-weight: 600; color: #b45309; }
+.cmp-heat th:last-child, .cmp-heat td:last-child { border-left: 2px solid #fed7aa; }
 .cmp-heat .cmp-grp td { border-left: 0; background: var(--accent-tint, #eef4ff); color: #1e3a5f; font-size: 11.5px;
               font-weight: 700; letter-spacing: .10em; text-transform: uppercase;
               padding: 8px 16px; border-top: 2px solid #bfdbfe; }
