@@ -694,69 +694,9 @@ export async function renderCompare(root, onPick) {
       body.appendChild(rc);
     }
 
-    // ── 7. How closely the names move together ───────────────────────
-    if (data.length > 1) {
-      const series = data.map((x) => new Map(rets((x.d.prices || []).slice(-TRADING_DAYS)).map((q) => [q.date, q.r])));
-      const corr = (a, b) => {
-        const xs = [], ys = [];
-        for (const [d, v] of a) if (b.has(d)) { xs.push(v); ys.push(b.get(d)); }
-        if (xs.length < 30) return null;
-        const mx = mean(xs), my = mean(ys);
-        let sxy = 0, sxx = 0, syy = 0;
-        for (let i = 0; i < xs.length; i++) {
-          sxy += (xs[i] - mx) * (ys[i] - my);
-          sxx += (xs[i] - mx) ** 2; syy += (ys[i] - my) ** 2;
-        }
-        return (sxx && syy) ? sxy / Math.sqrt(sxx * syy) : null;
-      };
-
-      // Every unordered pair once. n names give n(n-1)/2 rows -- six for four
-      // names, which is a short list, not a grid to decode.
-      const pairs = [];
-      for (let i = 0; i < data.length; i++) {
-        for (let j = i + 1; j < data.length; j++) {
-          const v = corr(series[i], series[j]);
-          if (F.isNum(v)) pairs.push({ a: data[i].t, b: data[j].t, v,
-                                       ca: SERIES[i % SERIES.length], cb: SERIES[j % SERIES.length] });
-        }
-      }
-      if (pairs.length) {
-        pairs.sort((p2, q2) => q2.v - p2.v);
-        const avg = mean(pairs.map((q) => q.v));
-        // Bands from how equity correlations actually behave: above 0.7 two
-        // names are effectively one position, below 0.4 they are genuinely
-        // separate bets.
-        const band = (v) => v >= 0.7 ? ["Gần như đi cùng nhau", "#b91c1c"]
-          : v >= 0.55 ? ["Đi cùng chiều rõ", "#d97706"]
-          : v >= 0.4 ? ["Cùng chiều vừa phải", "#ca8a04"]
-          : v >= 0.2 ? ["Khá độc lập", "#4d7c0f"]
-          : ["Gần như độc lập", "#15803d"];
-        const overall = band(avg);
-
-        const cc = el(`<div class="card">
-          <h2 class="sec-h">Mức độ đi cùng nhau <span class="ta-sub">· lợi suất ngày, 1 năm</span></h2>
-          <div class="vb-note">Đo mức hai mã cùng lên cùng xuống. Càng cao thì nắm cả hai càng
-            ít tác dụng phân tán rủi ro — vì khi một mã giảm, mã kia thường giảm theo.
-            Trung bình cả nhóm: <b style="color:${overall[1]}">${avg.toFixed(2)} — ${overall[0].toLowerCase()}</b>.</div>
-          <div class="cr-list"></div></div>`);
-        const list = cc.querySelector(".cr-list");
-        for (const q of pairs) {
-          const [label, colour] = band(q.v);
-          list.appendChild(el(`<div class="cr-row">
-            <div class="cr-pair"><span style="color:${readable(q.ca)}">${q.a}</span>
-              <span class="cr-x">↔</span>
-              <span style="color:${readable(q.cb)}">${q.b}</span></div>
-            <div class="cr-track"><div class="cr-fill" style="width:${Math.max(2, q.v * 100).toFixed(0)}%;background:${colour}"></div></div>
-            <div class="cr-val" style="color:${colour}">${q.v.toFixed(2)}</div>
-            <div class="cr-lab">${label}</div>
-          </div>`));
-        }
-        body.appendChild(cc);
-      }
-    }
-
-    // (The detail table that used to close this view is gone: it repeated
-    // the comparison table's numbers transposed.)
+    // (Two blocks that used to close this view are gone: a detail table that
+    // repeated the comparison table's numbers transposed, and a pairwise
+    // co-movement list -- you read the latter as noise, not signal.)
 
     pending.forEach((fn) => fn());
   }
