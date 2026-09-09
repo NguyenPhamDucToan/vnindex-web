@@ -60,6 +60,17 @@ let currentRange = 365;
 // ── boot ────────────────────────────────────────────────────────────
 async function boot() {
   COMPANIES = await loadCompanies();
+  // companies.json carries all 641 listed codes, 238 of which are covered
+  // warrants (CHPG2523 and friends). They have prices but no financials, no
+  // valuation and no sector, so their page is a shell -- and searching "HPG"
+  // buried HPG under a dozen of them. The original never showed them either:
+  // its picker queries tickers with at least four quarterly rows. The screener
+  // is exactly that set here, so it is the filter. Not `sector`, which would
+  // wrongly drop ADG, CLC and YEG -- real companies with no sector recorded.
+  const listed = await loadScreener()
+    .then((rows) => new Set(rows.map((r) => r.ticker)))
+    .catch(() => null);
+  if (listed && listed.size) COMPANIES = COMPANIES.filter((c) => listed.has(c.ticker));
   buildPicker();
   buildNav();
   const meta = await loadMeta().catch(() => null);
@@ -108,8 +119,21 @@ function buildPicker() {
   const list = $("#picker-list");
   const render = (q) => {
     const term = q.trim().toUpperCase();
-    const matches = COMPANIES.filter((c) =>
-      c.ticker.includes(term) || (c.name || "").toUpperCase().includes(term)).slice(0, 40);
+    // Rank by how well it matches, not alphabetically: typing a whole ticker
+    // must put that ticker first, and a prefix match beats a match buried in
+    // the middle of a company name.
+    const rank = (c) => {
+      const t = c.ticker, n = (c.name || "").toUpperCase();
+      if (t === term) return 0;
+      if (t.startsWith(term)) return 1;
+      if (n.startsWith(term)) return 2;
+      if (t.includes(term)) return 3;
+      return 4;
+    };
+    const matches = COMPANIES
+      .filter((c) => c.ticker.includes(term) || (c.name || "").toUpperCase().includes(term))
+      .sort((a, b) => rank(a) - rank(b) || a.ticker.localeCompare(b.ticker))
+      .slice(0, 40);
     list.innerHTML = "";
     for (const c of matches) {
       const item = el(`<div class="pick"><b>${c.ticker}</b><span>${F.escapeHtml(c.name || "")}</span></div>`);
