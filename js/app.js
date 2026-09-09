@@ -512,6 +512,24 @@ function scorecard(co, v, ttm) {
       { label: "Ngày tồn kho (DIO)", value: F.days(v.dio), color: R(v.dio, dioGood, dioWarn, false) , tip: { f: "Hàng tồn kho × 365 / Giá vốn", d: "Hàng nằm kho bao lâu mới bán được. Phình lên = hàng khó tiêu thụ", g: "≤ 50 ngày", w: "50 – 100 ngày", b: "> 100 ngày" } },
       { label: "Tiền mặt trả lãi vay", value: F.isNum(cic) && cic > 100 ? "Không vay nợ" : F.mult(cic), color: F.isNum(cic) && cic > 100 ? "#16a34a" : R(cic, 5, 3) , tip: { f: "Dòng tiền hoạt động / Chi phí lãi vay", d: "Tiền thật kiếm được gấp bao nhiêu lần tiền lãi phải trả. Trên 100x nghĩa là gần như không vay", g: "≥ 5x", w: "3 – 5x", b: "< 3x" } },
     ]));
+
+    // Cash-flow performance and coverage ratios (CFA FSA module 5). The first
+    // three were already computed by the pipeline every day and shown nowhere;
+    // the last two come off the TTM sums. Non-financials only: a bank's CFO
+    // swings with deposit and loan flows, so CFO / doanh thu says nothing about
+    // one -- the same trap as applying inventory turns to an insurer.
+    const cfDebt = v.cash_coverage;
+    const cashToIncome = ttm ? div(ttm.operating_cf, ttm.ebit) : null;
+    // OCF is in billions and shares in millions, so the quotient is thousands
+    // of VND per share -- the same unit the price is quoted in.
+    const cfps = ttm ? div(ttm.operating_cf, ttm.shares_outstanding) : null;
+    card.appendChild(scoreRow("CHẤT LƯỢNG DÒNG TIỀN", [
+      { label: "Tiền / Doanh thu", value: F.pct(v.ocf_to_revenue), color: R(v.ocf_to_revenue, 0.15, 0.05) , tip: { f: "Dòng tiền hoạt động / Doanh thu", d: "Mỗi 100 đồng doanh thu đọng lại bao nhiêu đồng tiền thật. Đây là thước đo gốc của chất lượng doanh thu", g: "≥ 15%", w: "5 – 15%", b: "< 5%" } },
+      { label: "Tiền / Lợi nhuận hoạt động", value: F.mult(cashToIncome), color: R(cashToIncome, 1, 0.8) , tip: { f: "Dòng tiền hoạt động / Lợi nhuận hoạt động (EBIT)", d: "Lợi nhuận hoạt động có được thu bằng tiền hay không. Dưới 1x kéo dài là dấu hiệu lợi nhuận nằm ở phải thu và tồn kho", g: "≥ 1x", w: "0.8 – 1x", b: "< 0.8x" } },
+      { label: "Tiền / Tổng nợ vay", value: F.isNum(cfDebt) && cfDebt > 100 ? "Không vay nợ" : F.mult(cfDebt), color: F.isNum(cfDebt) && cfDebt > 100 ? "#16a34a" : R(cfDebt, 0.4, 0.2) , tip: { f: "Dòng tiền hoạt động / Tổng nợ vay", d: "Mỗi năm tiền kinh doanh trả được bao nhiêu phần dư nợ. 0.4x nghĩa là khoảng 2,5 năm là sạch nợ", g: "≥ 0.4x", w: "0.2 – 0.4x", b: "< 0.2x" } },
+      { label: "Tiền / CAPEX", value: F.mult(v.capex_coverage), color: R(v.capex_coverage, 2, 1) , tip: { f: "Dòng tiền hoạt động / Chi đầu tư tài sản cố định", d: "Tự nuôi được việc mở rộng hay phải đi vay. Dưới 1x là đầu tư vượt quá tiền tự làm ra", g: "≥ 2x", w: "1 – 2x", b: "< 1x" } },
+      { label: "Tiền trên mỗi cổ phiếu", value: F.isNum(cfps) ? `${cfps.toFixed(2)} nghìn` : "—", color: F.isNum(cfps) ? (cfps >= 0 ? "#16a34a" : "#dc2626") : "#666f7c" , tip: { f: "Dòng tiền hoạt động / Số cổ phiếu lưu hành", d: "Tiền kinh doanh tạo ra trên mỗi cổ phiếu, cùng đơn vị nghìn đồng như giá. Không có ngưỡng chung — hãy so với EPS và với thị giá", g: "Dương", w: "—", b: "Âm" } },
+    ]));
   }
 
   const legend = el(`<div class="legend">
