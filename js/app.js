@@ -543,15 +543,20 @@ function scorecard(co, v, ttm) {
     // swings with deposit and loan flows, so CFO / doanh thu says nothing about
     // one -- the same trap as applying inventory turns to an insurer.
     const cfDebt = v.cash_coverage;
-    const cashToIncome = ttm ? div(ttm.operating_cf, ttm.ebit) : null;
+    // Only when the operating line is actually in profit. With EBIT negative
+    // the ratio is not just wrong, it inverts: HID (OCF -127bn, EBIT -33bn)
+    // came out +3.88x and painted green -- a company burning cash scored as
+    // converting it perfectly. 16 tickers have negative TTM EBIT.
+    const cashToIncome = (ttm && F.isNum(ttm.ebit) && ttm.ebit > 0)
+      ? div(ttm.operating_cf, ttm.ebit) : null;
     // OCF is in billions and shares in millions, so the quotient is thousands
     // of VND per share -- the same unit the price is quoted in.
     const cfps = ttm ? div(ttm.operating_cf, ttm.shares_outstanding) : null;
     card.appendChild(scoreRow("CHẤT LƯỢNG DÒNG TIỀN", [
-      { label: "Tiền / Doanh thu", value: F.pct(v.ocf_to_revenue), color: R(v.ocf_to_revenue, 0.15, 0.05) , tip: { f: "Dòng tiền hoạt động / Doanh thu", d: "Mỗi 100 đồng doanh thu đọng lại bao nhiêu đồng tiền thật. Đây là thước đo gốc của chất lượng doanh thu", g: "≥ 15%", w: "5 – 15%", b: "< 5%" } },
-      { label: "Tiền / Lợi nhuận hoạt động", value: F.mult(cashToIncome), color: R(cashToIncome, 1, 0.8) , tip: { f: "Dòng tiền hoạt động / Lợi nhuận hoạt động (EBIT)", d: "Lợi nhuận hoạt động có được thu bằng tiền hay không. Dưới 1x kéo dài là dấu hiệu lợi nhuận nằm ở phải thu và tồn kho", g: "≥ 1x", w: "0.8 – 1x", b: "< 0.8x" } },
-      { label: "Tiền / Tổng nợ vay", value: F.isNum(cfDebt) && cfDebt > 100 ? "Không vay nợ" : F.mult(cfDebt), color: F.isNum(cfDebt) && cfDebt > 100 ? "#16a34a" : R(cfDebt, 0.4, 0.2) , tip: { f: "Dòng tiền hoạt động / Tổng nợ vay", d: "Mỗi năm tiền kinh doanh trả được bao nhiêu phần dư nợ. 0.4x nghĩa là khoảng 2,5 năm là sạch nợ", g: "≥ 0.4x", w: "0.2 – 0.4x", b: "< 0.2x" } },
-      { label: "Tiền / CAPEX", value: F.mult(v.capex_coverage), color: R(v.capex_coverage, 2, 1) , tip: { f: "Dòng tiền hoạt động / Chi đầu tư tài sản cố định", d: "Tự nuôi được việc mở rộng hay phải đi vay. Dưới 1x là đầu tư vượt quá tiền tự làm ra", g: "≥ 2x", w: "1 – 2x", b: "< 1x" } },
+      { label: "Tiền / Doanh thu", value: F.pct(v.ocf_to_revenue), color: R(v.ocf_to_revenue, 0.15, 0.10) , tip: { f: "Dòng tiền hoạt động / Doanh thu", d: "Mỗi 100 đồng doanh thu đọng lại bao nhiêu đồng tiền thật. Đây là thước đo gốc của chất lượng doanh thu", g: "≥ 15%", w: "10 – 15%", b: "< 10%" } },
+      { label: "Tiền / Lợi nhuận hoạt động", value: F.mult(cashToIncome), color: R(cashToIncome, 1, 0.8) , tip: { f: "Dòng tiền hoạt động / Lợi nhuận hoạt động (EBIT)", d: "Lợi nhuận hoạt động có được thu bằng tiền hay không. Dưới 1x kéo dài là dấu hiệu lợi nhuận nằm ở phải thu và tồn kho. Để trống khi EBIT âm — lỗ ở khâu vận hành thì tỷ số này vô nghĩa", g: "≥ 1x", w: "0.8 – 1x", b: "< 0.8x" } },
+      { label: "Tiền / Tổng nợ vay", value: F.isNum(cfDebt) && cfDebt > 100 ? "Không vay nợ" : F.mult(cfDebt), color: F.isNum(cfDebt) && cfDebt > 100 ? "#16a34a" : R(cfDebt, 0.5, 0.2) , tip: { f: "Dòng tiền hoạt động / Tổng nợ vay", d: "Mỗi năm tiền kinh doanh trả được bao nhiêu phần dư nợ. 0.5x nghĩa là khoảng 2 năm là sạch nợ", g: "≥ 0.5x", w: "0.2 – 0.5x", b: "< 0.2x" } },
+      { label: "Tiền / CAPEX", value: F.mult(v.capex_coverage), color: R(v.capex_coverage, 2.9, 1.5) , tip: { f: "Dòng tiền hoạt động / Chi đầu tư tài sản cố định", d: "Tự nuôi được việc mở rộng hay phải đi vay. Dưới 1.5x là chưa tự tài trợ nổi mức đầu tư đang làm", g: "≥ 2.9x", w: "1.5 – 2.9x", b: "< 1.5x" } },
       { label: "Tiền trên mỗi cổ phiếu", value: F.isNum(cfps) ? `${cfps.toFixed(2)} nghìn` : "—", color: F.isNum(cfps) ? (cfps >= 0 ? "#16a34a" : "#dc2626") : "#666f7c" , tip: { f: "Dòng tiền hoạt động / Số cổ phiếu lưu hành", d: "Tiền kinh doanh tạo ra trên mỗi cổ phiếu, cùng đơn vị nghìn đồng như giá. Không có ngưỡng chung — hãy so với EPS và với thị giá", g: "Dương", w: "—", b: "Âm" } },
     ]));
   }
