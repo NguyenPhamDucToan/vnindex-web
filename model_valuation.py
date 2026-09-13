@@ -89,6 +89,17 @@ def _sector_adjust(v: dict, ttm: dict, sector: str) -> dict:
     def _ps(val_bn, mult):
         return round(val_bn * 1e9 / (shares * 1e6) * mult) if (val_bn and shares > 0) else None
 
+    # A bank, broker or insurer has no free cash flow in the sense these three
+    # methods assume: its operating cash flow is deposit, loan and client-money
+    # movement, not earnings retained after capex. They produce numbers 6 to 45
+    # times the share price -- CTG came out at 1,365,553 VND on DCF, 660,338 on
+    # FCFE and 197,677 on P/OCF against a 29,950 VND share -- and the winsorized
+    # mean only clips them to a ceiling, so all three still pushed the average
+    # up: CTG's model price was 78,677 where the six sound methods say 60,918.
+    if sector in ("Ngân hàng", "Chứng khoán", "Bảo hiểm"):
+        for k in ("dcf", "fcfe", "pocf"):
+            v[k] = None
+
     if sector == "Ngân hàng":
         v["ev_ebitda"] = _ps(ttm.get("gross_profit"), 8)
         v["epv"] = _ps(ttm.get("ebit"), 6)

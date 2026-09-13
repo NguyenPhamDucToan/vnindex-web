@@ -300,9 +300,9 @@ export function quarterlyCharts(parent, co, financials, detail, prices, valHisto
     const provInv = dSeries("balance", "prov_inventory");
     const provDbt = dSeries("balance", "prov_doubtful");
     if (provInv || provDbt) {
-      add("Trích lập dự phòng", [
-        ...(provInv ? [{ type: "bar", name: "Dự phòng giảm giá hàng tồn kho", x, y: provInv.map((v) => (isN(v) ? Math.abs(v) : null)), marker: { color: ORANGE} }] : []),
-        ...(provDbt ? [{ type: "bar", name: "Dự phòng phải thu khó đòi", x, y: provDbt.map((v) => (isN(v) ? Math.abs(v) : null)), marker: { color: RED} }] : []),
+      add("Số dư dự phòng", [
+        ...(provInv ? [{ type: "bar", name: "Số dư DP giảm giá tồn kho", x, y: provInv.map((v) => (isN(v) ? Math.abs(v) : null)), marker: { color: ORANGE} }] : []),
+        ...(provDbt ? [{ type: "bar", name: "Số dư DP phải thu khó đòi", x, y: provDbt.map((v) => (isN(v) ? Math.abs(v) : null)), marker: { color: RED} }] : []),
       ], Object.assign(base(), { barmode: "stack" }));
     }
   }
@@ -615,37 +615,34 @@ export function quarterlyCharts(parent, co, financials, detail, prices, valHisto
     ], pctAxis(Object.assign(base(), { barmode: "group", xaxis: { type: "category", tickfont: { ...FONT, size: 9 }, showgrid: false } })));
   }
 
-  if ((valHistory || []).length && (prices || []).length) {
+  // Gated on the model price now, not on valuation_history: the history is no
+  // longer plotted, and a ticker with a model price but no stored history was
+  // being denied the chart for a series it no longer draws.
+  if (isN((model || {}).price) && (prices || []).length) {
     const px = prices.slice(-500);
-    // The estimate is recomputed only now and then, so it covers a fraction of
-    // the price window. The original pads it to both ends of that window and
-    // interpolates, giving one continuous line instead of a stub; do the same.
-    const pts = valHistory
-      .map((r) => [r.calc_date || r.date, r.avg_intrinsic_value ?? r.avg])
-      .filter(([d, v]) => d && isN(v))
-      .sort((a, b) => String(a[0]).localeCompare(String(b[0])));
-    if (pts.length) {
+    // The interpolation that used to build a continuous line out of the sparse
+    // valuation_history is gone with the series it fed.
+    {
       const dates = px.map((r) => r.date);
-      const iv = dates.map((d) => {
-        let lo = null, hi = null;
-        for (const [pd, pv] of pts) {
-          if (pd <= d) lo = [pd, pv];
-          if (pd >= d && !hi) hi = [pd, pv];
-        }
-        if (lo && hi && lo[0] !== hi[0]) {
-          const t0 = Date.parse(lo[0]), t1 = Date.parse(hi[0]), t = Date.parse(d);
-          return lo[1] + (hi[1] - lo[1]) * ((t - t0) / (t1 - t0));
-        }
-        return (lo || hi)[1];               // flat before the first / after the last
-      });
+      const modelPrice = (model || {}).price;
       add("Giá so với giá trị nội tại", [
         { type: "scatter", mode: "lines", name: "Giá thị trường",
           x: dates, y: px.map((r) => r.close * 1000),
           line: { color: PRICE_BLUE, width: 1.5 }, fill: "tozeroy", fillcolor: "rgba(37,99,235,0.06)",
           hovertemplate: "%{y:,.0f} VND<extra></extra>" },
-        { type: "scatter", mode: "lines", name: "Giá trị nội tại TB",
-          x: dates, y: iv, line: { color: DRED, width: 2, dash: "dash" },
-          hovertemplate: "%{y:,.0f} VND<extra></extra>" },
+        // valuation_history stores the plain mean of the ten methods, with no
+        // sector adjustment: 110 of 403 tickers sit more than 30% away from the
+        // model price the rest of the app uses, and banks at less than half it
+        // -- CTG's line ran at 493,093 VND against a 30,000 VND share, which
+        // squeezed the price series into 3.8% of the chart. The line drawn is
+        // the sector-adjusted, winsorized model price, which is the number
+        // behind the Upside shown everywhere else. It is a level as of today,
+        // not a history, so it is drawn flat and labelled as such.
+        ...(isN(modelPrice) ? [{
+          type: "scatter", mode: "lines", name: "Giá trị hợp lý (mô hình, hiện tại)",
+          x: dates, y: dates.map(() => modelPrice),
+          line: { color: DRED, width: 2, dash: "dash" },
+          hovertemplate: "%{y:,.0f} VND<extra></extra>" }] : []),
       ], Object.assign(base(), {
         xaxis: { tickfont: { ...FONT, size: 9 }, showgrid: false },
         yaxis: { gridcolor: RULE, tickfont: { ...FONT, size: 9 },

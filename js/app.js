@@ -1219,7 +1219,10 @@ async function renderSector() {
     de: median(rs.map((r) => r.debt_to_equity)),
     cr: median(rs.map((r) => r.current_ratio)),
     up: median(rs.map((r) => r.upFrac)),
-    dcfUp: median(rs.map((r) => r.upside_pct)),
+    // upside_pct is the raw DCF against price, which is not sector-adjusted:
+    // the bank median came out at +1196% and one name at +23,456%. The adjusted
+    // model upside is `up`, right above, and is what every other view uses.
+    // There is no honest second upside metric to offer, so there is only one.
     q: median(rs.map((r) => r.q)),
   }));
 
@@ -1229,7 +1232,6 @@ async function renderSector() {
   // ── 1. Heatmap with the original's metric selector ────────────────
   const METRICS = {
     "Avg Estimate vs Thị trường": { key: "up", label: "Avg Est Upside %", pct: true, asc: false, lo: -0.8, hi: 1.5 },
-    "DCF vs Thị trường": { key: "dcfUp", label: "DCF Upside %", pct: true, asc: false, lo: -0.8, hi: 1.5 },
     "P/E (thấp hơn = rẻ hơn)": { key: "pe", label: "P/E", pct: false, asc: true, lo: 0, hi: 50 },
     "P/B (thấp hơn = rẻ hơn)": { key: "pb", label: "P/B", pct: false, asc: true, lo: 0, hi: 5 },
     "ROE (cao hơn = tốt hơn)": { key: "roe", label: "ROE %", pct: true, asc: false, lo: -0.2, hi: 0.4 },
@@ -1282,7 +1284,7 @@ async function renderSector() {
       custom.push([sec, "", "", "", ""]);
     }
     for (const r of leaves) {
-      const mv = r[m.key === "up" ? "upFrac" : m.key === "dcfUp" ? "upside_pct" : m.key];
+      const mv = r[m.key === "up" ? "upFrac" : m.key];
       ids.push(`${r.sector}_${r.ticker}`);
       labels.push(r.ticker);
       parents.push(r.sector);
@@ -1372,13 +1374,14 @@ async function renderSector() {
   // The original plots sectors here (bubble size = how many tickers), not
   // every ticker on a fixed axis; the per-ticker view lives on the screener.
   const SC_METRICS = {
-    "DCF Upside %": { key: "dcfUp", label: "Median DCF Upside (%)", pct: true },
+    // The adjusted model upside, not the raw DCF one that used to sit here.
+    "Upside %": { key: "up", label: "Median Upside (%)", pct: true },
     "P/E (median)": { key: "pe", label: "Median P/E (×)", pct: false },
     "P/B (median)": { key: "pb", label: "Median P/B (×)", pct: false },
     "ROE %": { key: "roe", label: "Median ROE (%)", pct: true },
     "Net Margin %": { key: "nm", label: "Median Net Margin (%)", pct: true },
   };
-  let scName = "DCF Upside %";
+  let scName = "Upside %";
 
   const scat = el(`<div class="card">
     <h2 class="sec-h" id="sec-sc-h">Quality Score vs ${scName}</h2>
@@ -1456,7 +1459,7 @@ async function renderSector() {
   // ── 3. Sector summary table — same columns as the original ───────
   const tbl = el(`<div class="card"><h2 class="sec-h">Bảng tổng hợp theo Ngành</h2>
     <table class="screen"><thead><tr>
-      <th>Ngành</th><th>Số mã</th><th>DCF Upside</th><th>P/E</th><th>P/B</th><th>ROE</th>
+      <th>Ngành</th><th>Số mã</th><th>Upside</th><th>P/E</th><th>P/B</th><th>ROE</th>
       <th>Biên LN ròng</th><th>FCF Margin</th><th>D/E</th><th>Curr Ratio</th><th>Quality</th>
     </tr></thead><tbody></tbody></table></div>`);
   const tb = $("tbody", tbl);
