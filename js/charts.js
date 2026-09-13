@@ -114,30 +114,3 @@ export function priceChart(el, prices, rangeDays = 365) {
   window.Plotly.react(el, traces, layout, { displayModeBar: false, responsive: true });
 }
 
-// Price vs intrinsic value over time. history: [{calc_date, dcf_estimate, avg_intrinsic_value}]
-// dcf/avg are raw VND; price series is close*1000 to match.
-export function priceVsValueChart(el, prices, history) {
-  const px = prices.slice(-500);
-  const traces = [
-    {
-      type: "scatter", mode: "lines", name: "Giá thị trường",
-      x: px.map((r) => r.date), y: px.map((r) => r.close * 1000),
-      line: { color: "#2563eb", width: 1.5 }, fill: "tozeroy",
-      fillcolor: "rgba(37,99,235,0.06)",
-    },
-    {
-      type: "scatter", mode: "lines", name: "DCF",
-      x: history.map((r) => r.calc_date), y: history.map((r) => r.dcf_estimate),
-      line: { color: "#b91c1c", width: 1.5, dash: "dash" }, connectgaps: true,
-    },
-  ];
-  const layout = {
-    dragmode: false, margin: { l: 52, r: 12, t: 18, b: 28 }, height: 300,
-    paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: FONT,
-    legend: { orientation: "h", y: 1.12, x: 0, font: { ...FONT, size: 10 } },
-    xaxis: { gridcolor: RULE, tickfont: { ...FONT, size: 9 } },
-    yaxis: { gridcolor: RULE, tickfont: FONT, side: "right" },
-    hovermode: "x unified",
-  };
-  window.Plotly.react(el, traces, layout, { displayModeBar: false, responsive: true });
-}
