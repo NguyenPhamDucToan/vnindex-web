@@ -98,6 +98,7 @@ export function quarterlyCharts(parent, co, financials, detail, prices, valHisto
   if (qs.length < 2) return null;
   const isBank = co.sector === "Ngân hàng";
   const isSec = co.sector === "Chứng khoán";
+  const isIns = co.sector === "Bảo hiểm";
   const x = qs.map((q) => label(q.period));
   const col = (k) => qs.map((q) => (isN(q[k]) ? q[k] : null));
   const ratio = (a, b) => qs.map((q) => (isN(q[a]) && q[b] ? q[a] / q[b] : null));
@@ -215,13 +216,57 @@ export function quarterlyCharts(parent, co, financials, detail, prices, valHisto
   const finExp = dSeries("income", "financial_expense");
   const otherP = dSeries("income", "other_profit");
   const preTax = dSeries("income", "pre_tax_profit");
-  if (preTax) {
+  // An insurer reports the same structure under its own account names, and
+  // splits more usefully: underwriting result against investment result is the
+  // question about an insurer. Without this the sector rendered one chart
+  // fewer than everyone else even though the numbers were already fetched.
+  const insUw = dSeries("income", "ins_underwriting");
+  const insFin = dSeries("income", "ins_financial_profit");
+  const insPre = dSeries("income", "ins_pretax");
+  if (isIns && insPre) {
+    add("Cấu trúc lợi nhuận trước thuế", [
+      { type: "bar", name: "Lãi hoạt động bảo hiểm", x, y: insUw, marker: { color: DBLUE } },
+      { type: "bar", name: "Lãi hoạt động tài chính", x, y: insFin, marker: { color: GOLD } },
+      { type: "scatter", mode: "lines+markers", name: "Lợi nhuận trước thuế", x, y: insPre,
+        line: { color: DRED, width: 1.6 }, marker: { size: 4 } },
+    ], Object.assign(base(), { barmode: "relative" }));
+  } else if (preTax) {
     add("Cấu trúc lợi nhuận trước thuế", [
       { type: "bar", name: "Lợi nhuận hoạt động", x, y: opProfit, marker: { color: DBLUE} },
       { type: "bar", name: "Lợi nhuận khác", x, y: otherP, marker: { color: GREY} },
       { type: "scatter", mode: "lines+markers", name: "Lợi nhuận trước thuế", x, y: preTax,
         line: { color: DRED, width: 1.6 }, marker: { size: 4 } },
     ], Object.assign(base(), { barmode: "relative" }));
+  }
+
+  // Brokers get their own structure chart here: no pre-tax subtotal exists in
+  // their chart of accounts, but the revenue mix does, and it says more about
+  // the business than a restated total would.
+  const secBrok = dSeries("income", "sec_brokerage");
+  const secFv = dSeries("income", "sec_fvtpl_income");
+  const secMar = dSeries("income", "sec_margin_income");
+  const secCus = dSeries("income", "sec_custody");
+  const secAdv = dSeries("income", "sec_advisory");
+  if (isSec && (secBrok || secFv || secMar)) {
+    // The five named lines do not add up to the reported revenue -- underwriting,
+    // HTM and derivative income sit outside them, about 8% of SSI's top line --
+    // and a stacked chart whose bars fall short of the total it appears to
+    // decompose is worse than one extra segment. The remainder is drawn as it is.
+    const parts = [secBrok, secFv, secMar, secAdv, secCus].filter(Boolean);
+    const secOther = qs.map((q, i) => {
+      if (!isN(q.revenue)) return null;
+      const named = parts.reduce((a, p) => a + (isN(p[i]) ? p[i] : 0), 0);
+      const rest = q.revenue - named;
+      return rest > 0.5 ? rest : null;
+    });
+    add("Cơ cấu doanh thu", [
+      ...(secBrok ? [{ type: "bar", name: "Môi giới", x, y: secBrok, marker: { color: BLUE } }] : []),
+      ...(secFv ? [{ type: "bar", name: "Tự doanh (FVTPL)", x, y: secFv, marker: { color: GREEN } }] : []),
+      ...(secMar ? [{ type: "bar", name: "Cho vay & phải thu", x, y: secMar, marker: { color: GOLD } }] : []),
+      ...(secAdv ? [{ type: "bar", name: "Tư vấn", x, y: secAdv, marker: { color: LPURPLE } }] : []),
+      ...(secCus ? [{ type: "bar", name: "Lưu ký", x, y: secCus, marker: { color: SKY } }] : []),
+      ...(secOther.some(isN) ? [{ type: "bar", name: "Khác", x, y: secOther, marker: { color: GREY } }] : []),
+    ], Object.assign(base(), { barmode: "stack" }));
   }
 
   add(isBank ? "Chi phí hoạt động & PPOP" : "Chi phí bán hàng & QLDN",

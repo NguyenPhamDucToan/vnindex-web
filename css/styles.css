@@ -282,7 +282,16 @@ b, strong { font-weight: 600; }
 /* ── chart grid ───────────────────────────────────────────── */
 /* The original lays the report out as st.columns(3) on every row, so nine
    charts fill three rows exactly instead of leaving an orphan. */
-.qgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-md); }
+/* Three up, expressed as six columns spanning two each, so a short last row
+   can divide the remainder instead of leaving a hole. Sector chart counts are
+   not multiples of three -- a broker produces 8 and an insurer 7 against an
+   industrial's 9 -- and the orphans used to sit beside dead space. */
+.qgrid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--space-md); }
+.qgrid > * { grid-column: span 2; }
+/* One chart alone on the last row takes the full width; two share it. */
+.qgrid > :last-child:nth-child(3n + 1) { grid-column: span 6; }
+.qgrid > :nth-last-child(2):nth-child(3n + 1),
+.qgrid > :last-child:nth-child(3n + 2) { grid-column: span 3; }
 .qchart { border: 1px solid var(--rule); border-radius: var(--radius-sm); padding: 10px 12px 6px; min-width: 0; background: var(--paper); }
 .qtitle { font-size: 10.5px; font-weight: 700; letter-spacing: .7px; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
 
@@ -341,6 +350,9 @@ table.screen tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--pri
   .sc-cells { flex-wrap: wrap; }
   .sc-cell { flex: 1 1 45%; }
   .qgrid { grid-template-columns: 1fr; }
+  .qgrid > *, .qgrid > :last-child:nth-child(3n + 1),
+  .qgrid > :nth-last-child(2):nth-child(3n + 1),
+  .qgrid > :last-child:nth-child(3n + 2) { grid-column: span 1; }
   .stock-head { gap: var(--space-md); }
   .sh-right { text-align: left; min-width: 0; padding-right: 0; }
   .head-row { flex-direction: column; gap: var(--space-md); }
@@ -351,7 +363,12 @@ table.screen tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--pri
   .vp-grid { grid-template-columns: 1fr; }
   /* Three plots side by side stop being readable below ~1200px: axis labels
      and legends start colliding. Step down to two rather than straight to one. */
-  .qgrid { grid-template-columns: repeat(2, 1fr); }
+  .qgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .qgrid > *, .qgrid > :last-child:nth-child(3n + 1),
+  .qgrid > :nth-last-child(2):nth-child(3n + 1),
+  .qgrid > :last-child:nth-child(3n + 2) { grid-column: span 1; }
+  /* Odd count, two columns: the last one takes the row. */
+  .qgrid > :last-child:nth-child(odd) { grid-column: span 2; }
 }
 
 /* self-relative valuation band */
@@ -700,8 +717,15 @@ table.screen.cmp-heat tbody tr { cursor: default; }
 .sel-lab { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
 
 /* Four charts read better two-up than three-plus-one. */
-.qgrid.grid-2 { grid-template-columns: repeat(2, 1fr); }
-@media (max-width: 900px) { .qgrid.grid-2 { grid-template-columns: 1fr; } }
+.qgrid.grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.qgrid.grid-2 > *, .qgrid.grid-2 > :last-child:nth-child(3n + 1),
+.qgrid.grid-2 > :nth-last-child(2):nth-child(3n + 1),
+.qgrid.grid-2 > :last-child:nth-child(3n + 2) { grid-column: span 1; }
+.qgrid.grid-2 > :last-child:nth-child(odd) { grid-column: span 2; }
+@media (max-width: 900px) {
+  .qgrid.grid-2 { grid-template-columns: 1fr; }
+  .qgrid.grid-2 > *, .qgrid.grid-2 > :last-child:nth-child(odd) { grid-column: span 1; }
+}
 
 /* The four headline macro readings belong on one row; .metrics is three wide
    for the ticker header, which wrapped them 3 + 1. */

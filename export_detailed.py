@@ -46,6 +46,17 @@ INCOME_ITEMS = {
     "tax_expense":         ["corporate_income_tax_expenses"],
     "net_income":          ["net_profit_loss_after_tax", "attributable_to_parent_company",
                             "net_profit_attributable_to_shareholders_of_the_group"],
+    # Brokers report no pre-tax subtotal and no "other profit", so the profit
+    # structure chart cannot be built for them and the sector rendered one chart
+    # short of everyone else. What they do report, in detail, is where the
+    # revenue comes from -- and the mix between brokerage, proprietary trading
+    # and margin lending is the question about a broker.
+    "sec_brokerage":       ["revenue_in_brokerage_services"],
+    "sec_fvtpl_income":    ["income_from_financial_assets_recognized_through_profit_loss_fvtpl"],
+    "sec_margin_income":   ["income_from_loans_and_receivables"],
+    "sec_custody":         ["revenue_in_securities_custody_services"],
+    "sec_advisory":        ["revenue_in_financial_advisory_services",
+                            "revenue_in_stock_investment_advisory_services"],
     # Insurers: the combined ratio and its two halves are the sector's headline
     # numbers, and none of them can be derived from the industrial items above.
     "ins_gross_premium":   ["gross_written_premium"],
