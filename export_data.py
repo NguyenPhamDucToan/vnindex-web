@@ -264,7 +264,8 @@ def main() -> None:
 
     with engine.connect() as conn:
         companies = pd.read_sql(
-            text("SELECT ticker, name, sector, industry, exchange "
+            text("SELECT ticker, name, sector, industry, exchange, "
+                 "shares_outstanding_current, shares_updated_at "
                  "FROM companies WHERE is_active = TRUE ORDER BY ticker"),
             conn)
         print(f"  companies: {len(companies)}")
@@ -309,6 +310,34 @@ def main() -> None:
     # ---- per-ticker files ----------------------------------------------
     val_by_ticker = {t: g for t, g in valuations.groupby("ticker")}
     fin_by_ticker = {t: g for t, g in financials.groupby("ticker")}
+
+    # A bonus issue after the last balance-sheet date leaves the reported share
+    # count stale, so market cap comes out too low and every per-share figure
+    # too high -- TRA showed 41.5m shares against 82.9m actually in issue. The
+    # valuation layer already prefers the live count (valuation/inputs.py);
+    # apply the same substitution to the newest quarterly row so the figures the
+    # front end derives for itself -- market cap, cash flow per share, the
+    # comparison table -- rest on the same base.
+    _live_shares = {r.ticker: float(r.shares_outstanding_current)
+                    for r in companies.itertuples()
+                    if getattr(r, "shares_outstanding_current", None)}
+    _sh_fixed = 0
+    for _t, _g in fin_by_ticker.items():
+        _live = _live_shares.get(_t)
+        if not _live:
+            continue
+        _q = _g.index[_g["period_type"] == "Q"]
+        if not len(_q):
+            continue
+        _last = _q[-1]
+        _rep = _g.at[_last, "shares_outstanding"]
+        if _rep and abs(float(_live) / float(_rep) - 1.0) > 0.01:
+            _g = _g.copy()
+            _g.at[_last, "shares_outstanding"] = _live
+            fin_by_ticker[_t] = _g
+            _sh_fixed += 1
+            print(f"    shares {_t}: {float(_rep):,.1f}m reported -> {_live:,.1f}m in issue")
+    print(f"  share count restated for {_sh_fixed} tickers")
     px_by_ticker = {t: g for t, g in prices.groupby("ticker")}
     # Only real companies: covered warrants have no price band, so their genuine
     # swings would be "corrected" into nonsense.
