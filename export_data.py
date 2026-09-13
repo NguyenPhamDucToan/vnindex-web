@@ -138,6 +138,67 @@ def load_vnindex() -> "pd.Series | None":
         return None
 
 
+# HOSE caps an ordinary session at +-7%, so a close that moves further than
+# that against the previous one is not a market move -- it is a split or a
+# bonus issue that the price feed never adjusted for. collectors/prices.py sets
+# adjusted_close = close because vnstock's VCI source offers no adjusted
+# series, so the raw jumps reach every chart: TRA fell 80.10 -> 38.17 on
+# 2026-07-17, VHM 148.00 -> 76.45, PHR 61.40 -> 32.78. 28 of 403 tickers carry
+# one inside the one-year window the performance chart and the risk metrics
+# use, and it inflated annualised volatility by up to 2x (AAN 60.2% against a
+# true 30.1%). Back-adjusting here rather than in the database keeps the raw
+# series intact -- a bad detection is undone by re-exporting.
+#
+# 15% is deliberately well clear of the band: a cash dividend of a few percent
+# is indistinguishable from a market move and is left alone. Only the large,
+# unmistakable actions are corrected.
+_CA_BAND = 0.15
+_CA_MAX = 25.0          # beyond this it is a data error, not a corporate action
+
+
+def adjust_corporate_actions(df, ticker: str = ""):
+    """Back-adjust OHLC and volume for splits and bonus issues.
+
+    Returns (adjusted_df, events). The newest bar is never touched: adjustment
+    scales history onto today's share base, so current prices stay as traded.
+    Volume is scaled the opposite way, which keeps close * volume -- the
+    turnover the liquidity metrics use -- unchanged across the event.
+    """
+    if df is None or len(df) < 3:
+        return df, []
+    closes = df["close"].astype(float).to_numpy()
+    dates = df["date"].astype(str).to_numpy()
+    n = len(closes)
+    factors = [1.0] * n
+    f = 1.0
+    events = []
+    for i in range(n - 1, 0, -1):
+        prev_c, cur_c = closes[i - 1], closes[i]
+        if prev_c > 0 and cur_c > 0:
+            ratio = prev_c / cur_c
+            if ((ratio > 1 + _CA_BAND or ratio < 1 / (1 + _CA_BAND))
+                    and 1 / _CA_MAX < ratio < _CA_MAX):
+                f *= ratio
+                events.append((dates[i], round(ratio, 4)))
+        factors[i - 1] = f
+    if not events:
+        return df, []
+    out = df.copy()
+    fac = pd.Series(factors, index=out.index)
+    for col in ("open", "high", "low", "close"):
+        if col in out.columns:
+            # 4 decimals on a price quoted in thousands of VND is a tenth of a
+            # dong -- finer than any tick, and it keeps the JSON from growing a
+            # dozen digits per bar.
+            out[col] = (out[col].astype(float) / fac).round(4)
+    if "volume" in out.columns:
+        # Volume is a share count, so it stays whole. Scaling it the opposite
+        # way to price is what keeps close * volume -- the turnover behind the
+        # liquidity metrics -- unchanged across the event.
+        out["volume"] = (out["volume"].astype(float) * fac).round(0)
+    return out, list(reversed(events))
+
+
 def compute_beta_from(prices_df, vni: "pd.Series | None", days: int = 252) -> float:
     """β = Cov(stock, market) / Var(market) on daily returns — same as wacc.compute_beta."""
     DEFAULT_BETA = 1.2
@@ -249,6 +310,20 @@ def main() -> None:
     val_by_ticker = {t: g for t, g in valuations.groupby("ticker")}
     fin_by_ticker = {t: g for t, g in financials.groupby("ticker")}
     px_by_ticker = {t: g for t, g in prices.groupby("ticker")}
+    # Only real companies: covered warrants have no price band, so their genuine
+    # swings would be "corrected" into nonsense.
+    _real = set(financials["ticker"].unique())
+    _ca_total = 0
+    for _t in list(px_by_ticker):
+        if _t not in _real:
+            continue
+        _adj, _ev = adjust_corporate_actions(px_by_ticker[_t], _t)
+        if _ev:
+            px_by_ticker[_t] = _adj
+            _ca_total += len(_ev)
+            print(f"    corporate action {_t}: " +
+                  ", ".join(f"{d} x{r}" for d, r in _ev))
+    print(f"  back-adjusted {_ca_total} corporate actions")
     hist_by_ticker = {t: g for t, g in val_hist.groupby("ticker")}
 
     n = 0
