@@ -18,18 +18,31 @@ export const SIGNAL_VI = {
 
 const clamp10 = (x) => Math.max(0, Math.min(10, x));
 
-// Composite 0-100 quality score from 6 stored ratios. Same thresholds as
-// compute_quality_score() in signals.py.
+// Banks, brokers and insurers do not report the line items three of these six
+// thresholds are calibrated against, so those sub-scores stop measuring
+// anything for them -- 19 of 21 banks scored a perfect 10/10 on net margin
+// (their "revenue" is total operating income, median margin 37% against a 20%
+// bar) and 18 of 21 on FCF margin. See FINANCIAL_SECTORS in signals.py for the
+// measurements behind each substitution; this mirrors it exactly.
+export const FINANCIAL_SECTORS = new Set(["Ngân hàng", "Chứng khoán", "Bảo hiểm"]);
+
+// Composite 0-100 quality score from up to 6 stored ratios. Same thresholds as
+// compute_quality_score() in signals.py. Omitting `sector` keeps the original
+// industrial bars, as it does in Python.
 export function computeQualityScore(roe, netMargin, profitQuality, fcfMargin,
-                                    currentRatio, debtToEquity) {
+                                    currentRatio, debtToEquity, sector) {
   const s = [];
+  const fin = FINANCIAL_SECTORS.has(sector);
   const has = (v) => typeof v === "number" && isFinite(v);
   if (has(roe))           s.push(clamp10(Math.max(roe, 0) / 0.25 * 10));
-  if (has(netMargin))     s.push(clamp10(Math.max(netMargin, 0) / 0.20 * 10));
-  if (has(profitQuality)) s.push(clamp10(Math.max(profitQuality, 0) / 1.5 * 10));
-  if (has(fcfMargin))     s.push(clamp10(Math.max(fcfMargin, 0) / 0.15 * 10));
+  if (has(netMargin))     s.push(clamp10(Math.max(netMargin, 0) / (fin ? 0.40 : 0.20) * 10));
+  if (has(profitQuality) && !fin) s.push(clamp10(Math.max(profitQuality, 0) / 1.5 * 10));
+  if (has(fcfMargin) && !fin)     s.push(clamp10(Math.max(fcfMargin, 0) / 0.15 * 10));
   if (has(currentRatio))  s.push(clamp10((currentRatio - 0.5) / 2.0 * 10));
-  if (has(debtToEquity))  s.push(clamp10((3.0 - Math.min(debtToEquity, 3.0)) / 3.0 * 10));
+  if (has(debtToEquity)) {
+    const bar = fin ? 4.0 : 3.0;
+    s.push(clamp10((bar - Math.min(debtToEquity, bar)) / bar * 10));
+  }
   if (!s.length) return 0;
   return Math.round(s.reduce((a, b) => a + b, 0) / s.length * 10 * 10) / 10;
 }

@@ -576,7 +576,7 @@ function valuationSummary(co, v, model, analyst, last) {
   // winsorized by model_valuation.py -- unlike the raw dcf_estimate, which is
   // garbage for banks (VCB reads +715%).
   const upFrac = F.isNum(model.upside) ? model.upside : null;
-  const q = computeQualityScore(v.roe, v.net_margin, v.profit_quality, v.fcf_margin, v.current_ratio, v.debt_to_equity);
+  const q = computeQualityScore(v.roe, v.net_margin, v.profit_quality, v.fcf_margin, v.current_ratio, v.debt_to_equity, co.sector);
   const sig = (upFrac != null) ? classifySignal(upFrac, q) : null;
 
   const mColor = upFrac == null ? "#5b6675" : upFrac >= 0 ? "#15803d" : "#b91c1c";
@@ -650,7 +650,7 @@ async function enrichScreener() {
   if (SCREEN_ROWS) return SCREEN_ROWS;
   const rows = await loadScreener();
   SCREEN_ROWS = rows.map((r) => {
-    const q = computeQualityScore(r.roe, r.net_margin, r.profit_quality, r.fcf_margin, r.current_ratio, r.debt_to_equity);
+    const q = computeQualityScore(r.roe, r.net_margin, r.profit_quality, r.fcf_margin, r.current_ratio, r.debt_to_equity, r.sector);
     const upFrac = F.isNum(r.model_upside) ? r.model_upside : null;   // sector-adjusted fraction
     const sig = upFrac != null ? classifySignal(upFrac, q) : null;
     return { ...r, q, sig, upFrac };
@@ -1471,7 +1471,7 @@ async function renderPortfolio() {
     const last = d && d.prices && d.prices.length ? d.prices[d.prices.length - 1].close : null;
     const up = d && d.model ? d.model.upside : null;
     const v = d && d.valuation || {};
-    const q = d ? computeQualityScore(v.roe, v.net_margin, v.profit_quality, v.fcf_margin, v.current_ratio, v.debt_to_equity) : null;
+    const q = d ? computeQualityScore(v.roe, v.net_margin, v.profit_quality, v.fcf_margin, v.current_ratio, v.debt_to_equity, (d.company || {}).sector) : null;
     const sig = (F.isNum(up) && q != null) ? classifySignal(up, q) : null;
     const cost = h.shares * h.entry * 1000;
     const val = F.isNum(last) ? h.shares * last * 1000 : null;

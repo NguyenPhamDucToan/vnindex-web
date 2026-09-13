@@ -176,7 +176,7 @@ export async function renderCompare(root, onPick) {
         const d = await loadTicker(t);
         const s = byTicker.get(t) || {};
         const v = d.valuation || {};
-        const q = computeQualityScore(v.roe, v.net_margin, v.profit_quality, v.fcf_margin, v.current_ratio, v.debt_to_equity);
+        const q = computeQualityScore(v.roe, v.net_margin, v.profit_quality, v.fcf_margin, v.current_ratio, v.debt_to_equity, (d.company || {}).sector);
         const upFrac = F.isNum((d.model || {}).upside) ? d.model.upside : null;
         data.push({ t, d, v, q, upFrac, sig: upFrac != null ? classifySignal(upFrac, q) : null,
                     ttm: computeTTM(d.financials || []) || {},
@@ -206,7 +206,7 @@ export async function renderCompare(root, onPick) {
         const ctx = {
           t: r.ticker, d: pd, v: pv,
           q: computeQualityScore(pv.roe, pv.net_margin, pv.profit_quality, pv.fcf_margin,
-                                 pv.current_ratio, pv.debt_to_equity),
+                                 pv.current_ratio, pv.debt_to_equity, r.sector),
           upFrac: F.isNum((pd.model || {}).upside) ? pd.model.upside : null,
           ttm: computeTTM(pd.financials || []) || {},
         };
