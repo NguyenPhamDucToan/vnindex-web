@@ -355,6 +355,11 @@ def main() -> None:
     print(f"  back-adjusted {_ca_total} corporate actions")
     hist_by_ticker = {t: g for t, g in val_hist.groupby("ticker")}
 
+    # The market's newest session: a ticker whose own last close is older than
+    # this has stopped trading, and every price-derived figure it carries is as
+    # old as that close.
+    market_last_date = pd.to_datetime(prices["date"]).max() if len(prices) else None
+
     n = 0
     model_out = {}          # ticker -> {"price": .., "upside": ..} for screener
     change_out = {}         # ticker -> {"chg": .., "close": .., "vol": ..}
@@ -391,14 +396,25 @@ def main() -> None:
                 print(f"    ! model {t}: {e}")
         model_out[t] = model
 
-        # Latest daily % change + volume, for the market-overview movers.
+        # Latest daily % change + volume, for the market-overview movers. A
+        # suspended ticker has two consecutive rows months apart, and dividing
+        # them produced a "daily change" that put it at the top of the movers
+        # table and painted its heat-map box: BCG last traded 2025-10-08, 338
+        # sessions before the market's newest close. A change between two prices
+        # that are not consecutive sessions is not a daily change.
         chg = None
+        px_age = None
         if px is not None and len(px) >= 2:
+            d_last = pd.to_datetime(px["date"].iloc[-1])
+            d_prev = pd.to_datetime(px["date"].iloc[-2])
+            px_age = (market_last_date - d_last).days if market_last_date is not None else None
             prev = float(px["close"].iloc[-2])
-            if prev:
+            if prev and (d_last - d_prev).days <= 10 and (px_age is None or px_age <= 10):
                 chg = (last_close - prev) / prev
         change_out[t] = {"chg": _clean(chg), "close": _clean(last_close),
-                         "vol": _clean(float(px["volume"].iloc[-1]) if px is not None and len(px) else None)}
+                         "vol": _clean(float(px["volume"].iloc[-1]) if px is not None and len(px) else None),
+                         "px_date": _clean(px["date"].iloc[-1]) if px is not None and len(px) else None,
+                         "px_age": _clean(px_age)}
 
         # Fast VNDirect foreign flow inline. Analyst rec is a rate-limited VCI
         # call (~20/min Guest cap, with 57s penalties) so it can't run in this
@@ -448,6 +464,15 @@ def main() -> None:
     screener["model_price"] = screener.ticker.map(lambda t: model_out.get(t, {}).get("price"))
     screener["model_upside"] = screener.ticker.map(lambda t: model_out.get(t, {}).get("upside"))
     screener["chg"] = screener.ticker.map(lambda t: change_out.get(t, {}).get("chg"))
+    # How stale each row is, so the views can mark it instead of ranking it
+    # alongside live ones: BCG published a P/B of 0.10 -- the cheapest on the
+    # board -- from a year-old price over two-year-old book value.
+    screener["px_age"] = screener.ticker.map(lambda t: change_out.get(t, {}).get("px_age"))
+    screener["px_date"] = screener.ticker.map(lambda t: change_out.get(t, {}).get("px_date"))
+    screener["last_q"] = screener.ticker.map(
+        lambda t: (str(fin_by_ticker[t][fin_by_ticker[t]["period_type"] == "Q"]["period"].iloc[-1])
+                   if t in fin_by_ticker and
+                   len(fin_by_ticker[t][fin_by_ticker[t]["period_type"] == "Q"]) else None))
     # Latest close, so the screener can show "Giá (VND)" like the original.
     screener["close"] = screener.ticker.map(lambda t: change_out.get(t, {}).get("close"))
     screener["vol"] = screener.ticker.map(lambda t: change_out.get(t, {}).get("vol"))

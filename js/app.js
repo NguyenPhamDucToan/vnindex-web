@@ -186,6 +186,20 @@ async function renderStock(t) {
   headRow.appendChild(header(co, last, prev, chg, chgPct));
   headRow.appendChild(metricsGrid(co, v, q, mcap, shares, vol15));
   root.appendChild(headRow);
+  // Before any of the numbers, say if they are old ones. The screener row
+  // carries how far behind this ticker's last trade and last filing are,
+  // measured against the rest of the market at export time.
+  {
+    const srow = (await loadScreener().catch(() => []))
+      .find((r) => r.ticker === co.ticker) || {};
+    const note = stalenessNote(
+      co, last,
+      { actual: srow.last_q, expected: marketQuarter(await loadScreener().catch(() => [])) },
+      srow.px_age != null && last.date
+        ? new Date(Date.parse(last.date) + srow.px_age * 86400000).toISOString().slice(0, 10)
+        : null);
+    if (note) root.appendChild(note);
+  }
   const hd = holdersSection(d.holders);
   if (hd) root.appendChild(hd);
 
@@ -369,6 +383,34 @@ function priceState(exchange, close, prevClose) {
   if (chg === 0) return PRICE_STATES.flat;
   if (close <= prevClose * (1 - band) * 1.0005) return PRICE_STATES.floor;
   return PRICE_STATES.down;
+}
+
+// A ticker that has stopped trading or stopped filing still carries a price and
+// a set of ratios, and nothing about them says how old they are. BCG last traded
+// 2025-10-08 and last reported 2024-Q4, yet published a P/B of 0.10 -- the
+// cheapest on the board -- from that year-old price over that two-year-old book
+// value. Say so where it is read.
+// The quarter most of the market is on, so a lone ticker behind it stands out
+// without hard-coding a calendar.
+export function marketQuarter(rows) {
+  const count = {};
+  for (const r of rows || []) if (r.last_q) count[r.last_q] = (count[r.last_q] || 0) + 1;
+  return Object.keys(count).sort((a, b) => count[b] - count[a])[0] || null;
+}
+
+export function stalenessNote(co, last, lastQuarter, marketDate) {
+  const bits = [];
+  if (last && last.date && marketDate) {
+    const days = Math.round((Date.parse(marketDate) - Date.parse(last.date)) / 86400000);
+    if (days > 10) bits.push(`giá gần nhất ${last.date} (${days} ngày trước)`);
+  }
+  if (lastQuarter && lastQuarter.expected && lastQuarter.actual
+      && lastQuarter.actual < lastQuarter.expected) {
+    bits.push(`báo cáo gần nhất ${lastQuarter.actual}`);
+  }
+  if (!bits.length) return null;
+  return el(`<div class="stale-note">⚠ Dữ liệu đã cũ — ${bits.join(" · ")}.
+    Mọi tỷ số bên dưới tính trên số liệu đó, không phải số hiện tại.</div>`);
 }
 
 function header(co, last, prev, chg, chgPct) {
@@ -717,6 +759,11 @@ async function renderScreener() {
   const root = $("#view-screen");
   root.innerHTML = `<div class="loading">Đang tải…</div>`;
   const rows = await enrichScreener();
+  // The quarter the market as a whole is on -- the commonest last_q, not a
+  // calendar guess -- so a row sitting behind it can be marked as stale.
+  const qCount = {};
+  for (const r of rows) if (r.last_q) qCount[r.last_q] = (qCount[r.last_q] || 0) + 1;
+  const lastQExpected = Object.keys(qCount).sort((a, b) => qCount[b] - qCount[a])[0] || null;
   const sectors = [...new Set(rows.map((r) => r.sector).filter(Boolean))].sort();
   const wl = loadWL();
 
@@ -884,7 +931,8 @@ async function renderScreener() {
     for (const r of out) {
       const tr = el(`<tr>
         <td class="wl-cell"><button class="wl-star ${wl.has(r.ticker) ? "on" : ""}" title="Theo dõi">${wl.has(r.ticker) ? "★" : "☆"}</button></td>
-        <td><b>${r.ticker}</b></td>
+        <td><b>${r.ticker}</b>${(r.px_age ?? 0) > 10 || (r.last_q && lastQExpected && r.last_q < lastQExpected)
+          ? ` <span class="stale-tag" title="Giá gần nhất ${r.px_date || "?"} · Báo cáo gần nhất ${r.last_q || "?"}">cũ</span>` : ""}</td>
         <td>${r.sig ? `<span style="color:${SIGNAL_COLOR[r.sig]}">${SIGNAL_VI[r.sig]}</span>` : "—"}</td>
         <td class="dim">${F.escapeHtml(r.sector || "")}</td>
         <td>${F.priceVND(r.close)}</td>
