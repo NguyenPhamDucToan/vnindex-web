@@ -64,8 +64,10 @@ function base(height = 300) {
     hovermode: "x unified",
   };
 }
-const pctAxis = (l) => Object.assign(l, {
-  yaxis2: { overlaying: "y", side: "right", tickformat: ".0%", tickfont: { ...FONT, size: 9 }, showgrid: false, zeroline: false } });
+// tickformat "%" multiplies by 100 itself, so every series on this axis must be
+// a FRACTION. A ratio that is already a percent number renders 100x too large.
+const pctAxis = (l, fmt = ".0%") => Object.assign(l, {
+  yaxis2: { overlaying: "y", side: "right", tickformat: fmt, tickfont: { ...FONT, size: 9 }, showgrid: false, zeroline: false } });
 const numAxis = (l, fmt = ".2f") => Object.assign(l, {
   yaxis2: { overlaying: "y", side: "right", tickformat: fmt, tickfont: { ...FONT, size: 9 }, showgrid: false, zeroline: false } });
 const pctY = (l) => Object.assign(l, {
@@ -291,8 +293,9 @@ export function quarterlyCharts(parent, co, financials, detail, prices, valHisto
       { type: "bar", name: "Chi phí dự phòng", x, y: qs.map((q) => (isN(q.cogs) ? Math.abs(q.cogs) : null)), marker: { color: RED} },
       { type: "scatter", mode: "lines+markers", name: "Chi phí tín dụng (năm hóa)", x,
         y: qs.map((q) => (isN(q.cogs) && q.receivables ? Math.abs(q.cogs) * 4 / q.receivables : null)),
-        yaxis: "y2", line: { color: GOLD, width: 1.5 }, marker: { size: 4 } },
-    ], pctAxis(base()));
+        yaxis: "y2", line: { color: GOLD, width: 1.5 }, marker: { size: 4 },
+        hovertemplate: "Chi phí tín dụng: %{y:.2%}<extra></extra>" },
+    ], pctAxis(base(), ".2%"));
   } else {
     const provInv = dSeries("balance", "prov_inventory");
     const provDbt = dSeries("balance", "prov_doubtful");
@@ -400,9 +403,10 @@ export function quarterlyCharts(parent, co, financials, detail, prices, valHisto
           text: provB.map((v) => ((v || 0) < 0 ? "★ HOÀN NHẬP" : "")),
           textposition: "outside", textfont: { ...FONT, size: 10, color: GREEN2 } },
         { type: "scatter", mode: "lines+markers", name: "Chi phí tín dụng % (năm hóa)", x,
-          y: qs.map((q) => (isN(q.cogs) && q.receivables ? q.cogs * 4 / q.receivables * 100 : null)),
+          y: qs.map((q) => (isN(q.cogs) && q.receivables ? q.cogs * 4 / q.receivables : null)),
+          hovertemplate: "Chi phí tín dụng: %{y:.2%}<extra></extra>",
           yaxis: "y2", line: { color: GOLD, width: 2 }, marker: { size: 5 } },
-      ], Object.assign(pctAxis(base()), {
+      ], Object.assign(pctAxis(base(), ".2%"), {
         shapes: [{ type: "line", xref: "paper", x0: 0, x1: 1, y0: 0, y1: 0,
                    line: { color: "#64748b", width: 1, dash: "dot" }, opacity: 0.5 }],
         annotations: [{ text: "Xanh = Hoàn nhập | Đỏ = Trích lập mới", x: 0, xref: "paper",
@@ -474,12 +478,15 @@ export function quarterlyCharts(parent, co, financials, detail, prices, valHisto
     const fvtpl = dSeries("balance", "fvtpl");
     if (isSec && fvtpl) {
       // QoQ, not YoY -- a trading book turns over far faster than inventory.
-      const qoq = fvtpl.map((v, i) => (i && isN(v) && fvtpl[i - 1] ? (v / fvtpl[i - 1] - 1) * 100 : null));
+      // A fraction, not a percent number: the axis format multiplies by 100
+      // itself, and passing 10.9 for +10.9% rendered +1090%.
+      const qoq = fvtpl.map((v, i) => (i && isN(v) && fvtpl[i - 1] ? v / fvtpl[i - 1] - 1 : null));
       add("Danh mục tài sản tài chính", [
         { type: "bar", name: "Tài sản tài chính (FVTPL/AFS)", x, y: fvtpl, marker: { color: BLUE} },
-        { type: "scatter", mode: "lines+markers", name: "Tăng trưởng QoQ %", x, y: qoq,
+        { type: "scatter", mode: "lines+markers", name: "Tăng trưởng QoQ", x, y: qoq,
+          hovertemplate: "QoQ: %{y:+.1%}<extra></extra>",
           yaxis: "y2", line: { color: GOLD, width: 2 }, marker: { size: 5 } },
-      ], pctAxis(base()));
+      ], pctAxis(base(), ".1%"));
     }
 
     const invGross = dSeries("balance", "inventory_gross"), provInv = dSeries("balance", "prov_inventory");
