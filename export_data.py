@@ -451,8 +451,19 @@ def main() -> None:
                 if _fin_q is not None and len(_fin_q):
                     _lastq = _fin_q[_fin_q["period_type"] == "Q"].tail(1)
                     if len(_lastq):
-                        _dbt = float(_lastq["debt"].iloc[0] or 0)
-                        _eqt = float(_lastq["equity"].iloc[0] or 1)
+                        # NaN is truthy, so `float(x or 0)` returns NaN and
+                        # poisons the WACC. All five insurers file no debt line,
+                        # their debt came through as NaN, and wacc_ticker landed
+                        # as None -- which hid the whole ROIC vs WACC block for
+                        # the sector.
+                        def _num0(x, dflt):
+                            try:
+                                f = float(x)
+                                return dflt if math.isnan(f) else f
+                            except (TypeError, ValueError):
+                                return dflt
+                        _dbt = _num0(_lastq["debt"].iloc[0], 0.0)
+                        _eqt = _num0(_lastq["equity"].iloc[0], 1.0) or 1.0
                 prm["beta"] = _clean(_beta)
                 prm["wacc_ticker"] = _clean(
                     _wacc_calc(_beta, DEFAULT_COD, _dbt or 0.0, _eqt or 1.0))

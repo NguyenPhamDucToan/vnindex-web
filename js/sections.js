@@ -2,18 +2,32 @@
 // DuPont, ROIC vs WACC, and the peer comparison card. Logic is ported 1:1 from
 // valuation/ratios.py (dupont_analysis, roic) and the app's ROIC block so the
 // two builds reach the same verdicts, not merely similar-looking ones.
-import { ratingColor } from "./ratings.js";
+import { ratingColor, sectorBand } from "./ratings.js";
 import * as F from "./format.js";
 
 const el = (h) => { const t = document.createElement("template"); t.innerHTML = h.trim(); return t.content.firstElementChild; };
 const TAX_RATE = 0.20;
 
 // ── DuPont ──────────────────────────────────────────────────────────
-function dupontAnalysis(margin, turnover, leverage) {
+// Asset turnover and leverage are structural for a bank, not choices: it funds
+// a large balance sheet with deposits by design. Against the industrial bands
+// all 21 came out "asset efficiency low" and "leverage high -- risky", and the
+// verdict then told every one of them its ROE was debt-driven and
+// unsustainable. Bands come from ratings.js, shared with the scorecard so the
+// same number is never two colours on one page.
+function dupontAnalysis(margin, turnover, leverage, sector) {
   const roe = margin * turnover * leverage;
-  const mL = margin >= 0.10 ? "cao" : margin >= 0.05 ? "trung bình" : "thấp";
-  const tL = turnover >= 1.0 ? "cao" : turnover >= 0.5 ? "trung bình" : "thấp";
-  const lL = leverage >= 3.0 ? "cao" : leverage >= 2.0 ? "trung bình" : "thấp";
+  const bM = sectorBand(sector, "net");
+  const bT = sectorBand(sector, "turnover");
+  const bL = sectorBand(sector, "leverage");
+  const fin = bT !== undefined;
+  const [mGood, mOk] = bM || [0.10, 0.05];
+  const [tGood, tOk] = bT || [1.0, 0.5];
+  // Lower is better, so the pair reads (normal, stretched).
+  const [lNorm, lStretch] = bL || [2.0, 3.0];
+  const mL = margin >= mGood ? "cao" : margin >= mOk ? "trung bình" : "thấp";
+  const tL = turnover >= tGood ? "cao" : turnover >= tOk ? "trung bình" : "thấp";
+  const lL = leverage > lStretch ? "cao" : leverage > lNorm ? "trung bình" : "thấp";
   const rL = roe >= 0.15 ? "cao" : roe >= 0.10 ? "trung bình" : "thấp";
 
   const drivers = [];
@@ -23,15 +37,19 @@ function dupontAnalysis(margin, turnover, leverage) {
   const weak = [];
   if (mL === "thấp") weak.push("biên lợi nhuận thấp");
   if (tL === "thấp") weak.push("hiệu suất sử dụng tài sản thấp");
-  if (lL === "thấp") weak.push("ít dùng vay nợ nên đòn bẩy không hỗ trợ thêm cho ROE");
+  // A bank does not "choose" not to lever up, so this reads as nonsense there.
+  if (lL === "thấp" && !fin) weak.push("ít dùng vay nợ nên đòn bẩy không hỗ trợ thêm cho ROE");
 
   let comment;
   if (rL === "cao") {
     comment = drivers.length
       ? `ROE cao chủ yếu được thúc đẩy bởi: ${drivers.join(", ")}.`
       : "ROE cao nhưng không có yếu tố nào nổi bật rõ ràng.";
-    if (lL === "cao" && mL !== "cao") {
+    const fin = sectorBand(sector, "turnover") !== undefined;
+    if (lL === "cao" && mL !== "cao" && !fin) {
       comment += " ⚠️ Lưu ý: ROE cao phần lớn đến từ vay nợ chứ không phải lợi nhuận kinh doanh — đây là tín hiệu kém bền vững hơn, vì rủi ro tăng khi lãi suất tăng hoặc kinh doanh sa sút.";
+    } else if (lL === "cao" && fin) {
+      comment += " Đòn bẩy ở mức cao so với chính ngành này — với định chế tài chính, đòn bẩy là cấu trúc kinh doanh chứ không phải lựa chọn, nên hãy đọc kèm tỷ lệ vốn chủ / tổng tài sản ở bảng trên.";
     } else if (mL === "cao" && lL !== "cao") {
       comment += " ✅ Đây là dạng ROE cao bền vững — đến từ hiệu quả kinh doanh thực sự, không phải vay nợ nhiều.";
     }
@@ -45,10 +63,13 @@ function dupontAnalysis(margin, turnover, leverage) {
   return { roe, mL, tL, lL, rL, comment };
 }
 
-export function dupontSection(v) {
+export function dupontSection(v, sector) {
   const m = v.net_margin, t = v.asset_turnover, l = v.financial_leverage;
   if (!F.isNum(m) || !F.isNum(t) || !F.isNum(l)) return null;
-  const d = dupontAnalysis(m, t, l);
+  const d = dupontAnalysis(m, t, l, sector);
+  const bM = sectorBand(sector, "net") || [0.10, 0.05];
+  const bT = sectorBand(sector, "turnover") || [1.0, 0.5];
+  const bL = sectorBand(sector, "leverage") || [2.0, 3.0];
   const card = (label, value, color, hint) =>
     `<div class="dp-card"><div class="dp-k">${label}</div>
      <div class="dp-v" style="color:${color}">${value}</div>
@@ -65,11 +86,11 @@ export function dupontSection(v) {
   return el(`<div class="card">
     <h2 class="sec-h">DuPont</h2>
     <div class="dp-row">
-      ${card("Biên lợi nhuận ròng", F.pct(m), ratingColor(m, 0.10, 0.05), "LN ròng / Doanh thu")}
+      ${card("Biên lợi nhuận ròng", F.pct(m), ratingColor(m, bM[0], bM[1]), "LN ròng / Doanh thu")}
       ${op("×")}
-      ${card("Hiệu suất tài sản", F.mult(t), ratingColor(t, 1.0, 0.5), "Doanh thu / Tổng TS")}
+      ${card("Hiệu suất tài sản", F.mult(t), ratingColor(t, bT[0], bT[1]), "Doanh thu / Tổng TS")}
       ${op("×")}
-      ${card("Đòn bẩy tài chính", F.mult(l), ratingColor(l, 2.0, 3.0, false), "Tổng TS / Vốn CSH")}
+      ${card("Đòn bẩy tài chính", F.mult(l), ratingColor(l, bL[0], bL[1], false), "Tổng TS / Vốn CSH")}
       ${op("=")}
       ${card("ROE", F.pct(d.roe), ratingColor(d.roe, 0.15, 0.10), "LN ròng / Vốn CSH")}
     </div>

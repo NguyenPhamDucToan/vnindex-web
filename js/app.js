@@ -1,7 +1,7 @@
 import { loadCompanies, loadScreener, loadTicker, loadMeta, loadCommodities } from "./data.js";
 import { priceChart } from "./charts.js";
 import { computeQualityScore, classifySignal, SIGNAL_VI, SIGNAL_COLOR, SIGNAL_ORDER } from "./signals.js";
-import { ratingColor } from "./ratings.js";
+import { ratingColor, sectorBand } from "./ratings.js";
 import { computeTTM } from "./ttm.js";
 import { quarterlyCharts, foreignSection } from "./quarterly.js";
 import { valuationPanel, technicalPanel } from "./valuation-panel.js";
@@ -238,7 +238,7 @@ async function renderStock(t) {
   const ttm = computeTTM(d.financials || []);
   root.appendChild(scorecard(co, v, ttm));
 
-  const dp = dupontSection(v);
+  const dp = dupontSection(v, co.sector);
   if (dp) root.appendChild(dp);
   const rw = roicSection(d.financials || [], d.model || {});
   if (rw) root.appendChild(rw);
@@ -491,6 +491,22 @@ function scoreRow(title, cells) {
 
 function scorecard(co, v, ttm) {
   const isFin = FINANCIAL_SECTORS.has(co.sector);
+  // Sector bands live in ratings.js so DuPont grades the same number the same
+  // way. `undefined` = no sector table, use the generic threshold; `null` =
+  // deliberately not rated for this sector.
+  const mR = (val, key, good, ok) => {
+    const b = sectorBand(co.sector, key);
+    if (b === undefined) return R(val, good, ok);
+    return b ? R(val, b[0], b[1]) : "#666f7c";
+  };
+  const mBand = (key, g, w, b) => {
+    const x = sectorBand(co.sector, key);
+    if (x === undefined) return { g, w, b };
+    if (!x) return { g: "không xếp hạng", w: "—", b: "—" };
+    const f = (n) => `${(n * 100).toFixed(n < 0.1 ? 1 : 0)}%`;
+    return { g: `≥ ${f(x[0])} · nhóm đầu ngành`, w: `${f(x[1])} – ${f(x[0])} · giữa ngành`,
+             b: `< ${f(x[1])} · nhóm cuối ngành` };
+  };
   const isBank = co.sector === "Ngân hàng";
   const isSec = co.sector === "Chứng khoán";
   const isRE = co.sector === "Bất động sản";
@@ -499,21 +515,21 @@ function scorecard(co, v, ttm) {
   const div = (a, b) => (F.isNum(a) && b) ? a / b : null;
 
   card.appendChild(scoreRow("SINH LỜI", [
-    { label: isBank ? "Thu nhập lãi / Tổng TN" : "Biên LN gộp", value: F.pct(v.gross_margin), color: R(v.gross_margin, 0.25, 0.15),
+    { label: isBank ? "Thu nhập lãi / Tổng TN" : "Biên LN gộp", value: F.pct(v.gross_margin), color: mR(v.gross_margin, "gross", 0.25, 0.15),
       tip: { f: isBank ? "Thu nhập lãi thuần / Tổng thu nhập hoạt động" : "Lợi nhuận gộp / Doanh thu",
              d: isBank ? "Bao nhiêu phần thu nhập đến từ cho vay. Thấp hơn nghĩa là nguồn thu đa dạng hơn (phí, ngoại hối, đầu tư)"
                        : "Đo hiệu quả sản xuất cốt lõi trước chi phí vận hành",
-             g: "≥ 25%", w: "15 – 25%", b: "< 15%" } },
-    { label: isBank ? "Biên trước dự phòng" : "Biên hoạt động", value: F.pct(v.operating_margin), color: R(v.operating_margin, 0.15, 0.05),
+             ...mBand("gross", "≥ 25%", "15 – 25%", "< 15%") } },
+    { label: isBank ? "Biên trước dự phòng" : "Biên hoạt động", value: F.pct(v.operating_margin), color: mR(v.operating_margin, "op", 0.15, 0.05),
       tip: { f: isBank ? "Lợi nhuận trước dự phòng (PPOP) / Tổng thu nhập hoạt động" : "EBIT / Doanh thu",
              d: isBank ? "Lãi còn lại sau chi phí vận hành nhưng trước khi trích lập dự phòng nợ xấu"
                        : "Lợi nhuận sau chi phí bán hàng & quản lý, trước lãi vay và thuế",
-             g: "≥ 15%", w: "5 – 15%", b: "< 5%" } },
-    { label: "Biên lợi nhuận ròng", value: F.pct(v.net_margin), color: R(v.net_margin, 0.10, 0.05) , tip: { f: "Lợi nhuận sau thuế / Doanh thu", d: "Tỷ suất sinh lời thực tế cuối cùng giữ lại cho cổ đông", g: "≥ 10%", w: "5 – 10%", b: "< 5%" } },
+             ...mBand("op", "≥ 15%", "5 – 15%", "< 5%") } },
+    { label: "Biên lợi nhuận ròng", value: F.pct(v.net_margin), color: mR(v.net_margin, "net", 0.10, 0.05) , tip: { f: "Lợi nhuận sau thuế / Doanh thu", d: "Tỷ suất sinh lời thực tế cuối cùng giữ lại cho cổ đông", ...mBand("net", "≥ 10%", "5 – 10%", "< 5%") } },
     { label: "ROE", value: F.pct(v.roe), color: R(v.roe, 0.15, 0.10) , tip: { f: "Lợi nhuận ròng / Vốn chủ sở hữu", d: "Đo mức sinh lời trên đồng vốn cổ đông bỏ ra", g: "≥ 15%", w: "10 – 15%", b: "< 10%" } },
     // Banks earn 1-2% on a deposit-funded asset base by design; scoring against
     // the 8%/5% industrial band would paint every bank red.
-    { label: "ROA", value: F.pct(v.roa), color: isBank ? R(v.roa, 0.015, 0.010) : R(v.roa, 0.08, 0.05) , tip: { f: "Lợi nhuận ròng / Tổng tài sản", d: "Đo hiệu quả sử dụng toàn bộ tài sản", g: "≥ 8%", w: "5 – 8%", b: "< 5%" } },
+    { label: "ROA", value: F.pct(v.roa), color: mR(v.roa, "roa", 0.08, 0.05) , tip: { f: "Lợi nhuận ròng / Tổng tài sản", d: "Đo hiệu quả sử dụng toàn bộ tài sản", ...mBand("roa", "≥ 8%", "5 – 8%", "< 5%") } },
   ]));
 
   if (isBank && ttm) {
