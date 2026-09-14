@@ -639,13 +639,13 @@ function scorecard(co, v, ttm, detail) {
     })();
     card.appendChild(scoreRow("THANH KHOẢN & CƠ CẤU TÀI SẢN", [
       { label: "Current ratio", value: F.mult(v.current_ratio), color: R(v.current_ratio, 2, 1) , tip: { f: "Tài sản ngắn hạn / Nợ ngắn hạn", d: "Khả năng trả nợ ngắn hạn bằng tài sản lưu động", g: "≥ 2x", w: "1 – 2x", b: "< 1x" } },
-      { label: "Dư nợ cho vay / Vốn chủ", value: F.mult(secLoan), color: R(secLoan, 1.5, 2.0, false) , tip: { f: "Phải thu (chủ yếu là dư nợ margin) / Vốn chủ sở hữu", d: "Quy mô cho vay margin so với vốn tự có. Trần quy định là 2 lần vốn chủ sở hữu, nên càng gần 2x thì càng ít chỗ để mở rộng và càng nhạy với một đợt giảm giá", g: "≤ 1.5x", w: "1.5 – 2x", b: "> 2x" } },
+      { label: "Dư nợ cho vay / Vốn chủ", value: F.mult(secLoan), color: R(secLoan, 1.5, 2.0, false) , tip: { f: "Dư nợ cho vay (margin & ứng trước) / Vốn chủ sở hữu", d: "Quy mô cho vay margin so với vốn tự có. Trần quy định là 2 lần vốn chủ sở hữu, nên càng gần 2x thì càng ít chỗ để mở rộng và càng nhạy với một đợt giảm giá", g: "≤ 1.5x", w: "1.5 – 2x", b: "> 2x" } },
       { label: "Tài sản tài chính / Tổng TS", value: F.pct(secFin), color: F.isNum(secFin) ? (secFin <= 0.5 ? "#16a34a" : secFin <= 0.7 ? "#b45309" : "#dc2626") : "#666f7c" , tip: { f: "Tài sản tài chính FVTPL & AFS / Tổng tài sản", d: "Phần tài sản đặt vào danh mục tự doanh. Càng lớn thì lợi nhuận càng đi theo thị trường chứ không theo phí môi giới", g: "≤ 50%", w: "50 – 70%", b: "> 70%" } },
     ]));
     card.appendChild(scoreRow("ĐÒN BẨY & AN TOÀN VỐN", [
       { label: "Nợ / Vốn chủ (D/E)", value: F.mult(v.debt_to_equity), color: R(v.debt_to_equity, 1, 2, false) , tip: { f: "Tổng nợ vay / Vốn chủ sở hữu", d: "Mức độ đòn bẩy tài chính", g: "≤ 1x", w: "1 – 2x", b: "> 2x" } },
       { label: "Nợ / Tổng tài sản", value: F.pct(v.debt_to_assets), color: R(v.debt_to_assets, 0.30, 0.60, false) , tip: { f: "Tổng nợ vay / Tổng tài sản", d: "Tỷ trọng nợ trong cơ cấu vốn", g: "≤ 30%", w: "30 – 60%", b: "> 60%" } },
-      { label: "Vốn chủ / Tổng tài sản", value: F.pct(ea), color: R(ea, 0.40, 0.25) , tip: { f: "Vốn chủ sở hữu / Tổng tài sản", d: "Đệm vốn tự có chống đỡ rủi ro. Mỏng thì chịu lỗ kém hơn khi nợ xấu tăng", g: "≥ 9%", w: "6 – 9%", b: "< 6%" } },
+      { label: "Vốn chủ / Tổng tài sản", value: F.pct(ea), color: R(ea, 0.40, 0.25) , tip: { f: "Vốn chủ sở hữu / Tổng tài sản", d: "Đệm vốn tự có so với toàn bộ tài sản. 25% tương đương tài sản gấp 4 lần vốn chủ — mỏng với một công ty cho vay margin, vì giá giảm là phải gọi thêm tiền ngay", g: "≥ 40%", w: "25 – 40%", b: "< 25%" } },
     ]));
   } else {
     card.appendChild(scoreRow("THANH KHOẢN", [
