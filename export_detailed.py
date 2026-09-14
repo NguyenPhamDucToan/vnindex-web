@@ -91,6 +91,11 @@ BALANCE_ITEMS = {
                            "trading_securities", "trading_securities_2",
                            "available_for_sale_financial_assets_afs"],
     "current_liabilities": ["current_liabilities"],
+    # A broker's margin book. `short_term_receivables` does not exist for them
+    # and `accounts_receivable` is trade receivables (1,132bn for SSI against a
+    # 40,473bn loan book), so the ratio a broker is actually judged on -- margin
+    # lending against equity, capped at 2x by regulation -- had no input.
+    "sec_loans":          ["loans"],
     "equity":             ["owners_equity", "equity"],
     # Insurers hold an investment book, not inventory; reserves are their
     # largest liability and drive solvency.

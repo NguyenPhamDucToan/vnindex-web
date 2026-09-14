@@ -236,7 +236,7 @@ async function renderStock(t) {
                   commodities);
 
   const ttm = computeTTM(d.financials || []);
-  root.appendChild(scorecard(co, v, ttm));
+  root.appendChild(scorecard(co, v, ttm, d.detail));
 
   const dp = dupontSection(v, co.sector);
   if (dp) root.appendChild(dp);
@@ -489,7 +489,24 @@ function scoreRow(title, cells) {
   return row;
 }
 
-function scorecard(co, v, ttm) {
+function scorecard(co, v, ttm, detail) {
+  const isIns = co.sector === "Bảo hiểm";
+  // Insurance line items live in `detail`, not in the shared Financial columns,
+  // so they are summed here over the same four quarters the TTM uses.
+  const dsum = (group, key) => {
+    const arr = ((detail || {})[group] || {})[key];
+    if (!Array.isArray(arr)) return null;
+    const last4 = arr.slice(-4).filter((x) => typeof x === "number" && isFinite(x));
+    return last4.length ? last4.reduce((a, b) => a + b, 0) : null;
+  };
+  const dlast = (group, key) => {
+    const arr = ((detail || {})[group] || {})[key];
+    if (!Array.isArray(arr)) return null;
+    for (let i = arr.length - 1; i >= 0; i--) {
+      if (typeof arr[i] === "number" && isFinite(arr[i])) return arr[i];
+    }
+    return null;
+  };
   const isFin = FINANCIAL_SECTORS.has(co.sector);
   // Sector bands live in ratings.js so DuPont grades the same number the same
   // way. `undefined` = no sector table, use the generic threshold; `null` =
@@ -515,11 +532,13 @@ function scorecard(co, v, ttm) {
   const div = (a, b) => (F.isNum(a) && b) ? a / b : null;
 
   card.appendChild(scoreRow("SINH LỜI", [
+    // Insurers file no gross-profit line, so the tile was a permanent dash.
+    ...(isIns && !F.isNum(v.gross_margin) ? [] : [
     { label: isBank ? "Thu nhập lãi / Tổng TN" : "Biên LN gộp", value: F.pct(v.gross_margin), color: mR(v.gross_margin, "gross", 0.25, 0.15),
       tip: { f: isBank ? "Thu nhập lãi thuần / Tổng thu nhập hoạt động" : "Lợi nhuận gộp / Doanh thu",
              d: isBank ? "Bao nhiêu phần thu nhập đến từ cho vay. Thấp hơn nghĩa là nguồn thu đa dạng hơn (phí, ngoại hối, đầu tư)"
                        : "Đo hiệu quả sản xuất cốt lõi trước chi phí vận hành",
-             ...mBand("gross", "≥ 25%", "15 – 25%", "< 15%") } },
+             ...mBand("gross", "≥ 25%", "15 – 25%", "< 15%") } }]),
     { label: isBank ? "Biên trước dự phòng" : "Biên hoạt động", value: F.pct(v.operating_margin), color: mR(v.operating_margin, "op", 0.15, 0.05),
       tip: { f: isBank ? "Lợi nhuận trước dự phòng (PPOP) / Tổng thu nhập hoạt động" : "EBIT / Doanh thu",
              d: isBank ? "Lãi còn lại sau chi phí vận hành nhưng trước khi trích lập dự phòng nợ xấu"
@@ -556,14 +575,66 @@ function scorecard(co, v, ttm) {
       { label: "Tiền gửi KH / Tổng TS", value: F.pct(dep), color: R(dep, 0.60, 0.45) , tip: { f: "Tiền gửi khách hàng / Tổng tài sản", d: "Bao nhiêu phần nguồn vốn đến từ tiền gửi. Cao thì nguồn vốn ổn định và rẻ", g: "≥ 60%", w: "45 – 60%", b: "< 45%" } },
       { label: "Vay liên NH / Vốn chủ", value: F.mult(v.debt_to_equity), color: R(v.debt_to_equity, 2, 4, false) , tip: { f: "Vay liên ngân hàng & NHNN / Vốn chủ sở hữu", d: "Mức phụ thuộc nguồn vốn bán buôn ngoài tiền gửi. Nguồn này rút nhanh hơn tiền gửi", g: "≤ 2x", w: "2 – 4x", b: "> 4x" } },
     ]));
+  } else if (isIns) {
+    // Insurers were falling through to the industrial branch, which left eight
+    // tiles showing a dash -- the whole "Vòng quay vốn" block among them -- and
+    // two reading 0.00x because an insurer files no debt line. These are the
+    // numbers the sector is actually underwritten on, from the ins_* detail.
+    const prem = dsum("income", "ins_net_premium");
+    const gross = dsum("income", "ins_gross_premium");
+    const claims = dsum("income", "ins_claims_retained");
+    const comm = dsum("income", "ins_commission");
+    const finP = dsum("income", "ins_financial_profit");
+    const pre = dsum("income", "ins_pretax");
+    const loss = (prem && claims != null) ? Math.abs(claims) / prem : null;
+    const commR = (prem && comm != null) ? Math.abs(comm) / prem : null;
+    const combined = (loss != null && commR != null) ? loss + commR : null;
+    const retain = (gross && prem != null) ? prem / gross : null;
+    const invShare = (() => {
+      const st = dlast("balance", "ins_st_invest"), lt = dlast("balance", "ins_lt_invest");
+      const ta = dlast("balance", "total_assets") ?? ttm?.total_assets;
+      return (ta && (st != null || lt != null)) ? ((st || 0) + (lt || 0)) / ta : null;
+    })();
+    const liabEq = (() => {
+      const l = dlast("balance", "ins_total_liab"), e = dlast("balance", "equity") ?? ttm?.equity;
+      return (l != null && e) ? l / e : null;
+    })();
+    const finShare = (finP != null && pre) ? finP / pre : null;
+    card.appendChild(scoreRow("HIỆU QUẢ BẢO HIỂM", [
+      { label: "Tỷ lệ kết hợp", value: F.pct(combined), color: R(combined, 0.95, 1.00, false) , tip: { f: "(Bồi thường thuộc trách nhiệm giữ lại + hoa hồng) / Phí bảo hiểm thuần", d: "Dưới 100% nghĩa là riêng hoạt động bảo hiểm đã có lãi, chưa cần đến lãi đầu tư. Đây là thước đo cốt lõi của một công ty bảo hiểm", g: "≤ 95%", w: "95 – 100%", b: "> 100%" } },
+      { label: "Tỷ lệ bồi thường", value: F.pct(loss), color: R(loss, 0.60, 0.75, false) , tip: { f: "Bồi thường thuộc trách nhiệm giữ lại / Phí bảo hiểm thuần", d: "Bao nhiêu phần phí thu được phải trả ra để bồi thường. Tăng lên là dấu hiệu định phí quá thấp hoặc chọn rủi ro kém", g: "≤ 60%", w: "60 – 75%", b: "> 75%" } },
+      { label: "Tỷ lệ giữ lại", value: F.pct(retain), color: R(retain, 0.70, 0.50) , tip: { f: "Phí bảo hiểm thuần / Phí bảo hiểm gốc", d: "Phần rủi ro công ty tự giữ thay vì nhượng cho tái bảo hiểm. Giữ lại nhiều thì ăn trọn lãi nhưng cũng gánh trọn lỗ", g: "≥ 70%", w: "50 – 70%", b: "< 50%" } },
+      { label: "Lãi đầu tư / LN trước thuế", value: F.mult(finShare), color: F.isNum(finShare) ? (finShare <= 1 ? "#16a34a" : finShare <= 2 ? "#b45309" : "#dc2626") : "#666f7c" , tip: { f: "Lợi nhuận hoạt động tài chính / Lợi nhuận trước thuế", d: "Trên 1x nghĩa là lợi nhuận đến từ danh mục đầu tư nhiều hơn từ nghiệp vụ bảo hiểm — tức phụ thuộc thị trường tài chính", g: "≤ 1x", w: "1 – 2x", b: "> 2x" } },
+    ]));
+    card.appendChild(scoreRow("QUY MÔ ĐẦU TƯ & DỰ PHÒNG", [
+      { label: "Đầu tư / Tổng tài sản", value: F.pct(invShare), color: R(invShare, 0.70, 0.50) , tip: { f: "(Đầu tư ngắn hạn + dài hạn) / Tổng tài sản", d: "Bảo hiểm sống bằng danh mục đầu tư chứ không phải tài sản cố định; tỷ lệ cao là cấu trúc bình thường của ngành", g: "≥ 70%", w: "50 – 70%", b: "< 50%" } },
+      { label: "Nợ phải trả / Vốn chủ", value: F.mult(liabEq), color: R(liabEq, 6, 12, false) , tip: { f: "Tổng nợ phải trả / Vốn chủ sở hữu", d: "Phần lớn nợ phải trả của bảo hiểm là dự phòng nghiệp vụ — nghĩa vụ với người mua bảo hiểm. Càng cao thì đệm vốn càng mỏng so với nghĩa vụ", g: "≤ 6x", w: "6 – 12x", b: "> 12x" } },
+      { label: "Đòn bẩy (Tài sản / Vốn chủ sở hữu)", value: F.mult(v.financial_leverage), color: mR(v.financial_leverage, "leverage", 2.5, 4) , tip: { f: "Tổng tài sản / Vốn chủ sở hữu", d: "Mỗi đồng vốn chủ đang gánh bao nhiêu đồng tài sản", ...mBand("leverage", "≤ 2.5x", "2.5 – 4x", "> 4x") } },
+      { label: "Chất lượng lợi nhuận", value: F.mult(v.profit_quality), color: R(v.profit_quality, 1, 0.8) , tip: { f: "Dòng tiền hoạt động / Lợi nhuận ròng", d: "> 1x: lợi nhuận được bảo chứng bằng tiền mặt thực", g: "≥ 1x", w: "0.8 – 1x", b: "< 0.8x" } },
+    ]));
   } else if (isSec && ttm) {
     // Brokers keep D/E (leverage is real risk) but drop FCF/profit-quality --
     // they run structurally negative OCF from growing the margin book.
     const ea = div(ttm.equity, ttm.total_assets);
-    card.appendChild(scoreRow("THANH KHOẢN", [
+    // A broker holds no inventory, so its quick ratio is its current ratio to
+    // the decimal -- SSI showed 1.65x twice. And operating cash flow is
+    // negative for 18 of 20 brokers because funding the margin book runs
+    // through it, which the OCF tile read as a liquidity failure. Both are
+    // replaced by what a broker is actually judged on.
+    const secLoan = (() => {
+      const l = dlast("balance", "sec_loans");
+      const e = dlast("balance", "equity") ?? (ttm && ttm.equity);
+      return (l != null && e) ? l / e : null;
+    })();
+    const secFin = (() => {
+      const fv = dlast("balance", "fvtpl");
+      const ta = dlast("balance", "total_assets") ?? (ttm && ttm.total_assets);
+      return (fv != null && ta) ? fv / ta : null;
+    })();
+    card.appendChild(scoreRow("THANH KHOẢN & CƠ CẤU TÀI SẢN", [
       { label: "Current ratio", value: F.mult(v.current_ratio), color: R(v.current_ratio, 2, 1) , tip: { f: "Tài sản ngắn hạn / Nợ ngắn hạn", d: "Khả năng trả nợ ngắn hạn bằng tài sản lưu động", g: "≥ 2x", w: "1 – 2x", b: "< 1x" } },
-      { label: "Quick ratio", value: F.mult(v.quick_ratio), color: R(v.quick_ratio, 1, 0.5) , tip: { f: "(Tài sản ngắn hạn − Hàng tồn kho) / Nợ ngắn hạn", d: "Loại trừ hàng tồn kho để đo thanh khoản thực tế hơn", g: "≥ 1x", w: "0.5 – 1x", b: "< 0.5x" } },
-      { label: "OCF / Nợ ngắn hạn", value: F.mult(v.ocf_to_current_liab), color: R(v.ocf_to_current_liab, 0.4, 0.2) , tip: { f: "Dòng tiền hoạt động / Nợ ngắn hạn", d: "Khả năng trả nợ từ tiền kinh doanh tạo ra", g: "≥ 0.4x", w: "0.2 – 0.4x", b: "< 0.2x" } },
+      { label: "Dư nợ cho vay / Vốn chủ", value: F.mult(secLoan), color: R(secLoan, 1.5, 2.0, false) , tip: { f: "Phải thu (chủ yếu là dư nợ margin) / Vốn chủ sở hữu", d: "Quy mô cho vay margin so với vốn tự có. Trần quy định là 2 lần vốn chủ sở hữu, nên càng gần 2x thì càng ít chỗ để mở rộng và càng nhạy với một đợt giảm giá", g: "≤ 1.5x", w: "1.5 – 2x", b: "> 2x" } },
+      { label: "Tài sản tài chính / Tổng TS", value: F.pct(secFin), color: F.isNum(secFin) ? (secFin <= 0.5 ? "#16a34a" : secFin <= 0.7 ? "#b45309" : "#dc2626") : "#666f7c" , tip: { f: "Tài sản tài chính FVTPL & AFS / Tổng tài sản", d: "Phần tài sản đặt vào danh mục tự doanh. Càng lớn thì lợi nhuận càng đi theo thị trường chứ không theo phí môi giới", g: "≤ 50%", w: "50 – 70%", b: "> 70%" } },
     ]));
     card.appendChild(scoreRow("ĐÒN BẨY & AN TOÀN VỐN", [
       { label: "Nợ / Vốn chủ (D/E)", value: F.mult(v.debt_to_equity), color: R(v.debt_to_equity, 1, 2, false) , tip: { f: "Tổng nợ vay / Vốn chủ sở hữu", d: "Mức độ đòn bẩy tài chính", g: "≤ 1x", w: "1 – 2x", b: "> 2x" } },
@@ -611,7 +682,13 @@ function scorecard(co, v, ttm) {
     // of VND per share -- the same unit the price is quoted in.
     const cfps = ttm ? div(ttm.operating_cf, ttm.shares_outstanding) : null;
     card.appendChild(scoreRow("CHẤT LƯỢNG DÒNG TIỀN", [
-      { label: "Tiền / Doanh thu", value: F.pct(v.ocf_to_revenue), color: R(v.ocf_to_revenue, 0.15, 0.10) , tip: { f: "Dòng tiền hoạt động / Doanh thu", d: "Mỗi 100 đồng doanh thu đọng lại bao nhiêu đồng tiền thật. Đây là thước đo gốc của chất lượng doanh thu", g: "≥ 15%", w: "10 – 15%", b: "< 10%" } },
+      // ratios.py documents 10%/15% for this, but measured on the 357
+      // non-financial tickers the market median is 7.6% and the 10% bar painted
+      // 56% of the board red -- a "danger" band that more than half the market
+      // sits in is not a warning. These are the market's own quartiles. The
+      // level is still structurally sector-dependent: utilities run a 28%
+      // median against retail's 2.2%, so read it beside the peer table.
+      { label: "Tiền / Doanh thu", value: F.pct(v.ocf_to_revenue), color: R(v.ocf_to_revenue, 0.20, 0.05) , tip: { f: "Dòng tiền hoạt động / Doanh thu", d: "Mỗi 100 đồng doanh thu đọng lại bao nhiêu đồng tiền thật. Mức hợp lý phụ thuộc ngành rất mạnh — tiện ích quanh 28%, bán lẻ quanh 2% — nên đọc kèm bảng so sánh cùng ngành", g: "≥ 20% (top 25% thị trường)", w: "5 – 20%", b: "< 5% (đáy 25%)" } },
       { label: "Tiền / Lợi nhuận hoạt động", value: F.mult(cashToIncome), color: R(cashToIncome, 1, 0.8) , tip: { f: "Dòng tiền hoạt động / Lợi nhuận hoạt động (EBIT)", d: "Lợi nhuận hoạt động có được thu bằng tiền hay không. Dưới 1x kéo dài là dấu hiệu lợi nhuận nằm ở phải thu và tồn kho. Để trống khi EBIT âm — lỗ ở khâu vận hành thì tỷ số này vô nghĩa", g: "≥ 1x", w: "0.8 – 1x", b: "< 0.8x" } },
       { label: "Tiền / Tổng nợ vay", value: F.isNum(cfDebt) && cfDebt > 100 ? "Không vay nợ" : F.mult(cfDebt), color: F.isNum(cfDebt) && cfDebt > 100 ? "#16a34a" : R(cfDebt, 0.5, 0.2) , tip: { f: "Dòng tiền hoạt động / Tổng nợ vay", d: "Mỗi năm tiền kinh doanh trả được bao nhiêu phần dư nợ. 0.5x nghĩa là khoảng 2 năm là sạch nợ", g: "≥ 0.5x", w: "0.2 – 0.5x", b: "< 0.2x" } },
       { label: "Tiền / CAPEX", value: F.mult(v.capex_coverage), color: R(v.capex_coverage, 2.9, 1.5) , tip: { f: "Dòng tiền hoạt động / Chi đầu tư tài sản cố định", d: "Tự nuôi được việc mở rộng hay phải đi vay. Dưới 1.5x là chưa tự tài trợ nổi mức đầu tư đang làm", g: "≥ 2.9x", w: "1.5 – 2.9x", b: "< 1.5x" } },

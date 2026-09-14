@@ -102,9 +102,16 @@ const SECURITIES = [
   { label: "Tài sản tài chính / Tổng tài sản", max: 0.80, fmt: PCT,
     calc: (c) => div(dLast(c.d, "balance", "fvtpl"), c.ttm.total_assets) },
   { label: "Dư nợ margin / Vốn chủ sở hữu", max: 2.0, fmt: NUM,
-    // Brokers leave the TTM receivables column empty; the margin book is on
-    // the detail balance sheet instead.
-    calc: (c) => div(c.ttm.receivables ?? dLast(c.d, "balance", "receivables_trade"), c.ttm.equity) },
+    // The margin book is the `loans` line, not trade receivables: SSI carries
+    // 40,473bn of margin lending against 1,132bn of receivables, so the old
+    // fallback understated this by a factor of 36. Regulation caps it at 2x
+    // equity, which is why `max` is 2.0 -- a broker near the top of this axis
+    // has no room left to grow the book and takes the full hit of a selloff.
+    // Lower is safer, not worse: this is leverage against client positions, and
+    // the table was starring the broker closest to the cap as the leader while
+    // the scorecard painted the same 2.02x red.
+    lowerBetter: true,
+    calc: (c) => div(dLast(c.d, "balance", "sec_loans"), c.ttm.equity) },
   A.leverage,
   A.netMargin, A.roe, A.upside,
 ];
