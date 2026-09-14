@@ -7,7 +7,7 @@
 import { loadTicker, loadScreener, loadMarket } from "./data.js";
 import { computeQualityScore, classifySignal, SIGNAL_VI, SIGNAL_COLOR } from "./signals.js";
 import { computeTTM } from "./ttm.js";
-import { axesFor, normalise, SECTOR_AXES } from "./sector-metrics.js";
+import { axesFor, normalise, allAxesFor } from "./sector-metrics.js";
 import * as F from "./format.js";
 
 const el = (h) => { const t = document.createElement("template"); t.innerHTML = h.trim(); return t.content.firstElementChild; };
@@ -353,8 +353,9 @@ export async function renderCompare(root, onPick) {
     // (a 2.5% NIM against a 1.03x LDR), and it stays readable at twenty
     // columns in industry mode where bars would not.
     const sectorNames = [...new Set(data.map((x) => x.sector).filter(Boolean))];
-    const sAxes = (sectorNames.length === 1 && SECTOR_AXES[sectorNames[0]])
-      ? SECTOR_AXES[sectorNames[0]] : null;
+    // allAxesFor, not the raw table: it carries the per-sector scale overrides,
+    // so the table and the radar can never disagree about an axis.
+    const sAxes = sectorNames.length === 1 ? allAxesFor(sectorNames[0]) : null;
 
     const pct1 = (v) => (F.isNum(v) ? `${(v * 100).toFixed(1)}%` : null);
     const mult = (v) => (F.isNum(v) ? `${v.toFixed(2)}×` : null);

@@ -180,13 +180,46 @@ export const SECTOR_AXES = {
 };
 
 /** Axes for a set of companies: sector-specific when they all share one. */
+// A spoke is useless when the sector's own median sits past the end of it:
+// every company pegs at the rim and the axis stops separating anyone. Measured
+// on 20 tickers per sector, nine spokes were in that state -- retail turns its
+// inventory 8.7 times against a scale ending at 8, construction collects in 122
+// days on a 120-day scale, brokers earn a 29% net margin on a 25% scale. The
+// scale is stretched for those sectors only: raising the shared value instead
+// would push every manufacturer toward the centre, since their medians are half
+// as large.
+//
+// Upside is deliberately left at 1.0. Beyond +100% the distinction stops
+// meaning much, and stretching the axis to the +250% that real estate shows
+// would flatten every ordinary +20% case into the middle.
+const AXIS_MAX_OVERRIDE = {
+  "Bất động sản":                      { "Biên gộp": 0.60 },
+  "Dịch vụ lưu trú, ăn uống, giải trí": { "Biên EBITDA": 0.70, "Biên FCF": 0.40 },
+  "Nông - Lâm - Ngư":                  { "Vòng quay tồn kho": 20 },
+  "Bán lẻ":                            { "Vòng quay tồn kho": 16, "Vòng quay tài sản": 3.5 },
+  "Bán buôn":                          { "Vòng quay tồn kho": 16, "Vòng quay tài sản": 3.0 },
+  "Xây dựng":                          { "Số ngày phải thu": 200 },
+  "Chứng khoán":                       { "Biên lợi nhuận ròng": 0.40 },
+  "Công nghệ và thông tin":            { "Tăng trưởng DT": 1.0 },
+};
+
 export function axesFor(sectors) {
   const uniq = [...new Set(sectors.filter(Boolean))];
   if (uniq.length === 1 && SECTOR_AXES[uniq[0]]) {
+    const over = AXIS_MAX_OVERRIDE[uniq[0]] || {};
     // Radar spokes only: `extra` metrics belong to the bars and the table.
-    return SECTOR_AXES[uniq[0]].filter((a) => !a.extra);
+    return SECTOR_AXES[uniq[0]].filter((a) => !a.extra)
+      .map((a) => (over[a.label] ? { ...a, max: over[a.label] } : a));
   }
   return GENERIC;
+}
+
+/** Every axis for a sector, scale overrides applied -- bars and table use this. */
+export function allAxesFor(sector) {
+  const axes = SECTOR_AXES[sector];
+  if (!axes) return null;
+  const over = AXIS_MAX_OVERRIDE[sector] || {};
+  return axes.map((a) => (over[a.label] ? { ...a, max: over[a.label] } : a));
 }
 
 /** 0-100 position of `raw` on `axis`, with lowerBetter inverted. */
