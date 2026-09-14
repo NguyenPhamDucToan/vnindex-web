@@ -116,6 +116,20 @@ const SECURITIES = [
   A.netMargin, A.roe, A.upside,
 ];
 
+/** Combined ratio: (retained claims + commission + selling + admin) / net premium.
+ *  Exported so the scorecard and the comparison table cannot drift apart -- the
+ *  loss ratio had already drifted, reading 86.9% in one place and 55.2% in the
+ *  other for the same insurer. */
+export function insCombined(c) {
+  const prem = dSum4(c.d, "income", "ins_net_premium");
+  if (!prem) return null;
+  const claims = abs(dSum4(c.d, "income", "ins_claims_retained"));
+  const comm = abs(dSum4(c.d, "income", "ins_commission"));
+  const exp = abs(c.ttm.selling_expense || 0) + abs(c.ttm.ga_expense || 0);
+  if (claims == null) return null;
+  return (claims + (comm || 0) + exp) / prem;
+}
+
 // ── insurance ────────────────────────────────────────────────────
 // The six the user approved, in that order. The three insurance-only ratios
 // below them are marked `extra`: they are the sector's real headline numbers
@@ -126,16 +140,23 @@ const INSURANCE = [
     calc: (c) => div((dLast(c.d, "balance", "ins_st_invest") || 0)
                    + (dLast(c.d, "balance", "ins_lt_invest") || 0), c.ttm.total_assets) },
   A.netMargin, A.roe, A.leverage, A.profitQuality, A.upside,
+  // Claims on retained risks, not total claims: the premium these divide by is
+  // net of reinsurance, so total claims mixes two retention bases. On BVH the
+  // difference is the whole reading -- 86.9% against 55.2% -- because a life
+  // insurer's "total claim settlement" includes maturities and surrenders that
+  // the retained-risk line does not. The combined ratio carries commission as
+  // well as selling and admin expense, which is what makes it comparable with
+  // the 100% line that separates underwriting profit from loss.
   { label: "Combined ratio", max: 1.2, fmt: PCT, lowerBetter: true, extra: true,
-    calc: (c) => {
-      const p = dSum4(c.d, "income", "ins_net_premium");
-      const claims = abs(dSum4(c.d, "income", "ins_claims"));
-      const exp = abs(c.ttm.selling_expense || 0) + abs(c.ttm.ga_expense || 0);
-      return div((claims ?? 0) + exp, p);
-    } },
+    calc: (c) => insCombined(c) },
   { label: "Tỷ lệ bồi thường", max: 1.0, fmt: PCT, lowerBetter: true, extra: true,
-    calc: (c) => div(abs(dSum4(c.d, "income", "ins_claims")), dSum4(c.d, "income", "ins_net_premium")) },
-  { label: "Tỷ lệ giữ lại", max: 1.0, fmt: PCT, extra: true,
+    calc: (c) => div(abs(dSum4(c.d, "income", "ins_claims_retained")),
+                     dSum4(c.d, "income", "ins_net_premium")) },
+  // No direction: keeping more risk earns the whole margin and carries the
+  // whole loss, so neither end is the better place to be. Starring the highest
+  // said otherwise. Same treatment as NII/TOI for a bank and Beta in the risk
+  // table -- state the number, do not rank it.
+  { label: "Tỷ lệ giữ lại", max: 1.0, fmt: PCT, extra: true, neutral: true,
     calc: (c) => div(dSum4(c.d, "income", "ins_net_premium"), dSum4(c.d, "income", "ins_gross_premium")) },
 ];
 

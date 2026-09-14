@@ -307,12 +307,13 @@ export async function renderCompare(root, onPick) {
       const rows = perName
         .map((n) => ({ ...n, v: n.raws[k] }))
         .filter((n) => F.isNum(n.v))
-        .sort((p2, q2) => (a.lowerBetter ? p2.v - q2.v : q2.v - p2.v));
+        .sort((p2, q2) => (a.neutral ? 0 : a.lowerBetter ? p2.v - q2.v : q2.v - p2.v));
       if (industryAvg && F.isNum(industryAvg.raw[a.label])) {
         rows.push({ name: `Trung vị ngành (${industryAvg.n})`, colour: "#f97316",
                     v: industryAvg.raw[a.label] });
       }
-      const hint = a.lowerBetter ? " · càng thấp càng tốt" : "";
+      const hint = a.neutral ? " · cao hay thấp tốt hơn còn tùy"
+        : a.lowerBetter ? " · càng thấp càng tốt" : "";
       return `<b>${a.label}</b>${hint}<br>` + (rows.length
         ? rows.map((n) => `<span style="color:${n.colour}">■</span> ${n.name}: <b>${a.fmt(n.v)}</b>`)
               .join("<br>")
@@ -398,7 +399,7 @@ export async function renderCompare(root, onPick) {
       if (own.length) {
         GROUPS.push([`Đặc thù ngành · ${sectorNames[0]}`,
           own.map((a) => [a.label, (x) => { try { return a.calc(x); } catch { return null; } },
-                          !a.lowerBetter, a.fmt])]);
+                          a.neutral ? null : !a.lowerBetter, a.fmt])]);
       }
     }
 
@@ -440,7 +441,13 @@ export async function renderCompare(root, onPick) {
         const valid = vals.map((v, i) => [v, i])
           .filter(([v, i]) => F.isNum(v) && !cols[i].avg);
         // Rank inside the row, so shading answers "best here", not "biggest".
-        const order = valid.slice().sort((a, b) => (higherBetter ? b[0] - a[0] : a[0] - b[0]));
+        // higherBetter === null means the metric has no better end -- retention
+        // for an insurer, where keeping more risk earns the whole margin and
+        // carries the whole loss. The risk table already honoured null this
+        // way; here it fell through the ternary and starred the lowest value
+        // instead, which is a direction, not the absence of one.
+        const order = higherBetter === null ? []
+          : valid.slice().sort((a, b) => (higherBetter ? b[0] - a[0] : a[0] - b[0]));
         const rank = new Map(order.map(([, i], r) => [i, r]));
         const tr = el(`<tr><td class="dim">${F.escapeHtml(label)}</td></tr>`);
         vals.forEach((v, i) => {

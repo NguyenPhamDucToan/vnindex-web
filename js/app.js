@@ -3,6 +3,7 @@ import { priceChart } from "./charts.js";
 import { computeQualityScore, classifySignal, SIGNAL_VI, SIGNAL_COLOR, SIGNAL_ORDER } from "./signals.js";
 import { ratingColor, sectorBand } from "./ratings.js";
 import { computeTTM } from "./ttm.js";
+import { insCombined } from "./sector-metrics.js";
 import { quarterlyCharts, foreignSection } from "./quarterly.js";
 import { valuationPanel, technicalPanel } from "./valuation-panel.js";
 import { dupontSection, roicSection, peerSection, valuationBandSection,
@@ -587,8 +588,13 @@ function scorecard(co, v, ttm, detail) {
     const finP = dsum("income", "ins_financial_profit");
     const pre = dsum("income", "ins_pretax");
     const loss = (prem && claims != null) ? Math.abs(claims) / prem : null;
-    const commR = (prem && comm != null) ? Math.abs(comm) / prem : null;
-    const combined = (loss != null && commR != null) ? loss + commR : null;
+    // One definition, from sector-metrics.js, so this tile and the comparison
+    // table cannot drift: the loss ratio already had, reading 86.9% there
+    // against 55.2% here for BVH because one used total claims and the other
+    // claims on retained risks. The combined ratio also has to carry selling
+    // and admin expense, or it is not comparable with the 100% line that
+    // separates underwriting profit from loss.
+    const combined = insCombined({ d: { detail }, ttm: ttm || {} });
     const retain = (gross && prem != null) ? prem / gross : null;
     const invShare = (() => {
       const st = dlast("balance", "ins_st_invest"), lt = dlast("balance", "ins_lt_invest");
