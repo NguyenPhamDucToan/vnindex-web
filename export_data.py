@@ -154,9 +154,41 @@ def load_vnindex() -> "pd.Series | None":
 # unmistakable actions are corrected.
 _CA_BAND = 0.15
 _CA_MAX = 25.0          # beyond this it is a data error, not a corporate action
+# Minimum sessions between two genuine actions. A split and a cash dividend on
+# the same ex-date are one gap, not several days of them.
+_CA_MIN_GAP_SESSIONS = 5
 
 
-def adjust_corporate_actions(df, ticker: str = ""):
+def issuance_dates(ticker: str) -> set:
+    """Ex-entitlement dates for a ticker, from its stored corporate events.
+
+    The price series alone cannot tell a split from a crash. NTC fell 15.1%,
+    14.4% and 14.1% on three sessions of the April 2025 selloff, two of them
+    gapping at the open, and no test on prices separated that from a bonus
+    issue. The exchange's own event list does: every genuine action in the data
+    has a "Phát hành cổ phiếu" (ISS) event within one to four days of the gap,
+    while NTC's nearest entitlement is 133 days away.
+    """
+    f = OUT / "ticker" / f"{ticker}.json"
+    if not f.exists():
+        return set()
+    try:
+        obj = json.loads(f.read_text(encoding="utf-8"))
+    except (ValueError, OSError):
+        return set()
+    out = set()
+    for e in ((obj.get("news_events") or {}).get("events") or []):
+        if e.get("code") != "ISS":
+            continue
+        d = str(e.get("date") or "")[:10]
+        try:
+            out.add(date.fromisoformat(d))
+        except ValueError:
+            continue
+    return out
+
+
+def adjust_corporate_actions(df, ticker: str = "", issuances: set | None = None):
     """Back-adjust OHLC and volume for splits and bonus issues.
 
     Returns (adjusted_df, events). The newest bar is never touched: adjustment
@@ -167,19 +199,54 @@ def adjust_corporate_actions(df, ticker: str = ""):
     if df is None or len(df) < 3:
         return df, []
     closes = df["close"].astype(float).to_numpy()
+    opens = (df["open"].astype(float).to_numpy()
+             if "open" in df.columns else closes)
     dates = df["date"].astype(str).to_numpy()
     n = len(closes)
+
+    # Detect on the OPENING gap, not on close-to-close. An entitlement is priced
+    # in before the session starts, so a split shows a gap at the open and then
+    # trades normally; a crash opens near the previous close and falls during the
+    # day. NTC on 2025-04-03 closed 15.1% down but opened only 2.2% below the
+    # previous close and lost 13.2% intraday -- a limit-down session that
+    # close-to-close detection took for a corporate action.
+    cand = []
+    for i in range(1, n):
+        prev_c, op, cur_c = closes[i - 1], opens[i], closes[i]
+        if prev_c <= 0 or op <= 0 or cur_c <= 0:
+            continue
+        gap = prev_c / op
+        if (gap > 1 + _CA_BAND or gap < 1 / (1 + _CA_BAND)) and 1 / _CA_MAX < gap < _CA_MAX:
+            cand.append(i)
+
+    # A corporate action is a single session, so a cluster of gaps is a falling
+    # market rather than several actions.
+    keep = [i for k, i in enumerate(cand)
+            if (k == 0 or i - cand[k - 1] > _CA_MIN_GAP_SESSIONS)
+            and (k == len(cand) - 1 or cand[k + 1] - i > _CA_MIN_GAP_SESSIONS)]
+
+    # And confirm each survivor against the exchange's event list. Without this
+    # the detector is guessing from prices: NTC's lone remaining gap, a
+    # limit-down open in a selloff, would still have rebased its whole history
+    # by 17%. The event is filed a day or four after the ex-date, so the window
+    # runs forward.
+    if issuances is not None:
+        def _near(i):
+            try:
+                gd = date.fromisoformat(str(dates[i])[:10])
+            except ValueError:
+                return False
+            return any(-2 <= (ed - gd).days <= 10 for ed in issuances)
+        keep = [i for i in keep if _near(i)]
+
     factors = [1.0] * n
     f = 1.0
     events = []
     for i in range(n - 1, 0, -1):
-        prev_c, cur_c = closes[i - 1], closes[i]
-        if prev_c > 0 and cur_c > 0:
-            ratio = prev_c / cur_c
-            if ((ratio > 1 + _CA_BAND or ratio < 1 / (1 + _CA_BAND))
-                    and 1 / _CA_MAX < ratio < _CA_MAX):
-                f *= ratio
-                events.append((dates[i], round(ratio, 4)))
+        if i in keep:
+            ratio = closes[i - 1] / opens[i]
+            f *= ratio
+            events.append((dates[i], round(ratio, 4)))
         factors[i - 1] = f
     if not events:
         return df, []
@@ -346,7 +413,7 @@ def main() -> None:
     for _t in list(px_by_ticker):
         if _t not in _real:
             continue
-        _adj, _ev = adjust_corporate_actions(px_by_ticker[_t], _t)
+        _adj, _ev = adjust_corporate_actions(px_by_ticker[_t], _t, issuance_dates(_t))
         if _ev:
             px_by_ticker[_t] = _adj
             _ca_total += len(_ev)
