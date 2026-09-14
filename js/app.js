@@ -241,7 +241,7 @@ async function renderStock(t) {
 
   const dp = dupontSection(v, co.sector);
   if (dp) root.appendChild(dp);
-  const rw = roicSection(d.financials || [], d.model || {});
+  const rw = roicSection(d.financials || [], d.model || {}, co.sector);
   if (rw) root.appendChild(rw);
 
   root.appendChild(valuationSummary(co, v, d.model || {}, d.analyst, last));

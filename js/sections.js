@@ -3,10 +3,16 @@
 // valuation/ratios.py (dupont_analysis, roic) and the app's ROIC block so the
 // two builds reach the same verdicts, not merely similar-looking ones.
 import { ratingColor, sectorBand } from "./ratings.js";
+import { FINANCIAL_SECTORS } from "./signals.js";
 import * as F from "./format.js";
 
 const el = (h) => { const t = document.createElement("template"); t.innerHTML = h.trim(); return t.content.firstElementChild; };
 const TAX_RATE = 0.20;
+// CAPM inputs, mirroring config.py (RF, ERP) the way compare.js mirrors RF for
+// its Sharpe ratio. Kept here rather than read from the export because the
+// deploy skips the export when data/ has not moved, so a new JSON field would
+// not reach the page on a code-only push.
+const RF = 0.05, ERP = 0.08;
 
 // ── DuPont ──────────────────────────────────────────────────────────
 // Asset turnover and leverage are structural for a bank, not choices: it funds
@@ -104,51 +110,95 @@ export function dupontSection(v, sector) {
   </div>`);
 }
 
-// ── ROIC vs WACC ────────────────────────────────────────────────────
-// ROIC = NOPAT / (debt + equity − cash), averaged over the last 5 annual
-// reports, versus the ticker's own beta-derived WACC.
-export function roicSection(financials, model) {
+// ── ROIC vs WACC — and ROE vs cost of equity for financials ─────────
+// ROIC asks whether the return to EVERY capital provider beats the blended cost
+// of their capital. Both halves of that break for a bank, a broker or an
+// insurer:
+//
+//   · The numerator. `ebit` is mapped to PPOP for a bank and to operating
+//     profit for a broker, both of which are already NET of interest expense —
+//     interest is what these businesses pay for their raw material, not a
+//     financing choice. Charging a WACC on top subtracts the cost of debt a
+//     second time.
+//   · The denominator. debt + equity − cash only counts borrowings and issued
+//     paper, not customer deposits: VCB's `debt` is 481tn against ~2,000tn of
+//     assets, so "invested capital" is an arbitrary slice of the funding. And
+//     cash is an earning asset for these three sectors, not idle money to strip
+//     out — subtracting it flatters the return.
+//
+// Measured across all 46 financial tickers, 14 reached the opposite verdict
+// under the two tests. Eleven of the 21 banks were told they broke even or
+// destroyed value while earning far above their cost of equity: HDB 21.9% ROE
+// against 13.0% Ke read "hòa vốn", VIB 21.5% against 12.0% likewise, TCB 16.2%
+// against 13.8% read "bào mòn". VPB failed the other way, reading "tạo giá trị"
+// on a 12.0% ROE against a 14.9% Ke.
+//
+// So financials get the test that fits them — ROE against a CAPM cost of equity
+// — which is also what the sector's own analysts use, and what the P/B and
+// residual-income methods in valuation/ already assume.
+export function roicSection(financials, model, sector) {
+  const fin = FINANCIAL_SECTORS.has(sector);
   const annual = (financials || []).filter((f) => f.period_type === "Y")
     .sort((a, b) => String(a.period).localeCompare(String(b.period))).slice(-5);
+  const beta = (model && model.params) ? model.params.beta : null;
+  const hurdle = fin
+    ? (F.isNum(beta) ? RF + beta * ERP : null)
+    : ((model && model.params) ? model.params.wacc_ticker : null);
+
   const perYear = [];
   for (const r of annual) {
-    const ic = (r.debt || 0) + (r.equity || 0) - (r.cash || 0);
-    if (!F.isNum(r.ebit) || ic <= 0) continue;
-    perYear.push([String(r.period).slice(0, 4), r.ebit * (1 - TAX_RATE) / ic * 100]);
+    if (fin) {
+      if (!F.isNum(r.net_income) || !F.isNum(r.equity) || r.equity <= 0) continue;
+      perYear.push([String(r.period).slice(0, 4), r.net_income / r.equity * 100]);
+    } else {
+      const ic = (r.debt || 0) + (r.equity || 0) - (r.cash || 0);
+      if (!F.isNum(r.ebit) || ic <= 0) continue;
+      perYear.push([String(r.period).slice(0, 4), r.ebit * (1 - TAX_RATE) / ic * 100]);
+    }
   }
-  const wacc = (model && model.params) ? model.params.wacc_ticker : null;
-  if (!perYear.length || !F.isNum(wacc)) return null;
+  if (!perYear.length || !F.isNum(hurdle)) return null;
 
-  const avgRoic = perYear.reduce((a, [, x]) => a + x, 0) / perYear.length;
-  const gapPP = avgRoic - wacc * 100;
-  const roicC = ratingColor(gapPP / 100, 0.005, -0.005);
-  const waccC = ratingColor(wacc, 0.12, 0.15, false);
+  const avg = perYear.reduce((a, [, x]) => a + x, 0) / perYear.length;
+  const gapPP = avg - hurdle * 100;
+  const retC = ratingColor(gapPP / 100, 0.005, -0.005);
+  const hurC = ratingColor(hurdle, 0.12, 0.15, false);
   const n = perYear.length;
+  const RET = fin ? "ROE" : "ROIC";
+  const HUR = fin ? "Chi phí vốn chủ" : "WACC";
 
   let verdict;
   if (gapPP > 0.5) {
-    verdict = `✅ <b>ROIC trung bình ${n} năm cao hơn WACC ${gapPP >= 0 ? "+" : ""}${gapPP.toFixed(1)} điểm %</b> — công ty liên tục tạo ra giá trị thực: sinh lời ${avgRoic.toFixed(1)}%/năm trên vốn đầu tư, cao hơn chi phí vốn phải trả.`;
+    verdict = fin
+      ? `✅ <b>ROE trung bình ${n} năm cao hơn chi phí vốn chủ +${gapPP.toFixed(1)} điểm %</b> — mỗi đồng vốn cổ đông sinh lời ${avg.toFixed(1)}%/năm, nhiều hơn mức ${F.pct(hurdle)} mà cổ đông đòi hỏi cho rủi ro này, nên giá trị sổ sách xứng đáng được trả cao hơn 1 lần.`
+      : `✅ <b>ROIC trung bình ${n} năm cao hơn WACC +${gapPP.toFixed(1)} điểm %</b> — công ty liên tục tạo ra giá trị thực: sinh lời ${avg.toFixed(1)}%/năm trên vốn đầu tư, cao hơn chi phí vốn phải trả.`;
   } else if (gapPP < -0.5) {
-    verdict = `⚠️ <b>ROIC trung bình ${n} năm thấp hơn WACC ${gapPP.toFixed(1)} điểm %</b> — mỗi đồng vốn bỏ ra đang sinh lời ít hơn chi phí huy động, tức là bào mòn giá trị cổ đông nếu kéo dài.`;
+    verdict = fin
+      ? `⚠️ <b>ROE trung bình ${n} năm thấp hơn chi phí vốn chủ ${gapPP.toFixed(1)} điểm %</b> — lợi nhuận trên vốn cổ đông (${avg.toFixed(1)}%) chưa bù được rủi ro cổ đông gánh (${F.pct(hurdle)}), nên về lý thuyết cổ phiếu không đáng giá bằng vốn sổ sách.`
+      : `⚠️ <b>ROIC trung bình ${n} năm thấp hơn WACC ${gapPP.toFixed(1)} điểm %</b> — mỗi đồng vốn bỏ ra đang sinh lời ít hơn chi phí huy động, tức là bào mòn giá trị cổ đông nếu kéo dài.`;
   } else {
-    verdict = `ROIC trung bình ${n} năm xấp xỉ WACC (chênh ${gapPP >= 0 ? "+" : ""}${gapPP.toFixed(1)} điểm %) — công ty hòa vốn về mặt tạo giá trị.`;
+    verdict = `${RET} trung bình ${n} năm xấp xỉ ${fin ? "chi phí vốn chủ" : "WACC"} (chênh ${gapPP >= 0 ? "+" : ""}${gapPP.toFixed(1)} điểm %) — ${fin ? "vừa đủ bù rủi ro cho cổ đông" : "công ty hòa vốn về mặt tạo giá trị"}.`;
   }
 
   const years = perYear.map(([y, r]) =>
-    `<div class="rw-yr"><span>${y}</span><b style="color:${ratingColor(r / 100 - wacc, 0.005, -0.005)}">${r.toFixed(1)}%</b></div>`).join("");
+    `<div class="rw-yr"><span>${y}</span><b style="color:${ratingColor(r / 100 - hurdle, 0.005, -0.005)}">${r.toFixed(1)}%</b></div>`).join("");
+
+  const note = fin
+    ? `<div class="vb-note">Ngân hàng, chứng khoán và bảo hiểm được so bằng ROE với chi phí vốn chủ (CAPM: ${F.pct(RF)} + β×${F.pct(ERP)}) thay vì ROIC với WACC — lãi phải trả cho người gửi tiền là chi phí đầu vào của nghề, đã nằm trong lợi nhuận, nên không tính thêm một lần nữa qua WACC.</div>`
+    : "";
 
   return el(`<div class="card">
-    <h2 class="sec-h">ROIC vs WACC</h2>
+    <h2 class="sec-h">${RET} vs ${HUR}</h2>
     <div class="rw-row">
-      <div class="rw-card"><div class="rw-k">ROIC trung bình ${n} năm</div>
-        <div class="rw-v" style="color:${roicC}">${avgRoic.toFixed(1)}%</div></div>
-      <div class="rw-card"><div class="rw-k">WACC (β=${F.isNum(model.params.beta) ? model.params.beta.toFixed(2) : "—"})</div>
-        <div class="rw-v" style="color:${waccC}">${F.pct(wacc)}</div></div>
+      <div class="rw-card"><div class="rw-k">${RET} trung bình ${n} năm</div>
+        <div class="rw-v" style="color:${retC}">${avg.toFixed(1)}%</div></div>
+      <div class="rw-card"><div class="rw-k">${HUR} (β=${F.isNum(beta) ? beta.toFixed(2) : "—"})</div>
+        <div class="rw-v" style="color:${hurC}">${F.pct(hurdle)}</div></div>
       <div class="rw-card"><div class="rw-k">Chênh lệch</div>
-        <div class="rw-v" style="color:${roicC}">${gapPP >= 0 ? "+" : ""}${gapPP.toFixed(1)} pp</div></div>
+        <div class="rw-v" style="color:${retC}">${gapPP >= 0 ? "+" : ""}${gapPP.toFixed(1)} pp</div></div>
     </div>
     <div class="rw-years">${years}</div>
     <div class="dp-comment">${verdict}</div>
+    ${note}
   </div>`);
 }
 
