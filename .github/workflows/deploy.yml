@@ -48,13 +48,25 @@ jobs:
         id: day
         run: echo "d=$(date -u -d '+7 hours' +%F)" >> "$GITHUB_OUTPUT"
 
+      # The cache key carries the git tree hash of data/, because restoring the
+      # cache writes over the checkout. A commit that adds data -- the broker
+      # detail backfill did exactly this -- was silently replaced by the older
+      # cached copy, and export_data.py then carried the stale side-loaded
+      # blocks forward from it: SSI lost the five revenue lines its new chart
+      # needs, and the chart never appeared on the published site. Keying on the
+      # tree hash means any change to committed data/ misses the cache.
+      - name: Tree hash of committed data/
+        id: datatree
+        working-directory: vnindex-web
+        run: echo "h=$(git rev-parse HEAD:data | cut -c1-12)" >> "$GITHUB_OUTPUT"
+
       - name: Restore today's export if one exists
         id: data-cache
         uses: actions/cache/restore@v4
         with:
           path: vnindex-web/data
-          restore-keys: data-${{ steps.day.outputs.d }}-
-          key: data-${{ steps.day.outputs.d }}-${{ github.run_id }}
+          restore-keys: data-${{ steps.day.outputs.d }}-${{ steps.datatree.outputs.h }}-
+          key: data-${{ steps.day.outputs.d }}-${{ steps.datatree.outputs.h }}-${{ github.run_id }}
 
       # A CSS or JS push has no reason to spend 15 minutes re-reading 641
       # tickers out of the database. It exports only when the data could
@@ -117,7 +129,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: vnindex-web/data
-          key: data-${{ steps.day.outputs.d }}-${{ github.run_id }}
+          key: data-${{ steps.day.outputs.d }}-${{ steps.datatree.outputs.h }}-${{ github.run_id }}
 
       # Reads only local files, so it is safe (and cheap) on a restored export.
       - name: Add market cap for the sector heat map
