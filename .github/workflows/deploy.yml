@@ -27,7 +27,11 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 30 was not enough once the export started measuring 5.5 years of
+    # multiples: the job was cut at exactly 30:16 inside the export step. The
+    # per-ticker queries that caused it are now a single read, so this is
+    # headroom rather than a fix.
+    timeout-minutes: 120
     steps:
       # export_data.py imports config, valuation/* and models/* from the
       # sibling project and finds it at ../vnindex-valuation, so both repos

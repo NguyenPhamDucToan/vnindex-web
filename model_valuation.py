@@ -55,21 +55,10 @@ _NORMALISE_YEARS = 5
 def _normalised(ticker: str, column: str, ttm_value):
     """Mean of the last few annual figures; the TTM value if there are none."""
     candidates = []
-    try:
-        from models.database import get_session
-        from models.schema import Financial
-        from sqlalchemy import select
-        with get_session() as session:
-            rows = session.execute(
-                select(getattr(Financial, column))
-                .where(Financial.ticker == ticker, Financial.period_type == "Y")
-                .order_by(Financial.period.desc()).limit(_NORMALISE_YEARS)
-            ).all()
-        for (value,) in rows:
-            if value is not None and float(value) == float(value):
-                candidates.append(float(value))
-    except Exception:
-        pass
+    for row in _annual_rows(ticker, _NORMALISE_YEARS):
+        value = row.get(column)
+        if value is not None and float(value) == float(value):
+            candidates.append(float(value))
     if not candidates:
         return ttm_value
     return sum(candidates) / len(candidates)
@@ -189,6 +178,16 @@ def _build_history():
         closes = session.execute(
             select(Price.ticker, Price.date, Price.close).order_by(Price.ticker, Price.date)
         ).all()
+        # Everything the annual helpers need, in one read. Asking per ticker cost
+        # four round trips each -- _normalised twice, _avg_annual_roe and
+        # _fade_years once apiece -- which is 2,500 queries against a remote
+        # Postgres and pushed the export past the workflow's 30-minute timeout.
+        annuals = session.execute(
+            select(Financial.ticker, Financial.period, Financial.net_income,
+                   Financial.equity, Financial.fcf, Financial.operating_cf)
+            .where(Financial.period_type == "Y")
+            .order_by(Financial.ticker, Financial.period.desc())
+        ).all()
 
     rows_by_ticker = {}
     for row in quarters:
@@ -283,7 +282,14 @@ def _build_history():
                 out[key] = statistics.median(vals)
         if out:
             per_sector[sector] = out
-    return {"ticker": per_ticker, "sector": per_sector, "market": market}
+    by_year = {}
+    for ticker, period, ni, eq, fcf, ocf in annuals:
+        by_year.setdefault(ticker, []).append(
+            {"period": period, "net_income": ni, "equity": eq,
+             "fcf": fcf, "operating_cf": ocf})
+
+    return {"ticker": per_ticker, "sector": per_sector, "market": market,
+            "annual": by_year}
 
 
 def history():
@@ -294,7 +300,7 @@ def history():
             _HIST = _build_history()
         except Exception as e:
             print(f"    ! historical multiples unavailable: {e}")
-            _HIST = {"ticker": {}, "sector": {}, "market": {}}
+            _HIST = {"ticker": {}, "sector": {}, "market": {}, "annual": {}}
     return _HIST
 
 
@@ -401,6 +407,32 @@ def _blume(beta):
     return 0.33 + 0.67 * beta
 
 
+def _annual_rows(ticker: str, years: int):
+    """The last few annual reports for a ticker, newest first, from the cache."""
+    return (history().get("annual") or {}).get(ticker, [])[:years]
+
+
+def _annual_roes(ticker: str, years: int = 8):
+    """ROE for each of the last few annual reports, newest first."""
+    out = []
+    for row in _annual_rows(ticker, years):
+        ni, eq = row["net_income"], row["equity"]
+        if ni is not None and eq and float(eq) > 0:
+            ni, eq = float(ni), float(eq)
+            if ni == ni and eq == eq:
+                out.append(ni / eq)
+    return out
+
+
+def _fade_years(ticker: str, ke: float) -> float:
+    """How long to let the excess return last, from how long it has lasted."""
+    roes = _annual_roes(ticker)
+    if len(roes) < 3:
+        return _FADE_DEFAULT
+    beat = sum(1 for r in roes if r > ke) / len(roes)
+    return _FADE_MIN + (_FADE_MAX - _FADE_MIN) * beat
+
+
 def _avg_annual_roe(ticker: str, years: int = 3):
     """Mean ROE over the last few annual reports -- the sustainable figure the
     model wants, rather than one TTM window a single trading quarter can swing.
@@ -409,20 +441,7 @@ def _avg_annual_roe(ticker: str, years: int = 3):
     (VCB 20.2% in 2021 to 15.7% in 2025), so a five-year mean prices earning
     power the bank no longer has.
     """
-    try:
-        from models.database import get_session
-        from models.schema import Financial
-        from sqlalchemy import select
-        with get_session() as session:
-            rows = session.execute(
-                select(Financial.net_income, Financial.equity)
-                .where(Financial.ticker == ticker, Financial.period_type == "Y")
-                .order_by(Financial.period.desc()).limit(years)
-            ).all()
-    except Exception:
-        return None
-    vals = [ni / eq for ni, eq in rows
-            if ni is not None and eq and eq > 0 and ni == ni and eq == eq]
+    vals = _annual_roes(ticker, years)
     return sum(vals) / len(vals) if vals else None
 
 
@@ -479,7 +498,19 @@ def justified_pb_price(ttm: dict, beta: float | None, ticker: str, ke_shift: flo
 # Winsorized together the median lands at +11%, and the spread between the three
 # is itself the reading: VCB's models and its own history agree within 7 points,
 # while NAB's Gordon says +167% and its own history says -36%.
-_FADE_YEARS = 10
+# A flat ten-year fade said VNM and a steel mill both stop out-earning their
+# cost of capital on the same schedule. VNM has beaten its cost of equity in
+# every year on file; the steel mill has not. So the horizon is measured: the
+# share of the available annual reports in which ROE actually exceeded Ke,
+# stretched over a 5-to-20 year range.
+#
+# Five years at the bottom because even a commodity producer's current returns
+# do not vanish overnight, twenty at the top because a franchise that has
+# out-earned its capital every year on record has earned the benefit of the
+# doubt -- and because beyond twenty years the discounting makes the difference
+# immaterial anyway. A company with no annual history keeps the old ten.
+_FADE_MIN, _FADE_MAX = 5, 20
+_FADE_DEFAULT = 10
 _MIN_PB_OBS = 200          # ~2 years of sessions before a median means anything
 
 
@@ -498,9 +529,10 @@ def rim_fade_price(ttm: dict, beta: float | None, ticker: str):
 
     ke = cost_of_equity(_blume(beta))
     g = min(_G, ke - _G_FLOOR)
+    horizon = _fade_years(ticker, ke)
     total = 0.0
-    for t in range(1, _FADE_YEARS + 1):
-        roe_t = roe - (roe - ke) * (t / _FADE_YEARS)
+    for t in range(1, int(round(horizon)) + 1):
+        roe_t = roe - (roe - ke) * (t / horizon)
         total += (roe_t - ke) * ((1 + g) ** (t - 1)) / ((1 + ke) ** t)
     pb = max(_PB_MIN, min(1.0 + total, _PB_MAX))
     price = equity * 1_000 / shares * pb
@@ -723,6 +755,12 @@ def model_price(ticker: str, sector: str, price_vnd: float | None, beta=None):
             params[name] = round(x, 2)
 
     adj = _sector_adjust(_all_methods(ttm, ticker), ttm, sector, beta, ticker)
+    try:
+        params["fade_years"] = round(_fade_years(
+            ticker, cost_of_equity(_blume(beta))), 1)
+    except Exception:
+        pass
+
     if sector == "Ngân hàng":
         hi = justified_pb_price(ttm, beta, ticker, -_KE_SENSITIVITY)
         lo = justified_pb_price(ttm, beta, ticker, +_KE_SENSITIVITY)
