@@ -20,7 +20,8 @@ function methodLabels(sector, params) {
   // P/E to one decimal, P/B and P/S to two -- "×0.9" reads as a typo where
   // "×0.90" reads as a measurement.
   const mx = (k) => (F.isNum(p[k])
-    ? ` (×${p[k].toFixed(k.endsWith("pe") ? 1 : 2)})` : "");
+    ? ` (×${p[k].toFixed(k.endsWith("pe") || k === "sec_pocf" || k === "sec_ev" ? 1 : 2)})`
+    : "");
   return [
     ["dcf", "DCF / FCFF", "DCF dựa trên NOPAT, chiết khấu ở WACC"],
     ["fcfe", "FCFE / Dòng tiền vốn chủ", "OCF−CapEx chiết khấu ở chi phí vốn chủ"],
@@ -36,9 +37,8 @@ function methodLabels(sector, params) {
       "BVPS × P/B trung vị của ngành — mã này đang đắt hay rẻ so với các ngân hàng khác"],
     ["pe_own", `P/E lịch sử của chính mã${mx("own_pe")}`,
       "EPS (TTM) × P/E trung vị chính mã này từng được trả trong 5.5 năm (mỗi phiên khớp với lợi nhuận đã công bố tại thời điểm đó)"],
-    ["ev_ebitda",
-      bank ? "P/NII (×8)" : re ? "EV/EBITDA (×15)" : "EV/EBITDA (×8)",
-      bank ? "Thu nhập lãi thuần/CP × 8×" : re ? "EBITDA × 15× − nợ ròng" : "EBITDA × 8× − nợ ròng"],
+    ["ev_ebitda", `EV/EBITDA ngành${mx("sec_ev")}`,
+      "EBITDA × EV/EBITDA trung vị của ngành trong 5.5 năm, trừ nợ ròng. Mốc 8x (và 15x cho bất động sản) đặt tay đã bỏ"],
     ["epv",
       bank ? "P/PPOP (×6)" : re ? "NAV Proxy (Book×1.8)" : sec ? "Book Value (×1.2)" : ins ? "Embedded Value (×2.0)" : "Earnings Power Value",
       bank ? "LN trước dự phòng/CP × 6×" : re ? "Vốn chủ × 1.8 (quỹ đất)" : sec ? "Vốn chủ × 1.2" : ins ? "Vốn chủ × 2.0" : "NOPAT ÷ WACC, tăng trưởng 0"],
@@ -48,7 +48,8 @@ function methodLabels(sector, params) {
       "BVPS + phần ROE vượt trội, nhưng phần vượt trội tắt dần về 0 trong 10 năm — không giả định doanh nghiệp sinh lời cao mãi"],
     ["pb_own", `P/B lịch sử của chính mã${mx("own_pb")}`,
       "BVPS × P/B trung vị mã này từng được thị trường trả trong 5.5 năm (mỗi phiên khớp với sổ sách đã công bố tại thời điểm đó)"],
-    ["pocf", "Price/OCF (×10)", "Dòng tiền HĐKD/CP × 10×"],
+    ["pocf", `P/OCF ngành${mx("sec_pocf")}`,
+      "Dòng tiền hoạt động/CP × P/OCF trung vị của ngành trong 5.5 năm. Mốc 10x đặt tay đã bỏ"],
   ];
 }
 

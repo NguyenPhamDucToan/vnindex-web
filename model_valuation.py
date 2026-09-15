@@ -332,8 +332,21 @@ def sector_multiple(sector, key):
 
 
 def own_multiple(ticker, key):
-    """What this ticker itself has historically traded at."""
-    return history()["ticker"].get(ticker, {}).get(key)
+    """What this ticker itself has historically traded at.
+
+    Clamped for the same reason the sector figure is, and against the same
+    market yardstick: a company whose earnings are tiny relative to its price
+    shows a P/E that measures the denominator, not the market's opinion. VIC's
+    own median P/E is 43x, which valued it at 152,022 VND against 22,397 from
+    its own median P/B -- a sevenfold spread inside one family of methods.
+    """
+    value = history()["ticker"].get(ticker, {}).get(key)
+    if value is None:
+        return None
+    market = history()["market"].get(key)
+    if market and key in _CLAMPED_KEYS:
+        value = min(max(value, market * _MULT_LO), market * _MULT_HI)
+    return value
 
 
 # ── justified P/B for financials ────────────────────────────────────────────
@@ -699,7 +712,8 @@ def model_price(ticker: str, sector: str, price_vnd: float | None, beta=None):
     # The panel prints the multiple beside each card, so a reader can see that
     # "P/E ngành" means 7.7x for a bank and 16.0x for a broker rather than one
     # hidden constant for everyone.
-    for key, name in (("pe", "sec_pe"), ("pb", "sec_pb"), ("ps", "sec_ps")):
+    for key, name in (("pe", "sec_pe"), ("pb", "sec_pb"), ("ps", "sec_ps"),
+                      ("pocf", "sec_pocf"), ("ev_ebitda", "sec_ev")):
         x = sector_multiple(sector, key)
         if x:
             params[name] = round(x, 2)
