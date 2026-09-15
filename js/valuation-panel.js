@@ -11,32 +11,42 @@ const el = (html) => { const t = document.createElement("template"); t.innerHTML
 
 const MARKET_PE = 15;
 
-function methodLabels(sector) {
+function methodLabels(sector, params) {
   const bank = sector === "Ngân hàng", re = sector === "Bất động sản",
         sec = sector === "Chứng khoán", ins = sector === "Bảo hiểm";
+  // The multiple is the whole point of these labels, so show it when known
+  // rather than leaving the reader to guess which bar was used.
+  const p = params || {};
+  // P/E to one decimal, P/B and P/S to two -- "×0.9" reads as a typo where
+  // "×0.90" reads as a measurement.
+  const mx = (k) => (F.isNum(p[k])
+    ? ` (×${p[k].toFixed(k.endsWith("pe") ? 1 : 2)})` : "");
   return [
     ["dcf", "DCF / FCFF", "DCF dựa trên NOPAT, chiết khấu ở WACC"],
     ["fcfe", "FCFE / Dòng tiền vốn chủ", "OCF−CapEx chiết khấu ở chi phí vốn chủ"],
-    ["graham", "Graham Number", "√(22.5 × EPS × BVPS)"],
-    ["pe", `P/E Implied (×${MARKET_PE})`, `EPS (TTM) × ${MARKET_PE}×`],
+    ["graham", "Graham (bội số ngành)",
+      "√(P/E ngành × P/B ngành × EPS × BVPS). Con số 22.5 của Graham chính là 15 × 1.5 — cùng hai mốc đã sai, nên nó nhận cùng một hiệu chỉnh"],
+    ["pe", `P/E ngành${mx("sec_pe")}`,
+      "EPS (TTM) × P/E trung vị mà ngành này thực sự được thị trường trả trong 5.5 năm, thay cho mốc 15x bình quân toàn thị trường"],
     ["pb",
-      bank ? "P/B hợp lý (ROE vs chi phí vốn chủ)" : "P/B Implied (×1.5)",
+      bank ? "P/B hợp lý (ROE vs chi phí vốn chủ)" : `P/B ngành${mx("sec_pb")}`,
       bank ? "BVPS × (ROE − g) / (Ke − g): ngân hàng sinh lời trên vốn cao hơn mức cổ đông đòi hỏi thì đáng giá trên 1 lần sổ sách, thấp hơn thì dưới"
-           : "BVPS × 1.5× (trung bình thị trường VN)"],
+           : "BVPS × P/B trung vị mà ngành này thực sự được trả trong 5.5 năm, thay cho mốc 1.5x"],
+    ["pb_sector", `P/B ngành${mx("sec_pb")}`,
+      "BVPS × P/B trung vị của ngành — mã này đang đắt hay rẻ so với các ngân hàng khác"],
+    ["pe_own", `P/E lịch sử của chính mã${mx("own_pe")}`,
+      "EPS (TTM) × P/E trung vị chính mã này từng được trả trong 5.5 năm (mỗi phiên khớp với lợi nhuận đã công bố tại thời điểm đó)"],
     ["ev_ebitda",
       bank ? "P/NII (×8)" : re ? "EV/EBITDA (×15)" : "EV/EBITDA (×8)",
       bank ? "Thu nhập lãi thuần/CP × 8×" : re ? "EBITDA × 15× − nợ ròng" : "EBITDA × 8× − nợ ròng"],
     ["epv",
       bank ? "P/PPOP (×6)" : re ? "NAV Proxy (Book×1.8)" : sec ? "Book Value (×1.2)" : ins ? "Embedded Value (×2.0)" : "Earnings Power Value",
       bank ? "LN trước dự phòng/CP × 6×" : re ? "Vốn chủ × 1.8 (quỹ đất)" : sec ? "Vốn chủ × 1.2" : ins ? "Vốn chủ × 2.0" : "NOPAT ÷ WACC, tăng trưởng 0"],
-    ["ps",
-      bank ? "P/TOI (×5)" : re ? "P/Revenue (×3.5)" : sec ? "P/Revenue (×3)" : ins ? "P/Revenue (×2)" : "P/Sales (×1.2)",
-      bank ? "Tổng thu nhập/CP × 5×" : "Doanh thu/CP × bội số ngành"],
-    ["ri",
-      bank ? "RIM (ROE giảm dần về chi phí vốn)" : "Residual Income",
-      bank ? "BVPS + phần ROE vượt trội, nhưng phần vượt trội tắt dần về 0 trong 10 năm — không giả định ngân hàng sinh lời cao mãi"
-           : "BVPS + phần ROE vượt trội"],
-    ["pb_own", "P/B lịch sử của chính mã",
+    ["ps", `P/S ngành${mx("sec_ps")}`,
+      "Doanh thu/CP × P/S trung vị của ngành trong 5.5 năm"],
+    ["ri", "RIM (ROE giảm dần về chi phí vốn)",
+      "BVPS + phần ROE vượt trội, nhưng phần vượt trội tắt dần về 0 trong 10 năm — không giả định doanh nghiệp sinh lời cao mãi"],
+    ["pb_own", `P/B lịch sử của chính mã${mx("own_pb")}`,
       "BVPS × P/B trung vị mã này từng được thị trường trả trong 5.5 năm (mỗi phiên khớp với sổ sách đã công bố tại thời điểm đó)"],
     ["pocf", "Price/OCF (×10)", "Dòng tiền HĐKD/CP × 10×"],
   ];
@@ -44,7 +54,8 @@ function methodLabels(sector) {
 
 export function valuationPanel(co, model, priceRaw) {
   const methods = (model && model.methods) || {};
-  const valid = methodLabels(co.sector).filter(([k]) => F.isNum(methods[k]) && methods[k] > 0);
+  const valid = methodLabels(co.sector, (model && model.params) || {})
+    .filter(([k]) => F.isNum(methods[k]) && methods[k] > 0);
   if (!valid.length) return null;
 
   const panel = el(`<div class="vpanel"><h2 class="sec-h vp-h">Ước tính Định giá</h2></div>`);

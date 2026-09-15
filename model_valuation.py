@@ -81,6 +81,190 @@ def _all_methods(ttm: dict, ticker: str) -> dict:
             "ri": ri_price, "pocf": pocf_price}
 
 
+# -- what the market has actually paid ---------------------------------------
+# MARKET_PE was 15 and TARGET_PB 1.5, against a market whose median trailing P/E
+# is 9.6x and median P/B 0.93x. Graham inherited both, since 22.5 is 15 x 1.5.
+# The result was not a sector quirk but a constant offset in every sector: the
+# model put 320 of 403 tickers (79%) at a positive upside, median +60%, with
+# wholesale at +146%, construction +121% and property +90%. `pe` measured above
+# the market price in almost every sector -- fisheries x2.02, electrical
+# equipment x1.83, utilities x1.77, transport x1.75.
+#
+# So the multiples now come from what the market has paid, per sector, across
+# the 5.5 years of price history in the database rather than from a round
+# number. Per sector because a bank at 7.7x earnings and a broker at 16.0x are
+# not the same bar; historical rather than today's cross-section because the
+# current median would force the median ticker to exactly 0% upside and the
+# model could then never say a sector is cheap against its own past.
+#
+# Each close is matched to the EPS and book value a buyer could have known that
+# day -- a quarter becomes usable 45 days after it ends, the same publish lag
+# the valuation band uses -- so nothing here values a stock on earnings nobody
+# had yet.
+_PUBLISH_LAG_DAYS = 45
+_MIN_OBS = 200                  # ~2 years of sessions before a median means much
+_MIN_SECTOR_TICKERS = 3         # below this, fall back to the market median
+_QUARTER_END_MD = {1: (4, 1), 2: (7, 1), 3: (10, 1), 4: (1, 1)}
+
+_HIST = None
+
+
+def _quarter_usable_from(period):
+    """The date a quarter's figures could first have been used."""
+    from datetime import date, timedelta
+    try:
+        year, qn = int(str(period)[:4]), int(str(period)[6:])
+        month, day = _QUARTER_END_MD[qn]
+        return date(year + (1 if qn == 4 else 0), month, day) + timedelta(days=_PUBLISH_LAG_DAYS)
+    except (ValueError, KeyError, TypeError):
+        return None
+
+
+def _build_history():
+    """Trailing P/E, P/B and P/S medians per ticker, then per sector."""
+    from models.database import get_session
+    from models.schema import Company, Financial, Price
+    from sqlalchemy import select
+
+    with get_session() as session:
+        sectors = dict(session.execute(select(Company.ticker, Company.sector)).all())
+        quarters = session.execute(
+            select(Financial.ticker, Financial.period, Financial.equity,
+                   Financial.shares_outstanding, Financial.net_income, Financial.revenue)
+            .where(Financial.period_type == "Q").order_by(Financial.ticker, Financial.period)
+        ).all()
+        closes = session.execute(
+            select(Price.ticker, Price.date, Price.close).order_by(Price.ticker, Price.date)
+        ).all()
+
+    rows_by_ticker = {}
+    for row in quarters:
+        rows_by_ticker.setdefault(row[0], []).append(row)
+
+    marks = {}
+    for ticker, rows in rows_by_ticker.items():
+        out = []
+        for i, row in enumerate(rows):
+            _, period, equity, shares, _ni, _rev = row
+            usable = _quarter_usable_from(period)
+            if usable is None or not shares or float(shares) <= 0:
+                continue
+            window = rows[max(0, i - 3):i + 1]
+            incomes = [r[4] for r in window]
+            revenues = [r[5] for r in window]
+            full = len(window) == 4
+            bvps = (float(equity) * 1_000 / float(shares)) if equity and float(equity) > 0 else None
+            eps = (sum(float(x) for x in incomes) * 1_000 / float(shares)
+                   if full and all(x is not None for x in incomes) else None)
+            sps = (sum(float(x) for x in revenues) * 1_000 / float(shares)
+                   if full and all(x is not None for x in revenues) else None)
+            out.append((usable, bvps, eps, sps))
+        out.sort()
+        if out:
+            marks[ticker] = out
+
+    price_rows = {}
+    for ticker, when, close in closes:
+        price_rows.setdefault(ticker, []).append((when, close))
+
+    per_ticker = {}
+    for ticker, rows in price_rows.items():
+        mk = marks.get(ticker)
+        if not mk:
+            continue
+        pes, pbs, pss = [], [], []
+        i, bvps, eps, sps = 0, None, None, None
+        for when, close in rows:
+            while i < len(mk) and mk[i][0] <= when:
+                bvps, eps, sps = mk[i][1], mk[i][2], mk[i][3]
+                i += 1
+            price = float(close) * 1_000
+            if bvps and bvps > 0:
+                pbs.append(price / bvps)
+            if eps and eps > 0:
+                pes.append(price / eps)
+            if sps and sps > 0:
+                pss.append(price / sps)
+        entry = {}
+        if len(pbs) >= _MIN_OBS:
+            entry["pb"] = statistics.median(pbs)
+        if len(pes) >= _MIN_OBS:
+            entry["pe"] = statistics.median(pes)
+        if len(pss) >= _MIN_OBS:
+            entry["ps"] = statistics.median(pss)
+        if entry:
+            per_ticker[ticker] = entry
+
+    market = {}
+    for key in ("pe", "pb", "ps"):
+        pool = [e[key] for e in per_ticker.values() if key in e]
+        if pool:
+            market[key] = statistics.median(pool)
+
+    # Median of the per-ticker medians, so one ticker with 1,300 sessions cannot
+    # outvote its whole sector the way pooling every observation would let it.
+    grouped = {}
+    for ticker, entry in per_ticker.items():
+        grouped.setdefault(sectors.get(ticker) or "", []).append(entry)
+    per_sector = {}
+    for sector, entries in grouped.items():
+        if not sector:
+            continue
+        out = {}
+        for key in ("pe", "pb", "ps"):
+            vals = [e[key] for e in entries if key in e]
+            if len(vals) >= _MIN_SECTOR_TICKERS:
+                out[key] = statistics.median(vals)
+        if out:
+            per_sector[sector] = out
+    return {"ticker": per_ticker, "sector": per_sector, "market": market}
+
+
+def history():
+    """Built once per export run; a failure degrades rather than aborts."""
+    global _HIST
+    if _HIST is None:
+        try:
+            _HIST = _build_history()
+        except Exception as e:
+            print(f"    ! historical multiples unavailable: {e}")
+            _HIST = {"ticker": {}, "sector": {}, "market": {}}
+    return _HIST
+
+
+# A sector whose earnings collapsed shows a P/E that is an artefact of the
+# denominator, not a bar anyone would pay: hospitality measures 69.1x because
+# the sector earned almost nothing after COVID, and using it would declare those
+# stocks worth seven times the market. Clamped to half and two-and-a-half times
+# the market's own median, which takes hospitality to 26.6x and leaves every
+# ordinary sector alone -- brokers at 16.8x sit inside it.
+#
+# P/E ONLY. P/S and P/B differ between sectors for real reasons and clamping
+# them corrupts the figure: wholesale trades at 0.16x sales because a petrol
+# distributor keeps a cent on the dong, and floored to 0.50x it valued PLX at
+# +347% of its market price.
+_MULT_LO, _MULT_HI = 0.5, 2.5
+_CLAMPED_KEYS = ("pe",)
+
+
+def sector_multiple(sector, key):
+    """What this sector has historically traded at, or the market if too few."""
+    h = history()
+    s = h["sector"].get(sector or "")
+    value = s[key] if (s and key in s) else h["market"].get(key)
+    if value is None:
+        return None
+    market = h["market"].get(key)
+    if market and key in _CLAMPED_KEYS:
+        value = min(max(value, market * _MULT_LO), market * _MULT_HI)
+    return value
+
+
+def own_multiple(ticker, key):
+    """What this ticker itself has historically traded at."""
+    return history()["ticker"].get(ticker, {}).get(key)
+
+
 # ── justified P/B for financials ────────────────────────────────────────────
 # A bank is valued on what it earns for its shareholders against what they
 # require, because its debt is raw material rather than financing. The Gordon
@@ -239,85 +423,82 @@ def rim_fade_price(ttm: dict, beta: float | None, ticker: str):
     return round(price) if price > 0 else None
 
 
-def _own_median_pb(ticker: str):
-    """Median P/B the market has actually paid for this bank.
-
-    Each close is matched to the newest book value a buyer could have known on
-    that date -- the quarter is only usable once it has been filed, so the same
-    45-day publish lag the valuation band uses applies here, or the ratio would
-    use earnings nobody had yet.
-    """
-    try:
-        from datetime import date, timedelta
-        from models.database import get_session
-        from models.schema import Financial, Price
-        from sqlalchemy import select
-        with get_session() as session:
-            quarters = session.execute(
-                select(Financial.period, Financial.equity, Financial.shares_outstanding)
-                .where(Financial.ticker == ticker, Financial.period_type == "Q",
-                       Financial.equity.isnot(None))
-                .order_by(Financial.period)
-            ).all()
-            closes = session.execute(
-                select(Price.date, Price.close)
-                .where(Price.ticker == ticker).order_by(Price.date)
-            ).all()
-    except Exception:
-        return None
-    if not quarters or not closes:
-        return None
-
-    stamped = []
-    for period, equity, shares in quarters:
-        try:
-            year, qn = int(str(period)[:4]), int(str(period)[6:])
-            month, day = _QUARTER_END_MD[qn]
-            usable = date(year + (1 if qn == 4 else 0), month, day) + timedelta(days=45)
-        except (ValueError, KeyError, IndexError):
-            continue
-        if equity and shares and float(shares) > 0 and float(equity) > 0:
-            stamped.append((usable, float(equity) * 1_000 / float(shares)))
-    if not stamped:
-        return None
-    stamped.sort()
-
-    ratios, i, bvps = [], 0, None
-    for when, close in closes:
-        while i < len(stamped) and stamped[i][0] <= when:
-            bvps = stamped[i][1]
-            i += 1
-        if bvps and close:
-            ratios.append(float(close) * 1_000 / bvps)
-    if len(ratios) < _MIN_PB_OBS:
-        return None
-    return statistics.median(ratios)
-
-
-_QUARTER_END_MD = {1: (4, 1), 2: (7, 1), 3: (10, 1), 4: (1, 1)}
-
-
 def own_pb_price(ttm: dict, ticker: str):
-    """BVPS x the median P/B this bank has traded at."""
+    """BVPS x the median P/B this ticker has actually traded at."""
     equity = ttm.get("equity")
     shares = ttm.get("shares_outstanding") or 0
     if not equity or equity <= 0 or shares <= 0:
         return None
-    pb = _own_median_pb(ticker)
-    if pb is None or pb <= 0:
+    pb = own_multiple(ticker, "pb")
+    if not pb or pb <= 0:
         return None
     price = equity * 1_000 / shares * pb
     return round(price) if price > 0 else None
 
 
+def own_pe_price(ttm: dict, ticker: str):
+    """EPS (TTM) x the median P/E this ticker has actually traded at."""
+    shares = ttm.get("shares_outstanding") or 0
+    ni = ttm.get("net_income")
+    if shares <= 0 or not ni or ni <= 0:
+        return None
+    pe = own_multiple(ticker, "pe")
+    if not pe or pe <= 0:
+        return None
+    price = ni * 1_000 / shares * pe
+    return round(price) if price > 0 else None
+
+
 def _sector_adjust(v: dict, ttm: dict, sector: str, beta=None,
                    ticker: str = "") -> dict:
-    """Copy of _sector_adjusted_valuations() from the app."""
+    """Swap the round-number multiples for what this sector has actually traded at.
+
+    Every sector now carries four market-based anchors -- its own sector's
+    historical P/E and P/B, and the ticker's own historical P/E and P/B -- on top
+    of whatever model-based methods suit the sector. The four answer different
+    questions: "what does the market pay for this kind of company", and "is this
+    particular company dear against its own past". Their disagreement is the
+    reading, which one method could never give.
+    """
     v = dict(v)
     shares = ttm.get("shares_outstanding") or 0
+    equity = ttm.get("equity")
+    net_income = ttm.get("net_income")
 
-    def _ps(val_bn, mult):
-        return round(val_bn * 1e9 / (shares * 1e6) * mult) if (val_bn and shares > 0) else None
+    def _per_share(val_bn, mult):
+        return round(val_bn * 1e9 / (shares * 1e6) * mult) if (val_bn and shares > 0 and mult) else None
+
+    sec_pe = sector_multiple(sector, "pe")
+    sec_pb = sector_multiple(sector, "pb")
+    sec_ps = sector_multiple(sector, "ps")
+
+    # The sector's own bar, in place of MARKET_PE = 15 and TARGET_PB = 1.5.
+    v["pe"] = _per_share(net_income, sec_pe) if (net_income and net_income > 0) else None
+    v["pb"] = _per_share(equity, sec_pb)
+    v["ps"] = _per_share(ttm.get("revenue"), sec_ps)
+
+    # Graham's 22.5 is 15 x 1.5, the same two numbers -- so it takes the same
+    # correction rather than keeping a constant that no longer matches either.
+    if (sec_pe and sec_pb and net_income and net_income > 0 and equity
+            and equity > 0 and shares > 0):
+        eps = net_income * 1e9 / (shares * 1e6)
+        bvps = equity * 1e9 / (shares * 1e6)
+        v["graham"] = round((sec_pe * sec_pb * eps * bvps) ** 0.5)
+    else:
+        v["graham"] = None
+
+    # What the market has paid for THIS company, not its sector.
+    v["pb_own"] = own_pb_price(ttm, ticker)
+    v["pe_own"] = own_pe_price(ttm, ticker)
+
+    # residual_income_implied() defaults g to 0.12 against a CoE of 0.13, so its
+    # denominator is 0.01 and every excess point of ROE is multiplied by a
+    # hundred. Fixing that for banks left it live for the other 380 tickers,
+    # where it was the wildest method on the page: VHM read +754% against its
+    # market price, MWG +445%, PNJ +350%, HPG +263%. The faded version uses the
+    # ticker's own cost of equity and lets the excess return die over ten years,
+    # which is the model these numbers were always meant to be.
+    v["ri"] = rim_fade_price(ttm, beta, ticker)
 
     # A bank, broker or insurer has no free cash flow in the sense these three
     # methods assume: its operating cash flow is deposit, loan and client-money
@@ -331,27 +512,33 @@ def _sector_adjust(v: dict, ttm: dict, sector: str, beta=None,
             v[k] = None
 
     if sector == "Ngân hàng":
-        # One anchor, and it is the sector's own: see justified_pb_price above for
-        # why the six multiples it replaces could only ever conclude "cheap".
+        # Two model-based anchors join the four market-based ones. The justified
+        # P/B assumes today's ROE lasts for ever; the faded RIM lets the excess
+        # return die over ten years. EV/EBITDA and EPV go: a bank's interest
+        # expense is an operating cost, so an EBITDA for one is not a number, and
+        # EPV on pre-provision profit ignores the credit cost that defines the
+        # business.
         v["pb"] = justified_pb_price(ttm, beta, ticker)
-        v["ri"] = rim_fade_price(ttm, beta, ticker)
-        v["pb_own"] = own_pb_price(ttm, ticker)
-        for k in ("pe", "ps", "ev_ebitda", "graham", "epv"):
+        v["pb_sector"] = _per_share(equity, sec_pb)
+        # A bank's P/E is its P/B divided by its ROE, so a sector P/E adds no
+        # information that pb_sector does not already carry -- and applying the
+        # sector's 5.3x median to VCB, the one bank the market pays a real
+        # premium for, marked it -55% for being better than average.
+        for k in ("pe", "ps", "ev_ebitda", "epv", "graham"):
             v[k] = None
-    elif sector == "Bất động sản":
-        eb = (ttm.get("ebit") or 0) + (ttm.get("depreciation") or 0)
-        nd = (ttm.get("debt") or 0) - (ttm.get("cash") or 0)
-        if eb > 0 and shares > 0:
-            ev = eb * 15 - nd
-            v["ev_ebitda"] = round(ev * 1e9 / (shares * 1e6)) if ev > 0 else None
-        v["ps"] = _ps(ttm.get("revenue"), 3.5)
-        if ttm.get("equity") and shares > 0:
-            v["epv"] = round(ttm["equity"] * 1.8 * 1e9 / (shares * 1e6))
     elif sector == "Chứng khoán":
-        v["ps"] = _ps(ttm.get("revenue"), 3)
+        # Measured, the equity models fail here the mirror image of how the
+        # multiples failed for banks: a broker's three-year average ROE (3-14%)
+        # sits BELOW its cost of equity (10.5-15.6%), so the justified P/B lands
+        # under 1 for 11 of 20 and the floor binds. Gordon would put the sector
+        # at -45% and the faded RIM at -29% while the market pays 1.15x book.
+        # Broker earnings are cyclical -- 2021 a boom, 2022-23 a bust -- so a
+        # trailing mean understates mid-cycle power, and their book is mostly
+        # liquid marked-to-market assets, which is why the market will not price
+        # it below one. They are judged on what the market pays instead: own and
+        # sector P/E and P/B, median +6% each.
         v["ev_ebitda"] = None
-        if ttm.get("equity") and shares > 0:
-            v["epv"] = round(ttm["equity"] * 1.2 * 1e9 / (shares * 1e6))
+        v["epv"] = None
     elif sector == "Bảo hiểm":
         # 2x revenue for an insurer is 2x gross premium, and a premium buys a
         # future claim as much as a fee -- the sector nets 5-7% of it. That
@@ -360,8 +547,18 @@ def _sector_adjust(v: dict, ttm: dict, sector: str, beta=None,
         # float, so the sector is judged on equity instead.
         v["ps"] = None
         v["ev_ebitda"] = None
-        if ttm.get("equity") and shares > 0:
-            v["epv"] = round(ttm["equity"] * 2.0 * 1e9 / (shares * 1e6))
+        if equity and shares > 0:
+            v["epv"] = round(equity * 2.0 * 1e9 / (shares * 1e6))
+    elif sector == "Bất động sản":
+        # A developer's reported revenue is whatever handed over this year, so
+        # EBITDA carries a longer multiple and book stands in for the land bank.
+        eb = (ttm.get("ebit") or 0) + (ttm.get("depreciation") or 0)
+        nd = (ttm.get("debt") or 0) - (ttm.get("cash") or 0)
+        if eb > 0 and shares > 0:
+            ev = eb * 15 - nd
+            v["ev_ebitda"] = round(ev * 1e9 / (shares * 1e6)) if ev > 0 else None
+        if equity and shares > 0:
+            v["epv"] = round(equity * 1.8 * 1e9 / (shares * 1e6))
     return v
 
 
@@ -409,6 +606,18 @@ def model_price(ticker: str, sector: str, price_vnd: float | None, beta=None):
             params = {"wacc": None, "growth": growth, "fcff": fcff_base, "shares": shares}
     except Exception:
         params = {}
+
+    # The panel prints the multiple beside each card, so a reader can see that
+    # "P/E ngành" means 7.7x for a bank and 16.0x for a broker rather than one
+    # hidden constant for everyone.
+    for key, name in (("pe", "sec_pe"), ("pb", "sec_pb"), ("ps", "sec_ps")):
+        x = sector_multiple(sector, key)
+        if x:
+            params[name] = round(x, 2)
+    for key, name in (("pe", "own_pe"), ("pb", "own_pb")):
+        x = own_multiple(ticker, key)
+        if x:
+            params[name] = round(x, 2)
 
     adj = _sector_adjust(_all_methods(ttm, ticker), ttm, sector, beta, ticker)
     if sector == "Ngân hàng":
