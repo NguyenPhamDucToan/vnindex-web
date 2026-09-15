@@ -44,10 +44,21 @@ export const SECTOR_BANDS = {
   "Chứng khoán": {
     gross: [0.70, 0.47], op: [0.46, 0.26], net: [0.37, 0.20], roa: [0.047, 0.028],
     turnover: [0.150, 0.101], leverage: [2.0, 2.8],
+    // Not one of the 20 brokers clears the 15% ROE bar -- the sector's median is
+    // 9.1% -- so the tile could only ever say "you are a broker". The bar stays
+    // informative for industrials, where 119 of 357 clear it.
+    roe: [0.125, 0.054],
+    // A broker funds margin loans (a current asset) with short-term borrowing (a
+    // current liability), so its current ratio sits near 1.6 by construction:
+    // 15 of 20 read "cảnh báo" on the 2x/1x band and none read red.
+    current: [2.083, 1.558],
   },
   "Bảo hiểm": {
     gross: [0.10, 0.05], op: [0.084, 0.066], net: [0.069, 0.053], roa: [0.030, 0.026],
     turnover: [0.574, 0.479], leverage: [2.9, 4.8],
+    // Same story, 0 of 5 above 15%: an insurer earns on a float it must hold
+    // against future claims, so it cannot run an industrial's ROE.
+    roe: [0.131, 0.108],
   },
 };
 

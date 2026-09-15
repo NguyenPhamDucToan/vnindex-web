@@ -546,7 +546,7 @@ function scorecard(co, v, ttm, detail) {
                        : "Lợi nhuận sau chi phí bán hàng & quản lý, trước lãi vay và thuế",
              ...mBand("op", "≥ 15%", "5 – 15%", "< 5%") } },
     { label: "Biên lợi nhuận ròng", value: F.pct(v.net_margin), color: mR(v.net_margin, "net", 0.10, 0.05) , tip: { f: "Lợi nhuận sau thuế / Doanh thu", d: "Tỷ suất sinh lời thực tế cuối cùng giữ lại cho cổ đông", ...mBand("net", "≥ 10%", "5 – 10%", "< 5%") } },
-    { label: "ROE", value: F.pct(v.roe), color: R(v.roe, 0.15, 0.10) , tip: { f: "Lợi nhuận ròng / Vốn chủ sở hữu", d: "Đo mức sinh lời trên đồng vốn cổ đông bỏ ra", g: "≥ 15%", w: "10 – 15%", b: "< 10%" } },
+    { label: "ROE", value: F.pct(v.roe), color: mR(v.roe, "roe", 0.15, 0.10) , tip: { f: "Lợi nhuận ròng / Vốn chủ sở hữu", d: "Đo mức sinh lời trên đồng vốn cổ đông bỏ ra", ...mBand("roe", "≥ 15%", "10 – 15%", "< 10%") } },
     // Banks earn 1-2% on a deposit-funded asset base by design; scoring against
     // the 8%/5% industrial band would paint every bank red.
     { label: "ROA", value: F.pct(v.roa), color: mR(v.roa, "roa", 0.08, 0.05) , tip: { f: "Lợi nhuận ròng / Tổng tài sản", d: "Đo hiệu quả sử dụng toàn bộ tài sản", ...mBand("roa", "≥ 8%", "5 – 8%", "< 5%") } },
@@ -638,7 +638,7 @@ function scorecard(co, v, ttm, detail) {
       return (fv != null && ta) ? fv / ta : null;
     })();
     card.appendChild(scoreRow("THANH KHOẢN & CƠ CẤU TÀI SẢN", [
-      { label: "Current ratio", value: F.mult(v.current_ratio), color: R(v.current_ratio, 2, 1) , tip: { f: "Tài sản ngắn hạn / Nợ ngắn hạn", d: "Khả năng trả nợ ngắn hạn bằng tài sản lưu động", g: "≥ 2x", w: "1 – 2x", b: "< 1x" } },
+      { label: "Current ratio", value: F.mult(v.current_ratio), color: mR(v.current_ratio, "current", 2, 1) , tip: { f: "Tài sản ngắn hạn / Nợ ngắn hạn", d: "Khả năng trả nợ ngắn hạn bằng tài sản lưu động. Công ty chứng khoán tài trợ dư nợ margin bằng vay ngắn hạn nên tỷ lệ này nằm quanh 1.6x theo cấu trúc ngành, không phải dấu hiệu yếu", ...mBand("current", "≥ 2x", "1 – 2x", "< 1x") } },
       { label: "Dư nợ cho vay / Vốn chủ", value: F.mult(secLoan), color: R(secLoan, 1.5, 2.0, false) , tip: { f: "Dư nợ cho vay (margin & ứng trước) / Vốn chủ sở hữu", d: "Quy mô cho vay margin so với vốn tự có. Trần quy định là 2 lần vốn chủ sở hữu, nên càng gần 2x thì càng ít chỗ để mở rộng và càng nhạy với một đợt giảm giá", g: "≤ 1.5x", w: "1.5 – 2x", b: "> 2x" } },
       { label: "Tài sản tài chính / Tổng TS", value: F.pct(secFin), color: F.isNum(secFin) ? (secFin <= 0.5 ? "#16a34a" : secFin <= 0.7 ? "#b45309" : "#dc2626") : "#666f7c" , tip: { f: "Tài sản tài chính FVTPL & AFS / Tổng tài sản", d: "Phần tài sản đặt vào danh mục tự doanh. Càng lớn thì lợi nhuận càng đi theo thị trường chứ không theo phí môi giới", g: "≤ 50%", w: "50 – 70%", b: "> 70%" } },
     ]));
