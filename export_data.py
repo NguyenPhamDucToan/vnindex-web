@@ -440,12 +440,15 @@ def main() -> None:
         model = {"price": None, "upside": None, "methods": {}, "params": {}}
         if vg is not None and len(vg):     # only tickers we actually value
             try:
-                mp, mu, meth, prm = model_price(t, sec_by_ticker.get(t) or "", price_vnd)
-                prm = dict(prm or {})
-                # Ticker-specific beta + WACC, which is what the ROIC-vs-WACC
-                # verdict compares against (the DCF above uses DEFAULT_BETA).
-                _lq = vg.iloc[0] if vg is not None and len(vg) else None
+                # Beta first: the bank valuation needs the ticker's own cost of
+                # equity, so it can no longer be computed after the fact.
                 _beta = compute_beta_from(px, vni)
+                mp, mu, meth, prm = model_price(t, sec_by_ticker.get(t) or "", price_vnd,
+                                                _beta)
+                prm = dict(prm or {})
+                # Ticker-specific beta + WACC, which is what the ROE-vs-cost-of-
+                # equity verdict compares against (the DCF uses DEFAULT_BETA).
+                _lq = vg.iloc[0] if vg is not None and len(vg) else None
                 _fin_q = fin_by_ticker.get(t)
                 _dbt = _eqt = None
                 if _fin_q is not None and len(_fin_q):

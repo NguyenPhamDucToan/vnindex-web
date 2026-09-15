@@ -81,7 +81,105 @@ def _all_methods(ttm: dict, ticker: str) -> dict:
             "ri": ri_price, "pocf": pocf_price}
 
 
-def _sector_adjust(v: dict, ttm: dict, sector: str) -> dict:
+# ── justified P/B for financials ────────────────────────────────────────────
+# A bank is valued on what it earns for its shareholders against what they
+# require, because its debt is raw material rather than financing. The Gordon
+# form of that is
+#
+#     P/B = (ROE − g) / (Ke − g),     Ke = RF + β × ERP
+#
+# which is EXACTLY the residual-income formula already in valuation/multiples.py
+# once rearranged: BVPS + (ROE−Ke)·BVPS/(Ke−g) = BVPS·(ROE−g)/(Ke−g). What broke
+# there was the parameters, not the model -- g defaulted to 0.12 against a
+# CoE of 0.13, so the denominator was 0.01 and every excess point of ROE was
+# multiplied by a hundred: VCB came out at 141,856 VND against a 58,200 share.
+# And it used DEFAULT_BETA, so every bank got the same hurdle.
+#
+# Measured before this change, each method sat ABOVE the market for banks at the
+# median -- pe x2.14, ev_ebitda x2.13, ps x1.72, graham x1.66, epv x1.46,
+# pb x1.30, nothing below 1.0 -- because MARKET_PE is 15 and TARGET_PB is 1.5
+# while the sector trades at 7.7x earnings and 1.16x book. "A bank is cheap" was
+# therefore an assumption inside the multiples, applied equally to all 21, so it
+# lifted the whole sector without ranking any of it: 16 of 21 read Mua or Mua
+# mạnh on a median upside of +64%, and VCB -- the one bank the market prices at a
+# real premium -- was the only Theo dõi.
+_G = 0.05            # long-run nominal growth; VN inflation plus a little real
+_G_FLOOR = 0.02      # Ke must clear g by this much or the ratio explodes
+_PB_MIN, _PB_MAX = 0.30, 3.00
+
+
+def _blume(beta):
+    """Shrink a measured beta toward 1.0 (Blume): b_adj = 0.33 + 0.67 x b_raw.
+
+    A 252-day beta is an estimate, and the ratio below divides by (Ke - g), so a
+    low one runs away with the answer: NAB measured 0.475, which puts a bank's
+    cost of equity at 8.8% and its justified multiple past 3x book -- a cap, not
+    a valuation. Betas also mean-revert, so shrinking is the standard correction
+    rather than a thumb on the scale. It moved the sector's median justified P/B
+    from 1.56 to 1.52 and took both tickers off the cap.
+    """
+    if not isinstance(beta, (int, float)) or beta <= 0:
+        return DEFAULT_BETA
+    return 0.33 + 0.67 * beta
+
+
+def _avg_annual_roe(ticker: str, years: int = 3):
+    """Mean ROE over the last few annual reports -- the sustainable figure the
+    model wants, rather than one TTM window a single trading quarter can swing.
+
+    Three years rather than five: bank ROE has been falling across the sector
+    (VCB 20.2% in 2021 to 15.7% in 2025), so a five-year mean prices earning
+    power the bank no longer has.
+    """
+    try:
+        from models.database import get_session
+        from models.schema import Financial
+        from sqlalchemy import select
+        with get_session() as session:
+            rows = session.execute(
+                select(Financial.net_income, Financial.equity)
+                .where(Financial.ticker == ticker, Financial.period_type == "Y")
+                .order_by(Financial.period.desc()).limit(years)
+            ).all()
+    except Exception:
+        return None
+    vals = [ni / eq for ni, eq in rows
+            if ni is not None and eq and eq > 0 and ni == ni and eq == eq]
+    return sum(vals) / len(vals) if vals else None
+
+
+def justified_pb_price(ttm: dict, beta: float | None, ticker: str):
+    """BVPS × (ROE − g) / (Ke − g), or None when the inputs do not support it."""
+    equity = ttm.get("equity")
+    shares = ttm.get("shares_outstanding") or 0
+    if not equity or equity <= 0 or shares <= 0:
+        return None
+
+    roe = _avg_annual_roe(ticker)
+    if roe is None:
+        ni = ttm.get("net_income")
+        roe = (ni / equity) if ni else None
+    if roe is None:
+        return None
+
+    ke = cost_of_equity(_blume(beta))
+    g = min(_G, ke - _G_FLOOR)
+    if ke - g <= 0:
+        return None
+
+    pb = (roe - g) / (ke - g)
+    # A bank earning less than the growth it is priced for is worth less than its
+    # book, but not nothing: the floor keeps a single loss year from erasing the
+    # franchise, and the ceiling keeps a low-beta, high-ROE bank from running to
+    # 4x+ on a hurdle that is itself only an estimate.
+    pb = max(_PB_MIN, min(pb, _PB_MAX))
+    bvps = equity * 1_000 / shares
+    price = bvps * pb
+    return round(price) if price > 0 else None
+
+
+def _sector_adjust(v: dict, ttm: dict, sector: str, beta=None,
+                   ticker: str = "") -> dict:
     """Copy of _sector_adjusted_valuations() from the app."""
     v = dict(v)
     shares = ttm.get("shares_outstanding") or 0
@@ -101,9 +199,11 @@ def _sector_adjust(v: dict, ttm: dict, sector: str) -> dict:
             v[k] = None
 
     if sector == "Ngân hàng":
-        v["ev_ebitda"] = _ps(ttm.get("gross_profit"), 8)
-        v["epv"] = _ps(ttm.get("ebit"), 6)
-        v["ps"] = _ps(ttm.get("revenue"), 5)
+        # One anchor, and it is the sector's own: see justified_pb_price above for
+        # why the six multiples it replaces could only ever conclude "cheap".
+        v["pb"] = justified_pb_price(ttm, beta, ticker)
+        for k in ("pe", "ps", "ev_ebitda", "graham", "epv", "ri"):
+            v[k] = None
     elif sector == "Bất động sản":
         eb = (ttm.get("ebit") or 0) + (ttm.get("depreciation") or 0)
         nd = (ttm.get("debt") or 0) - (ttm.get("cash") or 0)
@@ -119,7 +219,12 @@ def _sector_adjust(v: dict, ttm: dict, sector: str) -> dict:
         if ttm.get("equity") and shares > 0:
             v["epv"] = round(ttm["equity"] * 1.2 * 1e9 / (shares * 1e6))
     elif sector == "Bảo hiểm":
-        v["ps"] = _ps(ttm.get("revenue"), 2)
+        # 2x revenue for an insurer is 2x gross premium, and a premium buys a
+        # future claim as much as a fee -- the sector nets 5-7% of it. That
+        # multiple implied a P/E near 40 and measured x3.83 the market price, the
+        # widest overshoot of any method in any sector. Book value carries the
+        # float, so the sector is judged on equity instead.
+        v["ps"] = None
         v["ev_ebitda"] = None
         if ttm.get("equity") and shares > 0:
             v["epv"] = round(ttm["equity"] * 2.0 * 1e9 / (shares * 1e6))
@@ -139,7 +244,7 @@ def _winsorized_mean(values):
     return sum(clipped) / len(clipped)
 
 
-def model_price(ticker: str, sector: str, price_vnd: float | None):
+def model_price(ticker: str, sector: str, price_vnd: float | None, beta=None):
     """Return (model_price_vnd, upside_fraction, per_method_prices, dcf_params).
 
     per_method_prices is the sector-adjusted {method_key: price_vnd} dict the
@@ -171,7 +276,7 @@ def model_price(ticker: str, sector: str, price_vnd: float | None):
     except Exception:
         params = {}
 
-    adj = _sector_adjust(_all_methods(ttm, ticker), ttm, sector)
+    adj = _sector_adjust(_all_methods(ttm, ticker), ttm, sector, beta, ticker)
     methods = {k: (round(x) if isinstance(x, (int, float)) and x and x > 0 else None)
                for k, x in adj.items()}
     prices = sorted(x for x in adj.values() if isinstance(x, (int, float)) and x and x > 0)
