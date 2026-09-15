@@ -29,6 +29,52 @@ from valuation.wacc import cost_of_equity, DEFAULT_BETA, DEFAULT_COD
 _FINANCIAL = {"Ngân hàng", "Chứng khoán", "Bảo hiểm", "Bất động sản"}
 
 
+# The four cash-flow methods each capitalise ONE trailing year, and measured
+# against the market they were the last systematic bias left after the multiples
+# were fixed: dcf x1.64, fcfe x1.61, pocf x1.40, ev_ebitda x1.39 -- and far worse
+# where working capital swings. Wholesale read fcfe x10.98 and pocf x6.09,
+# construction fcfe x5.17 and dcf x4.56, fisheries fcfe x3.60. A distributor that
+# drained inventory for one year shows an enormous operating cash flow, and
+# growing that at up to 35% before capitalising it is not a valuation.
+#
+# So the base is normalised to a cycle average: the mean of the last five annual
+# figures. Graham's own prescription for exactly this problem was a seven-to-ten
+# year average of earnings, and five is what the database holds.
+#
+# The mean, not the median, because these series alternate sign rather than
+# carry an occasional outlier -- a developer buys land one year and hands over
+# the next -- and a median can settle in a trough as easily as on a peak. On 158
+# tickers in the six most volatile sectors the two disagreed about the SIGN for
+# 23 of them. The mean is also the more conservative of the two, leaving 62 of
+# 158 with a positive base against the median's 71 and the latest year's 83; a
+# company that burns cash across a whole cycle genuinely has no DCF value, and
+# dropping the method for it is the right answer rather than a lost feature.
+_NORMALISE_YEARS = 5
+
+
+def _normalised(ticker: str, column: str, ttm_value):
+    """Mean of the last few annual figures; the TTM value if there are none."""
+    candidates = []
+    try:
+        from models.database import get_session
+        from models.schema import Financial
+        from sqlalchemy import select
+        with get_session() as session:
+            rows = session.execute(
+                select(getattr(Financial, column))
+                .where(Financial.ticker == ticker, Financial.period_type == "Y")
+                .order_by(Financial.period.desc()).limit(_NORMALISE_YEARS)
+            ).all()
+        for (value,) in rows:
+            if value is not None and float(value) == float(value):
+                candidates.append(float(value))
+    except Exception:
+        pass
+    if not candidates:
+        return ttm_value
+    return sum(candidates) / len(candidates)
+
+
 def _all_methods(ttm: dict, ticker: str) -> dict:
     """All 10 implied prices, mirroring get_all_valuations() in the app."""
     shares = ttm.get("shares_outstanding") or 0
@@ -40,6 +86,11 @@ def _all_methods(ttm: dict, ticker: str) -> dict:
 
     # DCF (canonical pipeline path so it matches the stored dcf_estimate).
     fcff_base = compute_fcff_ttm(ttm)
+    # A single year's FCFF is not a run rate; see _normalised above.
+    if fcff_base is not None:
+        annual_fcff = _normalised(ticker, "fcf", None)
+        if isinstance(annual_fcff, (int, float)) and annual_fcff == annual_fcff:
+            fcff_base = annual_fcff
     growth = 0.12
     _hg = annual_fcff_growth(ticker)          # takes ticker, not ttm
     if isinstance(_hg, (int, float)):
@@ -55,7 +106,7 @@ def _all_methods(ttm: dict, ticker: str) -> dict:
         wacc_val = r.get("wacc")
 
     fcfe_price = None
-    fcf_v = ttm.get("fcf")
+    fcf_v = _normalised(ticker, "fcf", ttm.get("fcf"))
     if fcf_v and fcf_v > 0 and shares > 0:
         r = dcf_valuation(fcff_base=fcf_v, net_debt_bn=0, shares_millions=shares,
                           fcff_growth_rate=growth, wacc_override=cost_of_equity(DEFAULT_BETA))
@@ -130,7 +181,9 @@ def _build_history():
         sectors = dict(session.execute(select(Company.ticker, Company.sector)).all())
         quarters = session.execute(
             select(Financial.ticker, Financial.period, Financial.equity,
-                   Financial.shares_outstanding, Financial.net_income, Financial.revenue)
+                   Financial.shares_outstanding, Financial.net_income, Financial.revenue,
+                   Financial.ebit, Financial.depreciation, Financial.operating_cf,
+                   Financial.debt, Financial.cash)
             .where(Financial.period_type == "Q").order_by(Financial.ticker, Financial.period)
         ).all()
         closes = session.execute(
@@ -145,20 +198,33 @@ def _build_history():
     for ticker, rows in rows_by_ticker.items():
         out = []
         for i, row in enumerate(rows):
-            _, period, equity, shares, _ni, _rev = row
+            _, period, equity, shares, _ni, _rev, _eb, _dep, _ocf, debt, cash = row
             usable = _quarter_usable_from(period)
             if usable is None or not shares or float(shares) <= 0:
                 continue
             window = rows[max(0, i - 3):i + 1]
-            incomes = [r[4] for r in window]
-            revenues = [r[5] for r in window]
             full = len(window) == 4
-            bvps = (float(equity) * 1_000 / float(shares)) if equity and float(equity) > 0 else None
-            eps = (sum(float(x) for x in incomes) * 1_000 / float(shares)
-                   if full and all(x is not None for x in incomes) else None)
-            sps = (sum(float(x) for x in revenues) * 1_000 / float(shares)
-                   if full and all(x is not None for x in revenues) else None)
-            out.append((usable, bvps, eps, sps))
+            shares_f = float(shares)
+
+            def _sum4(idx):
+                vals = [r[idx] for r in window]
+                if not full or any(v is None for v in vals):
+                    return None
+                return sum(float(v) for v in vals)
+
+            bvps = (float(equity) * 1_000 / shares_f) if equity and float(equity) > 0 else None
+            ni4, rev4 = _sum4(4), _sum4(5)
+            eps = (ni4 * 1_000 / shares_f) if ni4 is not None else None
+            sps = (rev4 * 1_000 / shares_f) if rev4 is not None else None
+
+            # EBITDA over the trailing year, from EBIT plus depreciation, and
+            # net debt from this quarter's balance sheet.
+            eb4, dep4, ocf4 = _sum4(6), _sum4(7), _sum4(8)
+            ebitda_ps = (((eb4 or 0) + (dep4 or 0)) * 1_000 / shares_f
+                         if eb4 is not None else None)
+            ocf_ps = (ocf4 * 1_000 / shares_f) if ocf4 is not None else None
+            net_debt_ps = ((float(debt or 0) - float(cash or 0)) * 1_000 / shares_f)
+            out.append((usable, bvps, eps, sps, ebitda_ps, ocf_ps, net_debt_ps))
         out.sort()
         if out:
             marks[ticker] = out
@@ -172,31 +238,31 @@ def _build_history():
         mk = marks.get(ticker)
         if not mk:
             continue
-        pes, pbs, pss = [], [], []
-        i, bvps, eps, sps = 0, None, None, None
+        series = {"pe": [], "pb": [], "ps": [], "pocf": [], "ev_ebitda": []}
+        i, bvps, eps, sps, ebitda_ps, ocf_ps, net_debt_ps = 0, None, None, None, None, None, None
         for when, close in rows:
             while i < len(mk) and mk[i][0] <= when:
-                bvps, eps, sps = mk[i][1], mk[i][2], mk[i][3]
+                _, bvps, eps, sps, ebitda_ps, ocf_ps, net_debt_ps = mk[i]
                 i += 1
             price = float(close) * 1_000
             if bvps and bvps > 0:
-                pbs.append(price / bvps)
+                series["pb"].append(price / bvps)
             if eps and eps > 0:
-                pes.append(price / eps)
+                series["pe"].append(price / eps)
             if sps and sps > 0:
-                pss.append(price / sps)
-        entry = {}
-        if len(pbs) >= _MIN_OBS:
-            entry["pb"] = statistics.median(pbs)
-        if len(pes) >= _MIN_OBS:
-            entry["pe"] = statistics.median(pes)
-        if len(pss) >= _MIN_OBS:
-            entry["ps"] = statistics.median(pss)
+                series["ps"].append(price / sps)
+            if ocf_ps and ocf_ps > 0:
+                series["pocf"].append(price / ocf_ps)
+            if ebitda_ps and ebitda_ps > 0 and net_debt_ps is not None:
+                ev = price + net_debt_ps
+                if ev > 0:
+                    series["ev_ebitda"].append(ev / ebitda_ps)
+        entry = {k: statistics.median(v) for k, v in series.items() if len(v) >= _MIN_OBS}
         if entry:
             per_ticker[ticker] = entry
 
     market = {}
-    for key in ("pe", "pb", "ps"):
+    for key in _MULT_KEYS:
         pool = [e[key] for e in per_ticker.values() if key in e]
         if pool:
             market[key] = statistics.median(pool)
@@ -211,7 +277,7 @@ def _build_history():
         if not sector:
             continue
         out = {}
-        for key in ("pe", "pb", "ps"):
+        for key in _MULT_KEYS:
             vals = [e[key] for e in entries if key in e]
             if len(vals) >= _MIN_SECTOR_TICKERS:
                 out[key] = statistics.median(vals)
@@ -244,7 +310,12 @@ def history():
 # distributor keeps a cent on the dong, and floored to 0.50x it valued PLX at
 # +347% of its market price.
 _MULT_LO, _MULT_HI = 0.5, 2.5
-_CLAMPED_KEYS = ("pe",)
+# Every multiple whose denominator is an earnings or cash-flow figure can go to
+# an artefact when that figure approaches zero, so those are clamped; P/S and
+# P/B are not, because a sales or book denominator does not collapse and their
+# spread between sectors is real.
+_CLAMPED_KEYS = ("pe", "pocf", "ev_ebitda")
+_MULT_KEYS = ("pe", "pb", "ps", "pocf", "ev_ebitda")
 
 
 def sector_multiple(sector, key):
@@ -471,6 +542,8 @@ def _sector_adjust(v: dict, ttm: dict, sector: str, beta=None,
     sec_pe = sector_multiple(sector, "pe")
     sec_pb = sector_multiple(sector, "pb")
     sec_ps = sector_multiple(sector, "ps")
+    sec_pocf = sector_multiple(sector, "pocf")
+    sec_ev = sector_multiple(sector, "ev_ebitda")
 
     # The sector's own bar, in place of MARKET_PE = 15 and TARGET_PB = 1.5.
     v["pe"] = _per_share(net_income, sec_pe) if (net_income and net_income > 0) else None
@@ -486,6 +559,26 @@ def _sector_adjust(v: dict, ttm: dict, sector: str, beta=None,
         v["graham"] = round((sec_pe * sec_pb * eps * bvps) ** 0.5)
     else:
         v["graham"] = None
+
+    # The fixed 10x P/OCF and 8x EV/EBITDA get the same treatment as P/E and
+    # P/B: the sector's own measured level instead of a round number.
+    #
+    # On the TRAILING cash flow, not the normalised one. The multiple was
+    # measured against trailing OCF, so pairing it with a five-year mean mixes
+    # two bases and understates everything -- it put HPG at -66% of its market
+    # price, VHM at -80% and PLX at -76%. Normalising belongs to the DCF and
+    # FCFE, which capitalise the figure into perpetuity and so need a run rate;
+    # a multiple on a trailing figure is a relative statement and only needs
+    # both sides measured the same way.
+    ocf = ttm.get("operating_cf")
+    v["pocf"] = _per_share(ocf, sec_pocf) if (ocf and ocf > 0) else None
+    ebitda = ttm.get("ebitda") or (((ttm.get("ebit") or 0) + (ttm.get("depreciation") or 0))
+                                   if ttm.get("ebit") else None)
+    if ebitda and ebitda > 0 and sec_ev and shares > 0:
+        ev_bn = ebitda * sec_ev - ((ttm.get("debt") or 0) - (ttm.get("cash") or 0))
+        v["ev_ebitda"] = round(ev_bn * 1e9 / (shares * 1e6)) if ev_bn > 0 else None
+    else:
+        v["ev_ebitda"] = None
 
     # What the market has paid for THIS company, not its sector.
     v["pb_own"] = own_pb_price(ttm, ticker)
@@ -550,13 +643,9 @@ def _sector_adjust(v: dict, ttm: dict, sector: str, beta=None,
         if equity and shares > 0:
             v["epv"] = round(equity * 2.0 * 1e9 / (shares * 1e6))
     elif sector == "Bất động sản":
-        # A developer's reported revenue is whatever handed over this year, so
-        # EBITDA carries a longer multiple and book stands in for the land bank.
-        eb = (ttm.get("ebit") or 0) + (ttm.get("depreciation") or 0)
-        nd = (ttm.get("debt") or 0) - (ttm.get("cash") or 0)
-        if eb > 0 and shares > 0:
-            ev = eb * 15 - nd
-            v["ev_ebitda"] = round(ev * 1e9 / (shares * 1e6)) if ev > 0 else None
+        # The hand-set 15x EBITDA is gone -- the sector's measured multiple does
+        # that job now. Book still stands in for the land bank, which reported
+        # revenue (whatever was handed over this year) cannot.
         if equity and shares > 0:
             v["epv"] = round(equity * 1.8 * 1e9 / (shares * 1e6))
     return v
