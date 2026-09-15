@@ -64,6 +64,10 @@ export function valuationPanel(co, model, priceRaw) {
   // A bank is valued on one anchor, so say so: the other methods were removed
   // because they could only conclude "cheap" for the sector -- P/E at the
   // market's 15x against a sector trading at 7.7x, P/B at 1.5x against 1.16x.
+  const prm = (model && model.params) || {};
+  if (co.sector === "Ngân hàng" && F.isNum(prm.pb_lo) && F.isNum(prm.pb_hi)) {
+    panel.appendChild(el(`<div class="vb-note">Chi phí vốn chủ là số ước lượng, và công thức chia cho (Ke − g) chỉ khoảng 0.06–0.10, nên lệch 1 điểm % ở Ke làm kết quả lệch 15–20%: với mã này khoảng <b>${F.rawVND(prm.pb_lo)} – ${F.rawVND(prm.pb_hi)} ₫</b>. Đọc con số trên như giữa một khoảng, không phải một điểm.</div>`));
+  }
   if (co.sector === "Ngân hàng") {
     panel.appendChild(el(`<div class="vb-note">Ngân hàng chỉ dùng một mốc: P/B hợp lý suy ra từ ROE và chi phí vốn chủ của chính mã đó. Các bội số P/E, P/S, EV/EBITDA đã bỏ vì lấy mốc bình quân thị trường (P/E 15x) cho một ngành đang giao dịch ở 7.7x thì kết luận "rẻ" nằm sẵn trong mốc, và áp đều cho cả 21 mã nên không xếp được thứ tự.</div>`));
   }

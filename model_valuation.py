@@ -105,7 +105,17 @@ def _all_methods(ttm: dict, ticker: str) -> dict:
 # real premium -- was the only Theo dõi.
 _G = 0.05            # long-run nominal growth; VN inflation plus a little real
 _G_FLOOR = 0.02      # Ke must clear g by this much or the ratio explodes
-_PB_MIN, _PB_MAX = 0.30, 3.00
+# 0.5x rather than 0.3x: Gordon puts EVF at 0.175x book on a 6.4% ROE against a
+# 13.0% hurdle, which is a ratio of two small differences, not a valuation. VN
+# banks bottomed near 0.5x in the 2012-13 bad-debt years and the lowest any of
+# the 21 trades at today is 0.76x, so half of book is the floor a lender that
+# still earns a profit gets.
+_PB_MIN, _PB_MAX = 0.50, 3.00
+# Ke is an estimate, and the ratio divides by (Ke - g) ~ 0.06-0.10, so a 1pp
+# error in the hurdle moves the answer 15-20%: MBB spans 1.77-2.30x, ACB
+# 1.86-2.48x. The panel shows that span so one printed number does not claim
+# precision the method does not have.
+_KE_SENSITIVITY = 0.01
 
 
 def _blume(beta):
@@ -148,8 +158,11 @@ def _avg_annual_roe(ticker: str, years: int = 3):
     return sum(vals) / len(vals) if vals else None
 
 
-def justified_pb_price(ttm: dict, beta: float | None, ticker: str):
-    """BVPS × (ROE − g) / (Ke − g), or None when the inputs do not support it."""
+def justified_pb_price(ttm: dict, beta: float | None, ticker: str, ke_shift: float = 0.0):
+    """BVPS × (ROE − g) / (Ke − g), or None when the inputs do not support it.
+
+    ke_shift moves the hurdle to price the sensitivity band.
+    """
     equity = ttm.get("equity")
     shares = ttm.get("shares_outstanding") or 0
     if not equity or equity <= 0 or shares <= 0:
@@ -162,7 +175,7 @@ def justified_pb_price(ttm: dict, beta: float | None, ticker: str):
     if roe is None:
         return None
 
-    ke = cost_of_equity(_blume(beta))
+    ke = cost_of_equity(_blume(beta)) + ke_shift
     g = min(_G, ke - _G_FLOOR)
     if ke - g <= 0:
         return None
@@ -277,6 +290,11 @@ def model_price(ticker: str, sector: str, price_vnd: float | None, beta=None):
         params = {}
 
     adj = _sector_adjust(_all_methods(ttm, ticker), ttm, sector, beta, ticker)
+    if sector == "Ngân hàng":
+        hi = justified_pb_price(ttm, beta, ticker, -_KE_SENSITIVITY)
+        lo = justified_pb_price(ttm, beta, ticker, +_KE_SENSITIVITY)
+        if lo and hi:
+            params["pb_lo"], params["pb_hi"] = lo, hi
     methods = {k: (round(x) if isinstance(x, (int, float)) and x and x > 0 else None)
                for k, x in adj.items()}
     prices = sorted(x for x in adj.values() if isinstance(x, (int, float)) and x and x > 0)

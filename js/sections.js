@@ -13,6 +13,13 @@ const TAX_RATE = 0.20;
 // deploy skips the export when data/ has not moved, so a new JSON field would
 // not reach the page on a code-only push.
 const RF = 0.05, ERP = 0.08;
+// Blume shrinkage, and three annual reports rather than five -- both mirroring
+// model_valuation.py, because that module now prices banks off exactly this
+// comparison. When they disagreed, VCB's card read 19.0% ROE against a 10.8%
+// hurdle (+8.2pp, "creates value") on the same page where its fair value came
+// out 3% BELOW the market: one number, two answers.
+const blume = (b) => (F.isNum(b) && b > 0 ? 0.33 + 0.67 * b : 1.0);
+const FIN_ROE_YEARS = 3;
 
 // ── DuPont ──────────────────────────────────────────────────────────
 // Asset turnover and leverage are structural for a bank, not choices: it funds
@@ -142,7 +149,7 @@ export function roicSection(financials, model, sector) {
     .sort((a, b) => String(a.period).localeCompare(String(b.period))).slice(-5);
   const beta = (model && model.params) ? model.params.beta : null;
   const hurdle = fin
-    ? (F.isNum(beta) ? RF + beta * ERP : null)
+    ? (F.isNum(beta) ? RF + blume(beta) * ERP : null)
     : ((model && model.params) ? model.params.wacc_ticker : null);
 
   const perYear = [];
@@ -156,13 +163,16 @@ export function roicSection(financials, model, sector) {
       perYear.push([String(r.period).slice(0, 4), r.ebit * (1 - TAX_RATE) / ic * 100]);
     }
   }
-  if (!perYear.length || !F.isNum(hurdle)) return null;
+  // Bank ROE has been falling across the sector, so a five-year mean prices
+  // earning power the bank no longer has.
+  const shown = fin ? perYear.slice(-FIN_ROE_YEARS) : perYear;
+  if (!shown.length || !F.isNum(hurdle)) return null;
 
-  const avg = perYear.reduce((a, [, x]) => a + x, 0) / perYear.length;
+  const avg = shown.reduce((a, [, x]) => a + x, 0) / shown.length;
   const gapPP = avg - hurdle * 100;
   const retC = ratingColor(gapPP / 100, 0.005, -0.005);
   const hurC = ratingColor(hurdle, 0.12, 0.15, false);
-  const n = perYear.length;
+  const n = shown.length;
   const RET = fin ? "ROE" : "ROIC";
   const HUR = fin ? "Chi phí vốn chủ" : "WACC";
 
@@ -179,11 +189,11 @@ export function roicSection(financials, model, sector) {
     verdict = `${RET} trung bình ${n} năm xấp xỉ ${fin ? "chi phí vốn chủ" : "WACC"} (chênh ${gapPP >= 0 ? "+" : ""}${gapPP.toFixed(1)} điểm %) — ${fin ? "vừa đủ bù rủi ro cho cổ đông" : "công ty hòa vốn về mặt tạo giá trị"}.`;
   }
 
-  const years = perYear.map(([y, r]) =>
+  const years = shown.map(([y, r]) =>
     `<div class="rw-yr"><span>${y}</span><b style="color:${ratingColor(r / 100 - hurdle, 0.005, -0.005)}">${r.toFixed(1)}%</b></div>`).join("");
 
   const note = fin
-    ? `<div class="vb-note">Ngân hàng, chứng khoán và bảo hiểm được so bằng ROE với chi phí vốn chủ (CAPM: ${F.pct(RF)} + β×${F.pct(ERP)}) thay vì ROIC với WACC — lãi phải trả cho người gửi tiền là chi phí đầu vào của nghề, đã nằm trong lợi nhuận, nên không tính thêm một lần nữa qua WACC.</div>`
+    ? `<div class="vb-note">Ngân hàng, chứng khoán và bảo hiểm được so bằng ROE với chi phí vốn chủ (CAPM: ${F.pct(RF)} + β×${F.pct(ERP)}, β co về 1 theo Blume) thay vì ROIC với WACC — lãi phải trả cho người gửi tiền là chi phí đầu vào của nghề, đã nằm trong lợi nhuận, nên không tính thêm một lần nữa qua WACC. Đây cũng chính là mốc dùng để định giá ngân hàng ở bảng bên.</div>`
     : "";
 
   return el(`<div class="card">

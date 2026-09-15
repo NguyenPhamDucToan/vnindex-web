@@ -470,11 +470,16 @@ function tipHtml(t) {
   return `<div class="ttm-tooltip">
     <div class="tt-f">${e(t.f)}</div>
     <div class="tt-d">${e(t.d)}</div>
-    <div class="tt-bands">
+    ${t.unrated
+      // A metric with no better end has no green/amber/red to show. Forcing it
+      // into the three-line legend printed "Tốt: không xếp hạng" beside two
+      // dashes, which reads as missing data rather than a deliberate choice.
+      ? `<div class="tt-bands"><span><i style="background:#666f7c"></i>Không xếp hạng — chỉ số này không có chiều tốt/xấu cho ngành, xem giải thích ở trên</span></div>`
+      : `<div class="tt-bands">
       <span><i style="background:#16a34a"></i>Tốt: ${e(t.g)}</span>
       <span><i style="background:#d97706"></i>Cảnh báo: ${e(t.w)}</span>
       <span><i style="background:#dc2626"></i>Nguy hiểm: ${e(t.b)}</span>
-    </div><div class="ttm-tt-arrow"></div></div>`;
+    </div>`}<div class="ttm-tt-arrow"></div></div>`;
 }
 
 function scoreRow(title, cells) {
@@ -520,7 +525,7 @@ function scorecard(co, v, ttm, detail) {
   const mBand = (key, g, w, b) => {
     const x = sectorBand(co.sector, key);
     if (x === undefined) return { g, w, b };
-    if (!x) return { g: "không xếp hạng", w: "—", b: "—" };
+    if (!x) return { unrated: true };
     const f = (n) => `${(n * 100).toFixed(n < 0.1 ? 1 : 0)}%`;
     return { g: `≥ ${f(x[0])} · nhóm đầu ngành`, w: `${f(x[1])} – ${f(x[0])} · giữa ngành`,
              b: `< ${f(x[1])} · nhóm cuối ngành` };
