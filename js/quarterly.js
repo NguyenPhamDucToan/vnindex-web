@@ -659,7 +659,7 @@ export function quarterlyCharts(parent, co, financials, detail, prices, valHisto
     ["dcf", "DCF / FCFF"], ["fcfe", "Cash Flow to Equity"], ["graham", "Graham Number"],
     ["pe", "P/E Implied"], ["pb", "P/B Implied"], ["ev_ebitda", "EV/EBITDA"],
     ["epv", "Earnings Power Value"], ["ps", "P/Sales"], ["ri", "Residual Income"],
-    ["pocf", "Price/OCF"],
+    ["pb_own", "P/B lịch sử"], ["pocf", "Price/OCF"],
   ];
   const commDef = commodities && commodities.sectors && commodities.sectors[co.sector];
   const commSeries = (commodities && commodities.series) || {};

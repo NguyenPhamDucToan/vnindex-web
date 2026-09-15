@@ -32,7 +32,12 @@ function methodLabels(sector) {
     ["ps",
       bank ? "P/TOI (×5)" : re ? "P/Revenue (×3.5)" : sec ? "P/Revenue (×3)" : ins ? "P/Revenue (×2)" : "P/Sales (×1.2)",
       bank ? "Tổng thu nhập/CP × 5×" : "Doanh thu/CP × bội số ngành"],
-    ["ri", "Residual Income", "BVPS + phần ROE vượt trội"],
+    ["ri",
+      bank ? "RIM (ROE giảm dần về chi phí vốn)" : "Residual Income",
+      bank ? "BVPS + phần ROE vượt trội, nhưng phần vượt trội tắt dần về 0 trong 10 năm — không giả định ngân hàng sinh lời cao mãi"
+           : "BVPS + phần ROE vượt trội"],
+    ["pb_own", "P/B lịch sử của chính mã",
+      "BVPS × P/B trung vị mã này từng được thị trường trả trong 5.5 năm (mỗi phiên khớp với sổ sách đã công bố tại thời điểm đó)"],
     ["pocf", "Price/OCF (×10)", "Dòng tiền HĐKD/CP × 10×"],
   ];
 }
@@ -66,10 +71,10 @@ export function valuationPanel(co, model, priceRaw) {
   // market's 15x against a sector trading at 7.7x, P/B at 1.5x against 1.16x.
   const prm = (model && model.params) || {};
   if (co.sector === "Ngân hàng" && F.isNum(prm.pb_lo) && F.isNum(prm.pb_hi)) {
-    panel.appendChild(el(`<div class="vb-note">Chi phí vốn chủ là số ước lượng, và công thức chia cho (Ke − g) chỉ khoảng 0.06–0.10, nên lệch 1 điểm % ở Ke làm kết quả lệch 15–20%: với mã này khoảng <b>${F.rawVND(prm.pb_lo)} – ${F.rawVND(prm.pb_hi)} ₫</b>. Đọc con số trên như giữa một khoảng, không phải một điểm.</div>`));
+    panel.appendChild(el(`<div class="vb-note">Chi phí vốn chủ là số ước lượng, và công thức chia cho (Ke − g) chỉ khoảng 0.06–0.10, nên lệch 1 điểm % ở Ke làm kết quả lệch 15–20%. Riêng thẻ <b>P/B hợp lý</b> của mã này dao động <b>${F.rawVND(prm.pb_lo)} – ${F.rawVND(prm.pb_hi)} ₫</b> khi Ke ±1 điểm %.</div>`));
   }
   if (co.sector === "Ngân hàng") {
-    panel.appendChild(el(`<div class="vb-note">Ngân hàng chỉ dùng một mốc: P/B hợp lý suy ra từ ROE và chi phí vốn chủ của chính mã đó. Các bội số P/E, P/S, EV/EBITDA đã bỏ vì lấy mốc bình quân thị trường (P/E 15x) cho một ngành đang giao dịch ở 7.7x thì kết luận "rẻ" nằm sẵn trong mốc, và áp đều cho cả 21 mã nên không xếp được thứ tự.</div>`));
+    panel.appendChild(el(`<div class="vb-note">Ngân hàng dùng ba mốc cố tình không đồng ý với nhau: <b>P/B hợp lý</b> (giả định ROE hiện tại kéo dài mãi — mốc rộng tay nhất), <b>RIM</b> (phần sinh lời vượt trội tắt dần về 0 trong 10 năm — chặt hơn), và <b>P/B lịch sử của chính mã</b> (thị trường đã trả bao nhiêu cho sổ sách của ngân hàng này trong 5.5 năm). Độ lệch giữa ba mốc chính là thông tin. Các bội số P/E, P/S, EV/EBITDA đã bỏ vì lấy mốc bình quân thị trường (P/E 15x) cho một ngành giao dịch ở 7.7x thì kết luận "rẻ" nằm sẵn trong mốc, và áp đều cho cả 21 mã nên không xếp được thứ tự.</div>`));
   }
 
   // Highlighted summary — the same winsorized mean the evaluation block shows,

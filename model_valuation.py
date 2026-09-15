@@ -191,6 +191,125 @@ def justified_pb_price(ttm: dict, beta: float | None, ticker: str, ke_shift: flo
     return round(price) if price > 0 else None
 
 
+# ── the two anchors that join the justified P/B ─────────────────────────────
+# One method is not a valuation, it is an opinion with a number attached. The
+# justified P/B above assumes today's ROE persists for ever, which is why it
+# reads 2-3x book for a sector the market pays 1.08x for; on its own it made the
+# median bank +36%. These two disagree with it on purpose:
+#
+#   · RIM with a fade. The same residual-income identity, but excess returns
+#     decay instead of lasting forever: ROE walks linearly down to Ke over ten
+#     years and the book compounds at g. That is the standard practitioner
+#     answer to "how long can a bank out-earn its cost of capital", and it is
+#     far more conservative -- median +0% against Gordon's +36%.
+#   · The bank's own traded P/B. Five and a half years of daily closes against
+#     the book value that was published at the time, median taken. It asks a
+#     different question from either model: not "what is this worth" but "what
+#     has the market paid for this bank's book, and is today dear or cheap
+#     against that". Median -12%.
+#
+# Winsorized together the median lands at +11%, and the spread between the three
+# is itself the reading: VCB's models and its own history agree within 7 points,
+# while NAB's Gordon says +167% and its own history says -36%.
+_FADE_YEARS = 10
+_MIN_PB_OBS = 200          # ~2 years of sessions before a median means anything
+
+
+def rim_fade_price(ttm: dict, beta: float | None, ticker: str):
+    """Residual income with ROE fading to the cost of equity over _FADE_YEARS."""
+    equity = ttm.get("equity")
+    shares = ttm.get("shares_outstanding") or 0
+    if not equity or equity <= 0 or shares <= 0:
+        return None
+    roe = _avg_annual_roe(ticker)
+    if roe is None:
+        ni = ttm.get("net_income")
+        roe = (ni / equity) if ni else None
+    if roe is None:
+        return None
+
+    ke = cost_of_equity(_blume(beta))
+    g = min(_G, ke - _G_FLOOR)
+    total = 0.0
+    for t in range(1, _FADE_YEARS + 1):
+        roe_t = roe - (roe - ke) * (t / _FADE_YEARS)
+        total += (roe_t - ke) * ((1 + g) ** (t - 1)) / ((1 + ke) ** t)
+    pb = max(_PB_MIN, min(1.0 + total, _PB_MAX))
+    price = equity * 1_000 / shares * pb
+    return round(price) if price > 0 else None
+
+
+def _own_median_pb(ticker: str):
+    """Median P/B the market has actually paid for this bank.
+
+    Each close is matched to the newest book value a buyer could have known on
+    that date -- the quarter is only usable once it has been filed, so the same
+    45-day publish lag the valuation band uses applies here, or the ratio would
+    use earnings nobody had yet.
+    """
+    try:
+        from datetime import date, timedelta
+        from models.database import get_session
+        from models.schema import Financial, Price
+        from sqlalchemy import select
+        with get_session() as session:
+            quarters = session.execute(
+                select(Financial.period, Financial.equity, Financial.shares_outstanding)
+                .where(Financial.ticker == ticker, Financial.period_type == "Q",
+                       Financial.equity.isnot(None))
+                .order_by(Financial.period)
+            ).all()
+            closes = session.execute(
+                select(Price.date, Price.close)
+                .where(Price.ticker == ticker).order_by(Price.date)
+            ).all()
+    except Exception:
+        return None
+    if not quarters or not closes:
+        return None
+
+    stamped = []
+    for period, equity, shares in quarters:
+        try:
+            year, qn = int(str(period)[:4]), int(str(period)[6:])
+            month, day = _QUARTER_END_MD[qn]
+            usable = date(year + (1 if qn == 4 else 0), month, day) + timedelta(days=45)
+        except (ValueError, KeyError, IndexError):
+            continue
+        if equity and shares and float(shares) > 0 and float(equity) > 0:
+            stamped.append((usable, float(equity) * 1_000 / float(shares)))
+    if not stamped:
+        return None
+    stamped.sort()
+
+    ratios, i, bvps = [], 0, None
+    for when, close in closes:
+        while i < len(stamped) and stamped[i][0] <= when:
+            bvps = stamped[i][1]
+            i += 1
+        if bvps and close:
+            ratios.append(float(close) * 1_000 / bvps)
+    if len(ratios) < _MIN_PB_OBS:
+        return None
+    return statistics.median(ratios)
+
+
+_QUARTER_END_MD = {1: (4, 1), 2: (7, 1), 3: (10, 1), 4: (1, 1)}
+
+
+def own_pb_price(ttm: dict, ticker: str):
+    """BVPS x the median P/B this bank has traded at."""
+    equity = ttm.get("equity")
+    shares = ttm.get("shares_outstanding") or 0
+    if not equity or equity <= 0 or shares <= 0:
+        return None
+    pb = _own_median_pb(ticker)
+    if pb is None or pb <= 0:
+        return None
+    price = equity * 1_000 / shares * pb
+    return round(price) if price > 0 else None
+
+
 def _sector_adjust(v: dict, ttm: dict, sector: str, beta=None,
                    ticker: str = "") -> dict:
     """Copy of _sector_adjusted_valuations() from the app."""
@@ -215,7 +334,9 @@ def _sector_adjust(v: dict, ttm: dict, sector: str, beta=None,
         # One anchor, and it is the sector's own: see justified_pb_price above for
         # why the six multiples it replaces could only ever conclude "cheap".
         v["pb"] = justified_pb_price(ttm, beta, ticker)
-        for k in ("pe", "ps", "ev_ebitda", "graham", "epv", "ri"):
+        v["ri"] = rim_fade_price(ttm, beta, ticker)
+        v["pb_own"] = own_pb_price(ttm, ticker)
+        for k in ("pe", "ps", "ev_ebitda", "graham", "epv"):
             v[k] = None
     elif sector == "Bất động sản":
         eb = (ttm.get("ebit") or 0) + (ttm.get("depreciation") or 0)
