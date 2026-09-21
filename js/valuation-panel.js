@@ -32,7 +32,7 @@ function methodLabels(sector, params) {
     ["pb",
       bank ? "P/B hợp lý (ROE vs chi phí vốn chủ)" : `P/B ngành${mx("sec_pb")}`,
       bank ? "BVPS × (ROE − g) / (Ke − g): ngân hàng sinh lời trên vốn cao hơn mức cổ đông đòi hỏi thì đáng giá trên 1 lần sổ sách, thấp hơn thì dưới"
-           : "BVPS × P/B trung vị mà ngành này thực sự được trả trong 5.5 năm, thay cho mốc 1.5x"],
+           : "BVPS × P/B trung vị của ngành trong 5.5 năm, nhân với ROE của mã này so với ROE trung vị ngành — doanh nghiệp sinh lời trên vốn gấp đôi ngành thì đáng bội số sổ sách gấp đôi"],
     ["pb_sector", `P/B ngành${mx("sec_pb")}`,
       "BVPS × P/B trung vị của ngành — mã này đang đắt hay rẻ so với các ngân hàng khác"],
     ["pe_own", `P/E lịch sử của chính mã${mx("own_pe")}`,

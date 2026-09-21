@@ -52,16 +52,36 @@ _FINANCIAL = {"Ngân hàng", "Chứng khoán", "Bảo hiểm", "Bất động s�
 _NORMALISE_YEARS = 5
 
 
-def _normalised(ticker: str, column: str, ttm_value):
-    """Mean of the last few annual figures; the TTM value if there are none."""
-    candidates = []
-    for row in _annual_rows(ticker, _NORMALISE_YEARS):
-        value = row.get(column)
-        if value is not None and float(value) == float(value):
-            candidates.append(float(value))
-    if not candidates:
-        return ttm_value
-    return sum(candidates) / len(candidates)
+def _normalised(ticker: str, column: str, ttm_value, current_revenue=None):
+    """A cycle-average MARGIN applied to today's revenue.
+
+    Averaging the level punishes a company that has grown every year: FPT's five
+    annual free cash flows rise throughout, so their mean sits near where it was
+    three years ago, and the DCF then values a bigger company at a smaller one's
+    cash flow. Measured on the 75 analyst-covered names -- which are the large,
+    growing ones -- that put fcfe at x0.63 of the market price, pocf at x0.64 and
+    dcf at x0.68, while the same methods read x1.23 across the names nobody
+    covers.
+
+    Averaging the MARGIN keeps the correction (one freak year cannot set the
+    base) without the penalty (today's scale is today's scale). This is the
+    ordinary way practitioners normalise: a mid-cycle margin on current revenue.
+    Falls back to averaging the level when revenue is missing.
+    """
+    rows = _annual_rows(ticker, _NORMALISE_YEARS)
+    margins, levels = [], []
+    for row in rows:
+        value, revenue = row.get(column), row.get("revenue")
+        if value is None or float(value) != float(value):
+            continue
+        levels.append(float(value))
+        if revenue and float(revenue) > 0:
+            margins.append(float(value) / float(revenue))
+    if margins and current_revenue and current_revenue > 0 and len(margins) == len(levels):
+        return sum(margins) / len(margins) * current_revenue
+    if levels:
+        return sum(levels) / len(levels)
+    return ttm_value
 
 
 def _all_methods(ttm: dict, ticker: str) -> dict:
@@ -77,7 +97,7 @@ def _all_methods(ttm: dict, ticker: str) -> dict:
     fcff_base = compute_fcff_ttm(ttm)
     # A single year's FCFF is not a run rate; see _normalised above.
     if fcff_base is not None:
-        annual_fcff = _normalised(ticker, "fcf", None)
+        annual_fcff = _normalised(ticker, "fcf", None, ttm.get("revenue"))
         if isinstance(annual_fcff, (int, float)) and annual_fcff == annual_fcff:
             fcff_base = annual_fcff
     growth = 0.12
@@ -95,7 +115,7 @@ def _all_methods(ttm: dict, ticker: str) -> dict:
         wacc_val = r.get("wacc")
 
     fcfe_price = None
-    fcf_v = _normalised(ticker, "fcf", ttm.get("fcf"))
+    fcf_v = _normalised(ticker, "fcf", ttm.get("fcf"), ttm.get("revenue"))
     if fcf_v and fcf_v > 0 and shares > 0:
         r = dcf_valuation(fcff_base=fcf_v, net_debt_bn=0, shares_millions=shares,
                           fcff_growth_rate=growth, wacc_override=cost_of_equity(DEFAULT_BETA))
@@ -184,7 +204,8 @@ def _build_history():
         # Postgres and pushed the export past the workflow's 30-minute timeout.
         annuals = session.execute(
             select(Financial.ticker, Financial.period, Financial.net_income,
-                   Financial.equity, Financial.fcf, Financial.operating_cf)
+                   Financial.equity, Financial.fcf, Financial.operating_cf,
+                   Financial.revenue)
             .where(Financial.period_type == "Y")
             .order_by(Financial.ticker, Financial.period.desc())
         ).all()
@@ -283,13 +304,13 @@ def _build_history():
         if out:
             per_sector[sector] = out
     by_year = {}
-    for ticker, period, ni, eq, fcf, ocf in annuals:
+    for ticker, period, ni, eq, fcf, ocf, rev in annuals:
         by_year.setdefault(ticker, []).append(
             {"period": period, "net_income": ni, "equity": eq,
-             "fcf": fcf, "operating_cf": ocf})
+             "fcf": fcf, "operating_cf": ocf, "revenue": rev})
 
     return {"ticker": per_ticker, "sector": per_sector, "market": market,
-            "annual": by_year}
+            "annual": by_year, "sectors": sectors}
 
 
 def history():
@@ -300,7 +321,8 @@ def history():
             _HIST = _build_history()
         except Exception as e:
             print(f"    ! historical multiples unavailable: {e}")
-            _HIST = {"ticker": {}, "sector": {}, "market": {}, "annual": {}}
+            _HIST = {"ticker": {}, "sector": {}, "market": {}, "annual": {},
+                     "sectors": {}}
     return _HIST
 
 
@@ -335,6 +357,102 @@ def sector_multiple(sector, key):
     if market and key in _CLAMPED_KEYS:
         value = min(max(value, market * _MULT_LO), market * _MULT_HI)
     return value
+
+
+def _sector_roe(sector):
+    """Median trailing ROE of a sector, from the annual cache."""
+    h = history()
+    annual = h.get("annual") or {}
+    sectors = h.get("sectors") or {}
+    vals = []
+    for ticker, rows in annual.items():
+        if sectors.get(ticker) != sector or not rows:
+            continue
+        roes = []
+        for row in rows[:3]:
+            ni, eq = row["net_income"], row["equity"]
+            if ni is not None and eq and float(eq) > 0:
+                roes.append(float(ni) / float(eq))
+        if roes:
+            vals.append(sum(roes) / len(roes))
+    return statistics.median(vals) if len(vals) >= _MIN_SECTOR_TICKERS else None
+
+
+def justified_sector_pb(ttm, sector, ticker, sec_pb):
+    """BVPS x sector P/B, scaled by this company's ROE against its sector's.
+
+    A sector median applied flat says every company in the sector deserves the
+    same multiple of book, which marks down exactly the companies that earn
+    more on that book -- it read x0.72 of the market price across the 75
+    analyst-covered names, the large, high-return ones. P/B and ROE move
+    together by construction (P/B = ROE x P/E), so the scaling is the
+    relationship itself rather than a fudge: a company earning twice its
+    sector's ROE has earned twice its sector's multiple of book.
+
+    Capped at a quarter to four times the sector figure, so a ticker with a
+    near-zero or freak ROE cannot run away with it.
+    """
+    equity = ttm.get("equity")
+    shares = ttm.get("shares_outstanding") or 0
+    if not equity or equity <= 0 or shares <= 0 or not sec_pb:
+        return None
+    bvps = equity * 1e9 / (shares * 1e6)
+    roe = _avg_annual_roe(ticker)
+    sector_roe = _sector_roe(sector)
+    scale = 1.0
+    if roe and sector_roe and sector_roe > 0 and roe > 0:
+        scale = min(max(roe / sector_roe, 0.25), 4.0)
+    price = bvps * sec_pb * scale
+    return round(price) if price > 0 else None
+
+
+def _sector_margin(sector, numerator):
+    """Median trailing margin of a sector -- net income or OCF over revenue."""
+    h = history()
+    annual = h.get("annual") or {}
+    sectors = h.get("sectors") or {}
+    vals = []
+    for ticker, rows in annual.items():
+        if sectors.get(ticker) != sector or not rows:
+            continue
+        margins = []
+        for row in rows[:3]:
+            value, revenue = row.get(numerator), row.get("revenue")
+            if value is not None and revenue and float(revenue) > 0:
+                margins.append(float(value) / float(revenue))
+        if margins:
+            vals.append(sum(margins) / len(margins))
+    return statistics.median(vals) if len(vals) >= _MIN_SECTOR_TICKERS else None
+
+
+def _own_margin(ticker, numerator):
+    rows = _annual_rows(ticker, 3)
+    margins = []
+    for row in rows:
+        value, revenue = row.get(numerator), row.get("revenue")
+        if value is not None and revenue and float(revenue) > 0:
+            margins.append(float(value) / float(revenue))
+    return sum(margins) / len(margins) if margins else None
+
+
+def _driver_scale(ticker, sector, numerator):
+    """How this company's margin compares with its sector's, clamped.
+
+    A sector median applied flat says every company in the sector deserves the
+    same multiple of sales or of cash flow, which marks down precisely the ones
+    that convert sales into more profit or more cash. The fix is the same one
+    the sector P/B gets from ROE, applied to the fundamental that drives each
+    multiple: P/S is P/E times net margin, and P/OCF moves with cash
+    conversion, so each is scaled by its own driver rather than by a fudge.
+
+    Measured on the 75 analyst-covered names -- the large, high-margin ones --
+    the flat versions read ps x0.74 and pocf x0.64 of the market price.
+    """
+    own = _own_margin(ticker, numerator)
+    sec = _sector_margin(sector, numerator)
+    if not own or not sec or sec <= 0 or own <= 0:
+        return 1.0
+    return min(max(own / sec, 0.25), 4.0)
 
 
 def own_multiple(ticker, key):
@@ -592,8 +710,9 @@ def _sector_adjust(v: dict, ttm: dict, sector: str, beta=None,
 
     # The sector's own bar, in place of MARKET_PE = 15 and TARGET_PB = 1.5.
     v["pe"] = _per_share(net_income, sec_pe) if (net_income and net_income > 0) else None
-    v["pb"] = _per_share(equity, sec_pb)
-    v["ps"] = _per_share(ttm.get("revenue"), sec_ps)
+    v["pb"] = justified_sector_pb(ttm, sector, ticker, sec_pb)
+    v["ps"] = _per_share(ttm.get("revenue"),
+                         sec_ps and sec_ps * _driver_scale(ticker, sector, "net_income"))
 
     # Graham's 22.5 is 15 x 1.5, the same two numbers -- so it takes the same
     # correction rather than keeping a constant that no longer matches either.
@@ -615,8 +734,10 @@ def _sector_adjust(v: dict, ttm: dict, sector: str, beta=None,
     # FCFE, which capitalise the figure into perpetuity and so need a run rate;
     # a multiple on a trailing figure is a relative statement and only needs
     # both sides measured the same way.
-    ocf = ttm.get("operating_cf")
-    v["pocf"] = _per_share(ocf, sec_pocf) if (ocf and ocf > 0) else None
+    ocf = ttm.get("operating_cf")  # trailing, to match how the multiple was measured
+    v["pocf"] = _per_share(
+        ocf, sec_pocf and sec_pocf * _driver_scale(ticker, sector, "operating_cf")
+    ) if (ocf and ocf > 0) else None
     ebitda = ttm.get("ebitda") or (((ttm.get("ebit") or 0) + (ttm.get("depreciation") or 0))
                                    if ttm.get("ebit") else None)
     if ebitda and ebitda > 0 and sec_ev and shares > 0:
@@ -657,7 +778,7 @@ def _sector_adjust(v: dict, ttm: dict, sector: str, beta=None,
         # EPV on pre-provision profit ignores the credit cost that defines the
         # business.
         v["pb"] = justified_pb_price(ttm, beta, ticker)
-        v["pb_sector"] = _per_share(equity, sec_pb)
+        v["pb_sector"] = justified_sector_pb(ttm, sector, ticker, sec_pb)
         # A bank's P/E is its P/B divided by its ROE, so a sector P/E adds no
         # information that pb_sector does not already carry -- and applying the
         # sector's 5.3x median to VCB, the one bank the market pays a real
