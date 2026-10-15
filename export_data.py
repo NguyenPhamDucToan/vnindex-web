@@ -52,9 +52,14 @@ if not _DB_URL:
 if not _DB_URL:
     raise SystemExit("DATABASE_URL not set and no ../vnindex-valuation/.env found")
 
-# SQLAlchemy needs the psycopg2 dialect spelled out for bare postgres:// URLs.
-if _DB_URL.startswith("postgres://"):
-    _DB_URL = _DB_URL.replace("postgres://", "postgresql://", 1)
+# Name psycopg2 explicitly. SQLAlchemy 2.1 made psycopg 3 the default for a
+# bare postgresql:// URL, and psycopg 3's server-side prepared statements
+# collide behind Supabase's transaction pooler ("prepared statement _pg3_0
+# already exists").
+for _bare in ("postgres://", "postgresql://"):
+    if _DB_URL.startswith(_bare):
+        _DB_URL = "postgresql+psycopg2://" + _DB_URL[len(_bare):]
+        break
 
 # The sibling's config.py reads DATABASE_URL from the environment (not our
 # local .env parse), so publish it before importing model_valuation -- otherwise
