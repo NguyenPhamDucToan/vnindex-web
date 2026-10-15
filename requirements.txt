@@ -4,5 +4,8 @@
 pandas>=2.0
 SQLAlchemy>=2.0
 psycopg2-binary>=2.9
+# SQLAlchemy 2.1 made psycopg 3 the default driver for a bare postgresql:// URL,
+# so DATABASE_URL needs this one now; psycopg2 stays for anything pinned to it.
+psycopg[binary]>=3.2
 # export_commodities.py only (Yahoo Finance futures for the chart-21 branch).
 yfinance>=0.2
