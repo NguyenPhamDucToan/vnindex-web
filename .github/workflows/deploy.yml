@@ -26,7 +26,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # 30 was not enough once the export started measuring 5.5 years of
     # multiples: the job was cut at exactly 30:16 inside the export step. The
     # per-ticker queries that caused it are now a single read, so this is
@@ -37,11 +37,11 @@ jobs:
       # sibling project and finds it at ../vnindex-valuation, so both repos
       # are checked out side by side under the workspace to recreate that
       # layout.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           path: vnindex-web
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           repository: NguyenPhamDucToan/vnindex_valuation
           path: vnindex-valuation
@@ -66,7 +66,7 @@ jobs:
 
       - name: Restore today's export if one exists
         id: data-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: vnindex-web/data
           restore-keys: data-${{ steps.day.outputs.d }}-${{ steps.datatree.outputs.h }}-
@@ -103,16 +103,25 @@ jobs:
           echo "export=$NEED" >> "$GITHUB_OUTPUT"
           echo "### Export: $NEED (cache: ${{ steps.data-cache.outputs.cache-matched-key || 'none' }})" >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: "pip"
 
+      # vnstock left PyPI for its own index in late September (and 4.x's vnai
+      # dependency went with it), so installing the sibling's requirements
+      # as-is failed every run from 2026-09-25. Everything else installs from
+      # PyPI as before; vnstock is tried from its new index and allowed to
+      # fail, because export_data.py only calls it lazily inside try/except
+      # (VNINDEX history, analyst targets) and falls back without it.
       - name: Install dependencies
         if: steps.plan.outputs.export == 'yes'
         run: |
           pip install -r vnindex-web/requirements.txt
-          pip install -r vnindex-valuation/requirements.txt
+          grep -viE '^\s*vnstock' vnindex-valuation/requirements.txt > /tmp/valuation-req.txt
+          pip install -r /tmp/valuation-req.txt
+          pip install --extra-index-url https://vnstocks.com/api/packages "vnstock>=5,<6" \
+            || echo "::warning::vnstock unavailable; VNINDEX history and analyst targets will fall back"
 
       - name: Export data from the database
         if: steps.plan.outputs.export == 'yes'
@@ -130,7 +139,7 @@ jobs:
       # new key would push 40MB into the cache on every CSS tweak.
       - name: Cache the export for the rest of the day
         if: steps.plan.outputs.export == 'yes'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: vnindex-web/data
           key: data-${{ steps.day.outputs.d }}-${{ steps.datatree.outputs.h }}-${{ github.run_id }}

@@ -38,30 +38,37 @@ permissions:
 
 jobs:
   refresh:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # backfill.py restarts export_detailed.py until nothing is left, and the
     # VCI Guest tier throttles with SystemExit and 57s penalties, so a healthy
     # full sweep is well over an hour.
     timeout-minutes: 300
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           path: vnindex-web
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           repository: NguyenPhamDucToan/vnindex_valuation
           path: vnindex-valuation
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: "pip"
 
+      # vnstock left PyPI for its own index in late September (see deploy.yml).
+      # Unlike the deploy, this job IS vnstock -- every block it backfills comes
+      # from VCI through it -- so here a failed install should fail the job.
       - name: Install dependencies
+        env:
+          VNSTOCK_TELEMETRY: "0"
         run: |
           pip install -r vnindex-web/requirements.txt
-          pip install -r vnindex-valuation/requirements.txt
+          grep -viE '^\s*vnstock' vnindex-valuation/requirements.txt > /tmp/valuation-req.txt
+          pip install -r /tmp/valuation-req.txt
+          pip install --extra-index-url https://vnstocks.com/api/packages "vnstock>=5,<6"
 
       - name: Commodity prices
         working-directory: vnindex-web
