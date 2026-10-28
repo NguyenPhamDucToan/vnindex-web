@@ -70,6 +70,14 @@ jobs:
           pip install -r /tmp/valuation-req.txt
           pip install --extra-index-url https://vnstocks.com/api/packages "vnstock>=5,<6"
 
+      # vnstock 5.1+ refuses the guest tier on GitHub Actions, and a key alone
+      # is not enough: the runner has to be registered as a device, which
+      # login() does. It persists for the later steps of this job.
+      - name: Log in to vnstock
+        env:
+          VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
+        run: python -c "import os, vnstock; print('vnstock tier:', vnstock.login(os.environ['VNSTOCK_API_KEY'])['tier'])"
+
       - name: Commodity prices
         working-directory: vnindex-web
         env:
