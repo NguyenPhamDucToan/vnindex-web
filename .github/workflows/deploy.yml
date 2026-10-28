@@ -10,7 +10,12 @@ on:
     # at the 09:20 I first picked, the export would have read a database that
     # was still being written, and published a half-updated site every day.
     # 87 minutes of clearance covers a healthy run with real headroom.
-    - cron: "30 10 * * 1-5"
+    #
+    # Moved to 12:30 on 2026-10-28: vnstock 5's guest tier (10 calls/minute)
+    # stretched the sibling refresh to ~75-100 minutes, and GitHub has been
+    # starting both crons ~5 hours late, so at 10:30 the export often ran
+    # while prices were still being written.
+    - cron: "30 12 * * 1-5"
   push:
     branches: [master]
   workflow_dispatch: {}
