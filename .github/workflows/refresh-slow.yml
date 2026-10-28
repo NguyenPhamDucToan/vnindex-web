@@ -74,6 +74,8 @@ jobs:
         working-directory: vnindex-web
         env:
           PYTHONIOENCODING: utf-8
+          # vnstock 5.1+ refuses the guest tier on GitHub Actions.
+          VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
         # Cheap and independent of the DB, so it runs first and is never the
         # thing a long throttled sweep runs out of time before reaching.
         run: python export_commodities.py
@@ -82,6 +84,8 @@ jobs:
         working-directory: vnindex-web
         env:
           PYTHONIOENCODING: utf-8
+          # vnstock 5.1+ refuses the guest tier on GitHub Actions.
+          VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
         # backfill.py stops on its own when a round makes no progress, so a
         # field the source genuinely has no data for does not spin the job.
         run: |
