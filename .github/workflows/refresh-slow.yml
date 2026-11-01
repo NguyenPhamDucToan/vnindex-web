@@ -42,7 +42,7 @@ jobs:
     runs-on: ubuntu-24.04
     # Up to 2h waiting for the financials refresh, ~30 min of sweep, and room
     # for a slow day at VCI.
-    timeout-minutes: 300
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@v5
         with:

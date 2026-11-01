@@ -26,6 +26,7 @@ import json
 import math
 import os
 import sys
+import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -90,10 +91,26 @@ def _records(df: pd.DataFrame) -> list[dict]:
     return [{k: _clean(v) for k, v in row.items()} for row in df.to_dict("records")]
 
 
-def fetch_foreign(code: str, sessions: int = 30) -> list[dict]:
-    """Foreign net trading (VND) for the last N sessions, from VNDirect finfo."""
+# fetch_foreign runs once per ticker inside the export loop. If VNDirect stops
+# answering, 641 tickers at a 12s timeout is over two hours -- past the job's
+# limit, so the site would not deploy at all. After this many failures in a
+# row the rest of the run skips the call and keeps each ticker's committed
+# foreign block; a success resets the count.
+_FOREIGN_MAX_FAILS = 8
+_foreign_fails = 0
+
+
+def fetch_foreign(code: str, sessions: int = 30) -> "list[dict] | None":
+    """Foreign net trading (VND) for the last N sessions, from VNDirect finfo.
+
+    None means the call failed (or was skipped after repeated failures), as
+    opposed to [] for a ticker VNDirect has no rows for.
+    """
+    global _foreign_fails
     import requests
     from datetime import timedelta
+    if _foreign_fails >= _FOREIGN_MAX_FAILS:
+        return None
     try:
         start = (date.today() - timedelta(days=sessions * 3 + 20)).strftime("%Y-%m-%d")
         url = ("https://api-finfo.vndirect.com.vn/v4/foreigns"
@@ -102,7 +119,7 @@ def fetch_foreign(code: str, sessions: int = 30) -> list[dict]:
             "User-Agent": "Mozilla/5.0", "Accept": "application/json",
             "Referer": "https://dstock.vndirect.com.vn/"})
         if r.status_code != 200:
-            return []
+            raise RuntimeError(f"HTTP {r.status_code}")
         rows = []
         for d in r.json().get("data", [])[-sessions:]:
             rows.append({
@@ -114,9 +131,15 @@ def fetch_foreign(code: str, sessions: int = 30) -> list[dict]:
                 "sell_vol": _clean(float(d.get("sellVol") or 0)),
                 "net_vol": _clean(float(d.get("netVol") or 0)),
             })
+        _foreign_fails = 0
         return rows
-    except Exception:
-        return []
+    except Exception as e:
+        _foreign_fails += 1
+        if _foreign_fails == _FOREIGN_MAX_FAILS:
+            print(f"  ! VNDirect foreign flow failed {_FOREIGN_MAX_FAILS} times in a row "
+                  f"(last: {e}); keeping committed foreign data for the rest of the run",
+                  flush=True)
+        return None
 
 
 def load_vnindex() -> "pd.Series | None":
@@ -466,6 +489,7 @@ def main() -> None:
     market_last_date = pd.to_datetime(prices["date"]).max() if len(prices) else None
 
     n = 0
+    _loop_t0 = time.monotonic()
     model_out = {}          # ticker -> {"price": .., "upside": ..} for screener
     change_out = {}         # ticker -> {"chg": .., "close": .., "vol": ..}
     for _, co in companies.iterrows():
@@ -547,15 +571,18 @@ def main() -> None:
         # files, so a re-export must carry it forward or it is destroyed:
         # analyst (~22 min), detail + news_events (~80 min) and holders
         # (~40 min). This has bitten once already, on analyst alone.
-        carried = {"analyst": None, "detail": None, "news_events": None, "holders": None}
+        carried = {"analyst": None, "detail": None, "news_events": None, "holders": None,
+                   "foreign": []}
         _prev = OUT / "ticker" / f"{t}.json"
         if _prev.exists():
             try:
                 _old = json.loads(_prev.read_text(encoding="utf-8"))
                 for k in carried:
-                    carried[k] = _old.get(k)
+                    carried[k] = _old.get(k, carried[k])
             except (ValueError, OSError):
                 pass
+        if foreign is None:                    # VNDirect failed: keep the last good flow
+            foreign = carried["foreign"] or []
 
         obj = {
             "company": {k: _clean(co[k]) for k in
@@ -576,7 +603,7 @@ def main() -> None:
         _write(OUT / "ticker" / f"{t}.json", obj)
         n += 1
         if n % 50 == 0:
-            print(f"    …{n}")
+            print(f"    …{n} ({time.monotonic() - _loop_t0:.0f}s)", flush=True)
     print(f"  wrote {n} per-ticker files")
 
     # screener.json with the sector-adjusted model price/upside + day change.
@@ -602,7 +629,7 @@ def main() -> None:
     # The VNINDEX series is already in hand from the beta calculation; the
     # market view needs it as a chart, and "VNINDEX" is also a valid code for
     # the VNDirect foreign endpoint (whole-HOSE net flow).
-    market = {"vnindex": [], "foreign": fetch_foreign("VNINDEX", sessions=30)}
+    market = {"vnindex": [], "foreign": fetch_foreign("VNINDEX", sessions=30) or []}
     if vni is not None:
         market["vnindex"] = [{"date": str(d), "close": _clean(float(v))}
                              for d, v in vni.items() if v == v]

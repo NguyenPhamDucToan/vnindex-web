@@ -37,9 +37,9 @@ jobs:
     # 30 was not enough once the export started measuring 5.5 years of
     # multiples: the job was cut at exactly 30:16 inside the export step. The
     # per-ticker queries that caused it are now a single read, so this is
-    # headroom rather than a fix. 150 since a scheduled run may also spend up
+    # headroom rather than a fix. 300 since a scheduled run may also spend up
     # to 80 minutes waiting for the sibling's refresh.
-    timeout-minutes: 150
+    timeout-minutes: 300
     steps:
       # export_data.py imports config, valuation/* and models/* from the
       # sibling project and finds it at ../vnindex-valuation, so both repos
