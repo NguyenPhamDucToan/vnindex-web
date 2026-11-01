@@ -40,12 +40,13 @@ function methodLabels(sector, params) {
     ["ev_ebitda", `EV/EBITDA ngành${mx("sec_ev")}`,
       "EBITDA × EV/EBITDA trung vị của ngành trong 5.5 năm, trừ nợ ròng. Mốc 8x (và 15x cho bất động sản) đặt tay đã bỏ"],
     ["epv",
-      bank ? "P/PPOP (×6)" : re ? "NAV Proxy (Book×1.8)" : sec ? "Book Value (×1.2)" : ins ? "Embedded Value (×2.0)" : "Earnings Power Value",
-      bank ? "LN trước dự phòng/CP × 6×" : re ? "Vốn chủ × 1.8 (quỹ đất)" : sec ? "Vốn chủ × 1.2" : ins ? "Vốn chủ × 2.0" : "NOPAT ÷ WACC, tăng trưởng 0"],
+      bank ? "P/PPOP (×6)" : re ? "NAV Proxy (Book×1.8)" : sec ? "Book Value (×1.2)" : ins ? "P/B hợp lý (ROE vs chi phí vốn chủ)" : "Earnings Power Value",
+      bank ? "LN trước dự phòng/CP × 6×" : re ? "Vốn chủ × 1.8 (quỹ đất)" : sec ? "Vốn chủ × 1.2" : ins ? "BVPS × (ROE − g) / (Ke − g), như ngân hàng: thay cho mốc vốn chủ × 2.0 đặt tay" : "NOPAT ÷ WACC, tăng trưởng 0"],
     ["ps", `P/S ngành${mx("sec_ps")}`,
       "Doanh thu/CP × P/S trung vị của ngành trong 5.5 năm"],
     ["ri", `RIM (ROE giảm dần${F.isNum(p.fade_years) ? ` trong ${p.fade_years} năm` : ""})`,
-      "BVPS + phần ROE vượt trội, tắt dần về 0. Độ dài đo từ chính doanh nghiệp: tỷ lệ số năm ROE thực sự vượt chi phí vốn chủ, trải trên khoảng 5–20 năm. Giữ được lợi thế lâu thì được giả định lâu hơn"],
+      "BVPS + phần ROE vượt trội, tắt dần về 0. Độ dài đo từ chính doanh nghiệp: tỷ lệ số năm ROE thực sự vượt chi phí vốn chủ, trải trên khoảng 5–20 năm. Giữ được lợi thế lâu thì được giả định lâu hơn"
+      + (bank || sec || ins ? `. Vốn chủ tăng theo lợi nhuận giữ lại (clean surplus)${F.isNum(p.retention) ? `, tỷ lệ giữ lại đo được ${Math.round(p.retention * 100)}%` : ""}` : "")],
     ["pb_own", `P/B lịch sử của chính mã${mx("own_pb")}`,
       "BVPS × P/B trung vị mã này từng được thị trường trả trong 5.5 năm (mỗi phiên khớp với sổ sách đã công bố tại thời điểm đó)"],
     ["pocf", `P/OCF ngành${mx("sec_pocf")}`,
@@ -86,7 +87,17 @@ export function valuationPanel(co, model, priceRaw) {
     panel.appendChild(el(`<div class="vb-note">Chi phí vốn chủ là số ước lượng, và công thức chia cho (Ke − g) chỉ khoảng 0.06–0.10, nên lệch 1 điểm % ở Ke làm kết quả lệch 15–20%. Riêng thẻ <b>P/B hợp lý</b> của mã này dao động <b>${F.rawVND(prm.pb_lo)} – ${F.rawVND(prm.pb_hi)} ₫</b> khi Ke ±1 điểm %.</div>`));
   }
   if (co.sector === "Ngân hàng") {
-    panel.appendChild(el(`<div class="vb-note">Ngân hàng dùng ba mốc cố tình không đồng ý với nhau: <b>P/B hợp lý</b> (giả định ROE hiện tại kéo dài mãi — mốc rộng tay nhất), <b>RIM</b> (phần sinh lời vượt trội tắt dần về 0 trong 10 năm — chặt hơn), và <b>P/B lịch sử của chính mã</b> (thị trường đã trả bao nhiêu cho sổ sách của ngân hàng này trong 5.5 năm). Độ lệch giữa ba mốc chính là thông tin. Các bội số P/E, P/S, EV/EBITDA đã bỏ vì lấy mốc bình quân thị trường (P/E 15x) cho một ngành giao dịch ở 7.7x thì kết luận "rẻ" nằm sẵn trong mốc, và áp đều cho cả 21 mã nên không xếp được thứ tự.</div>`));
+    panel.appendChild(el(`<div class="vb-note">Ngân hàng được định giá theo ba nhóm, mỗi nhóm một phiếu: <b>mô hình thu nhập thặng dư</b> (P/B hợp lý — ROE hiện tại kéo dài mãi, và RIM — phần vượt trội tắt dần về chi phí vốn chủ), <b>so ngành</b> (P/B trung vị ngành theo ROE), và <b>lịch sử chính mã</b> (P/E, P/B mã này từng được trả trong 5.5 năm). DCF, FCFE, P/OCF không dùng vì dòng tiền của ngân hàng là tiền gửi và cho vay, không phải dòng tiền tự do.</div>`));
+    if (F.isNum(prm.reserve_years) && F.isNum(prm.reserve_years_sector)) {
+      const cut = F.isNum(prm.book_haircut) ? prm.book_haircut : 0;
+      panel.appendChild(el(`<div class="vb-note"><b>Chất lượng tài sản:</b> dự phòng rủi ro cho vay của mã này đủ bù <b>${prm.reserve_years.toFixed(1)} năm</b> xoá nợ thực tế (trung vị ngành ${prm.reserve_years_sector.toFixed(1)} năm). ${cut > 0
+        ? `Thấp hơn ngành, nên mọi phương pháp dựa trên sổ sách dùng vốn chủ đã trừ phần trích lập thiếu sau thuế: <b>−${(cut * 100).toFixed(1)}%</b>.`
+        : "Không thấp hơn ngành, nên sổ sách giữ nguyên."} Số nợ xấu nằm trong thuyết minh BCTC, nguồn dữ liệu không có, nên đây là thước đo thay thế.</div>`));
+    }
+  }
+
+  if (prm.life_insurer) {
+    panel.appendChild(el(`<div class="vb-note">Mã này chủ yếu là <b>bảo hiểm nhân thọ</b>. Chuẩn định giá của ngành là <b>Embedded Value</b> (lợi nhuận tương lai của các hợp đồng đang hiệu lực cộng giá trị tài sản ròng điều chỉnh), nhưng BCTC công bố không có số này. Các thẻ ở đây dựa trên sổ sách và lợi nhuận kế toán, nên chỉ là ước lượng thay thế.</div>`));
   }
 
   // Highlighted summary — the same winsorized mean the evaluation block shows,
@@ -108,7 +119,7 @@ export function valuationPanel(co, model, priceRaw) {
           <div class="vp-avg-med">Trung vị ${F.rawVND(median)} · ${uMed == null ? "" : F.pctSigned(uMed)}</div>
         </div>
       </div>
-      <div class="vp-avg-note">Đã kẹp ngoại lai (median ± 1.5×MAD), điều chỉnh theo ngành</div>
+      <div class="vp-avg-note">Kẹp ngoại lai (median ± 1.5×MAD) trong từng nhóm — lịch sử chính mã, bội số ngành, mô hình dòng tiền — rồi lấy trung bình ba nhóm, để nhóm nào có nhiều phương pháp hơn không lấn phiếu</div>
     </div>`));
   }
 

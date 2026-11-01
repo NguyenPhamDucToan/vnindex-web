@@ -125,7 +125,14 @@ def load_vnindex() -> "pd.Series | None":
     valuation.wacc.compute_beta() re-fetches VNINDEX per ticker, which would
     mean 400+ rate-limited calls here; the maths is identical if we pull the
     index once and align each ticker's own price history against it.
+
+    VNDirect first: vnstock 5 rounds the index to two decimals after dividing
+    it by 1000 (1.74 for 1,741.62), a 0.6% step against daily moves of 0.5-1%,
+    which leaves the beta regression fitting rounding noise.
     """
+    s = _load_vnindex_vndirect()
+    if s is not None:
+        return s
     import warnings
     try:
         with warnings.catch_warnings():
@@ -138,8 +145,42 @@ def load_vnindex() -> "pd.Series | None":
             return None
         s = raw[["time", "close"]].copy()
         s["time"] = pd.to_datetime(s["time"]).dt.date
+        # vnstock 5 applies the stock price scale (/1000) to indices too, so
+        # VNINDEX arrives as 1.74 instead of 1,741. No Vietnamese index trades
+        # below 100 points, so a median that low is that bug, not the market.
+        if float(s["close"].median()) < 100:
+            s["close"] = s["close"] * 1000
         return s.set_index("time")["close"]
     except (Exception, SystemExit):
+        return None
+
+
+def _load_vnindex_vndirect() -> "pd.Series | None":
+    """VNINDEX closes from VNDirect's chart feed, for when vnstock refuses.
+
+    vnstock 5 counts every GitHub runner as a new device, and once the free
+    tier's device limit is reached every call fails. Without this the index
+    series came back empty: market.json shipped no VNINDEX points, and every
+    ticker's beta fell back to 1.2, which gave all 21 banks the same cost of
+    equity (VCB measures ~0.73).
+    """
+    import requests
+    from datetime import datetime, timezone
+    try:
+        now = int(datetime.now(timezone.utc).timestamp())
+        r = requests.get(
+            "https://dchart-api.vndirect.com.vn/dchart/history",
+            params={"resolution": "D", "symbol": "VNINDEX",
+                    "from": now - 520 * 86400, "to": now},
+            timeout=20, headers={"User-Agent": "Mozilla/5.0",
+                                 "Referer": "https://dchart.vndirect.com.vn/"})
+        j = r.json() if r.status_code == 200 else {}
+        t, c = j.get("t") or [], j.get("c") or []
+        if j.get("s") != "ok" or len(t) < 60 or len(t) != len(c):
+            return None
+        idx = [datetime.fromtimestamp(x, timezone.utc).date() for x in t]
+        return pd.Series([float(x) for x in c], index=idx, name="close")
+    except Exception:
         return None
 
 

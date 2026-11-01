@@ -205,7 +205,8 @@ def _build_history():
         annuals = session.execute(
             select(Financial.ticker, Financial.period, Financial.net_income,
                    Financial.equity, Financial.fcf, Financial.operating_cf,
-                   Financial.revenue)
+                   Financial.revenue, Financial.cogs, Financial.gross_loans,
+                   Financial.loan_loss_reserve)
             .where(Financial.period_type == "Y")
             .order_by(Financial.ticker, Financial.period.desc())
         ).all()
@@ -304,10 +305,12 @@ def _build_history():
         if out:
             per_sector[sector] = out
     by_year = {}
-    for ticker, period, ni, eq, fcf, ocf, rev in annuals:
+    for ticker, period, ni, eq, fcf, ocf, rev, cogs, loans, llr in annuals:
         by_year.setdefault(ticker, []).append(
             {"period": period, "net_income": ni, "equity": eq,
-             "fcf": fcf, "operating_cf": ocf, "revenue": rev})
+             "fcf": fcf, "operating_cf": ocf, "revenue": rev,
+             # for a bank, cogs holds the year's credit-loss provision
+             "provision": cogs, "gross_loans": loans, "loan_loss_reserve": llr})
 
     return {"ticker": per_ticker, "sector": per_sector, "market": market,
             "annual": by_year, "sectors": sectors}
@@ -632,13 +635,131 @@ _FADE_DEFAULT = 10
 _MIN_PB_OBS = 200          # ~2 years of sessions before a median means anything
 
 
-def rim_fade_price(ttm: dict, beta: float | None, ticker: str):
-    """Residual income with ROE fading to the cost of equity over _FADE_YEARS."""
+# Clean surplus: book grows by what is retained, B_t = B_(t-1) x (1 + b x ROE_t).
+# The fade above compounded book at a flat 5% -- which is a 70% cash payout for a
+# bank earning 17% -- while Vietnamese banks pay most of their dividend in stock
+# and keep almost everything. Residual income is ROE spread x OPENING book, so
+# understating how fast the book grows understates exactly the banks that earn
+# the widest spread for longest: VCB's RIM read 0.73x its price.
+#
+# The retention ratio is measured, not assumed: the change in equity over the
+# year's profit, median of the last three years. A capital raise or a foreign
+# placement inflates one year's figure, hence the median and the ceiling of 1.
+_RETENTION_MIN, _RETENTION_MAX = 0.30, 1.00
+_BROKER_ROE_YEARS = 8
+
+# A life insurer is valued in practice on embedded value -- in-force policies'
+# future profit plus adjusted net worth -- which no Vietnamese statement
+# discloses in a form the database holds. The panel says so rather than letting
+# a justified P/B pass for it.
+_LIFE_INSURERS = frozenset({"BVH"})
+
+
+def _retention(ticker: str):
+    """Median (E_t - E_(t-1)) / NI_t over the last three annual reports."""
+    rows = _annual_rows(ticker, 4)
+    vals = []
+    for cur, prev in zip(rows, rows[1:]):
+        ni, e1, e0 = cur.get("net_income"), cur.get("equity"), prev.get("equity")
+        try:
+            ni, e1, e0 = float(ni), float(e1), float(e0)
+        except (TypeError, ValueError):
+            continue
+        if ni > 0 and e1 == e1 and e0 == e0 and e0 > 0:
+            vals.append((e1 - e0) / ni)
+    if not vals:
+        return None
+    return min(max(statistics.median(vals), _RETENTION_MIN), _RETENTION_MAX)
+
+
+# ── asset quality ───────────────────────────────────────────────────────────
+# Every bank method above is book value times something, so a book that has not
+# been provisioned for the losses already in the loan portfolio moves all of
+# them the same way, and no blend of them can notice. The non-performing-loan
+# ratio that would measure this sits in the notes to the accounts, which the
+# feed does not carry, so the reserve is measured against the bank's own losses
+# instead: how many years of its actual write-offs the reserve would absorb.
+#
+#   write-off_t   = provision expense_t - (reserve_t - reserve_(t-1))
+#   reserve years = reserve / mean write-off over the last three years
+#
+# It ranks the way the market does -- VCB 6.9 years, ACB 5.8, TCB 4.7, with the
+# consumer lenders VPB (0.7) and TPB (1.1) at the bottom -- and the sector median
+# is 1.9. A bank below the median has its book reduced by the after-tax
+# shortfall against it: 0-4% for most, 13% for VPB. A bank above it gets no
+# credit, because a large reserve is as often a large problem being worked out
+# (STB's 23 years is its legacy book) as it is caution.
+_AQ_YEARS = 3
+_AQ_TAX = 0.20
+
+
+def _reserve_profile(ticker: str):
+    """(reserve, mean annual write-off) in VND bn, or None."""
+    rows = _annual_rows(ticker, _AQ_YEARS + 1)
+    pts = []
+    for row in rows:
+        try:
+            pts.append((float(row["loan_loss_reserve"]), float(row["provision"])))
+        except (TypeError, ValueError, KeyError):
+            break
+    if len(pts) < 2 or any(x != x for p in pts for x in p):
+        return None
+    write_offs = [prov - (llr - pts[i + 1][0])
+                  for i, (llr, prov) in enumerate(pts[:-1])]
+    mean_wo = sum(write_offs) / len(write_offs)
+    if mean_wo <= 0 or pts[0][0] <= 0:
+        return None
+    return pts[0][0], mean_wo
+
+
+_SECTOR_RESERVE_YEARS = {}
+
+
+def _sector_reserve_years(sector: str):
+    if sector not in _SECTOR_RESERVE_YEARS:
+        h = history()
+        yrs = []
+        for t, sec in (h.get("sectors") or {}).items():
+            if sec == sector:
+                p = _reserve_profile(t)
+                if p:
+                    yrs.append(p[0] / p[1])
+        _SECTOR_RESERVE_YEARS[sector] = (statistics.median(yrs)
+                                         if len(yrs) >= _MIN_SECTOR_TICKERS else None)
+    return _SECTOR_RESERVE_YEARS[sector]
+
+
+def reserve_shortfall(ticker: str, sector: str):
+    """After-tax reserve shortfall against the sector median, VND bn (>= 0)."""
+    p = _reserve_profile(ticker)
+    med = _sector_reserve_years(sector)
+    if not p or not med:
+        return None, None
+    llr, wo = p
+    return max(0.0, med * wo - llr) * (1 - _AQ_TAX), llr / wo
+
+
+def bank_book(ttm: dict, ticker: str, sector: str) -> dict:
+    """ttm with equity reduced by the reserve shortfall (unchanged if none)."""
+    sf, _ = reserve_shortfall(ticker, sector)
+    eq = ttm.get("equity")
+    if sf and eq and eq > sf:
+        return dict(ttm, equity=eq - sf)
+    return ttm
+
+
+def rim_fade_price(ttm: dict, beta: float | None, ticker: str,
+                   clean_surplus: bool = False, roe_years: int = 3):
+    """Residual income with ROE fading to the cost of equity over _FADE_YEARS.
+
+    clean_surplus grows the book by measured retention instead of a flat g;
+    roe_years is how many annual reports the starting ROE averages.
+    """
     equity = ttm.get("equity")
     shares = ttm.get("shares_outstanding") or 0
     if not equity or equity <= 0 or shares <= 0:
         return None
-    roe = _avg_annual_roe(ticker)
+    roe = _avg_annual_roe(ticker, roe_years)
     if roe is None:
         ni = ttm.get("net_income")
         roe = (ni / equity) if ni else None
@@ -648,10 +769,12 @@ def rim_fade_price(ttm: dict, beta: float | None, ticker: str):
     ke = cost_of_equity(_blume(beta))
     g = min(_G, ke - _G_FLOOR)
     horizon = _fade_years(ticker, ke)
-    total = 0.0
+    b = _retention(ticker) if clean_surplus else None
+    total, book = 0.0, 1.0           # book per unit of today's book
     for t in range(1, int(round(horizon)) + 1):
         roe_t = roe - (roe - ke) * (t / horizon)
-        total += (roe_t - ke) * ((1 + g) ** (t - 1)) / ((1 + ke) ** t)
+        total += (roe_t - ke) * book / ((1 + ke) ** t)
+        book *= (1 + b * roe_t) if b is not None else (1 + g)
     pb = max(_PB_MIN, min(1.0 + total, _PB_MAX))
     price = equity * 1_000 / shares * pb
     return round(price) if price > 0 else None
@@ -757,7 +880,8 @@ def _sector_adjust(v: dict, ttm: dict, sector: str, beta=None,
     # market price, MWG +445%, PNJ +350%, HPG +263%. The faded version uses the
     # ticker's own cost of equity and lets the excess return die over ten years,
     # which is the model these numbers were always meant to be.
-    v["ri"] = rim_fade_price(ttm, beta, ticker)
+    v["ri"] = rim_fade_price(ttm, beta, ticker,
+                             clean_surplus=sector in ("Ngân hàng", "Chứng khoán", "Bảo hiểm"))
 
     # A bank, broker or insurer has no free cash flow in the sense these three
     # methods assume: its operating cash flow is deposit, loan and client-money
@@ -777,8 +901,12 @@ def _sector_adjust(v: dict, ttm: dict, sector: str, beta=None,
         # expense is an operating cost, so an EBITDA for one is not a number, and
         # EPV on pre-provision profit ignores the credit cost that defines the
         # business.
-        v["pb"] = justified_pb_price(ttm, beta, ticker)
-        v["pb_sector"] = justified_sector_pb(ttm, sector, ticker, sec_pb)
+        # Every book-based figure works on the book net of any reserve shortfall.
+        bk = bank_book(ttm, ticker, sector)
+        v["pb"] = justified_pb_price(bk, beta, ticker)
+        v["pb_sector"] = justified_sector_pb(bk, sector, ticker, sec_pb)
+        v["pb_own"] = own_pb_price(bk, ticker)
+        v["ri"] = rim_fade_price(bk, beta, ticker, clean_surplus=True)
         # A bank's P/E is its P/B divided by its ROE, so a sector P/E adds no
         # information that pb_sector does not already carry -- and applying the
         # sector's 5.3x median to VCB, the one bank the market pays a real
@@ -798,16 +926,35 @@ def _sector_adjust(v: dict, ttm: dict, sector: str, beta=None,
         # sector P/E and P/B, median +6% each.
         v["ev_ebitda"] = None
         v["epv"] = None
+        # A broker's "revenue" is mostly proprietary-trading gains marked through
+        # profit and loss, so it swings with the index rather than measuring the
+        # business: sector P/S put VND, VIX and VDS at 1.8-2.4x their price.
+        # Graham is the square root of P/E x P/B, both already in the blend, so
+        # it was a second vote for the same two numbers.
+        v["ps"] = None
+        v["graham"] = None
+        # The same cycle that sinks a three-year ROE below the hurdle is why the
+        # RIM read 0.4-0.7x the price for most of the sector. Every annual report
+        # on file (up to eight) spans a boom and a bust, which is the mid-cycle
+        # figure a perpetuity-like model needs.
+        v["ri"] = rim_fade_price(ttm, beta, ticker, clean_surplus=True,
+                                 roe_years=_BROKER_ROE_YEARS)
     elif sector == "Bảo hiểm":
         # 2x revenue for an insurer is 2x gross premium, and a premium buys a
         # future claim as much as a fee -- the sector nets 5-7% of it. That
         # multiple implied a P/E near 40 and measured x3.83 the market price, the
         # widest overshoot of any method in any sector. Book value carries the
         # float, so the sector is judged on equity instead.
+        #
+        # The model slot was "embedded value" as 2.0x book -- a hand-set
+        # constant, not a measurement, and it put BMI at 2.9x its price. An
+        # insurer is a financial institution whose book is its float, which is
+        # the case CFA names for the justified P/B, so it gets the bank's.
         v["ps"] = None
         v["ev_ebitda"] = None
-        if equity and shares > 0:
-            v["epv"] = round(equity * 2.0 * 1e9 / (shares * 1e6))
+        v["epv"] = justified_pb_price(ttm, beta, ticker)
+        # Graham is sqrt(P/E x P/B), both already in the blend.
+        v["graham"] = None
     elif sector == "Bất động sản":
         # The hand-set 15x EBITDA is gone -- the sector's measured multiple does
         # that job now. Book still stands in for the land bank, which reported
@@ -815,6 +962,55 @@ def _sector_adjust(v: dict, ttm: dict, sector: str, beta=None,
         if equity and shares > 0:
             v["epv"] = round(equity * 1.8 * 1e9 / (shares * 1e6))
     return v
+
+
+# The blend was one method, one vote -- and the methods are not independent
+# opinions, they are several askings of three questions. A premium company ends
+# up with roughly seven sector multiples and four model estimates against two
+# anchors on its own trading history, so the answer is decided by which question
+# happens to be asked most often. Measured on the 75 analyst-covered names, the
+# own-history anchors are the unbiased ones (x1.05 of market price) while the
+# sector and model groups sit lower; outvoting them 11 to 2 is what produced
+# FRT's spread from 23,637 to 207,594 resolving near the bottom.
+#
+# So each family is winsorized on its own, and the families are then averaged.
+# Three questions, one answer each:
+#
+#   what the market pays for THIS company    (its own historical P/E and P/B)
+#   what the market pays for its KIND        (sector multiples, driver-scaled)
+#   what the cash and book are WORTH         (DCF, FCFE, RIM, EPV)
+#
+# A family with no usable method drops out rather than counting as zero.
+_FAMILIES = {
+    "own": ("pe_own", "pb_own"),
+    "sector": ("pe", "pb", "pb_sector", "ps", "ev_ebitda", "pocf", "graham"),
+    "model": ("dcf", "fcfe", "ri", "epv"),
+}
+
+
+# For a bank the "pb" slot holds the Gordon justified P/B, (ROE - g)/(Ke - g):
+# a forecast-fundamentals model (CFA's term), not a comparison with peers. Left
+# in the sector family it made the bank sector family two models of one bank
+# and the model family the faded RIM alone.
+_BANK_FAMILIES = {
+    "own": ("pe_own", "pb_own"),
+    "sector": ("pb_sector",),
+    "model": ("pb", "ri"),
+}
+
+
+def _family_mean(methods: dict, sector: str = ""):
+    """Winsorize inside each family, then average the families."""
+    per_family = []
+    families = _BANK_FAMILIES if sector == "Ngân hàng" else _FAMILIES
+    for keys in families.values():
+        values = sorted(v for k, v in methods.items()
+                        if k in keys and isinstance(v, (int, float)) and v and v > 0)
+        if values:
+            per_family.append(_winsorized_mean(values))
+    if not per_family:
+        return None
+    return sum(per_family) / len(per_family)
 
 
 def _winsorized_mean(values):
@@ -882,15 +1078,27 @@ def model_price(ticker: str, sector: str, price_vnd: float | None, beta=None):
     except Exception:
         pass
 
+    if ticker in _LIFE_INSURERS:
+        params["life_insurer"] = True
+    if sector in ("Ngân hàng", "Chứng khoán", "Bảo hiểm"):
+        b = _retention(ticker)
+        if b is not None:
+            params["retention"] = round(b, 2)
     if sector == "Ngân hàng":
-        hi = justified_pb_price(ttm, beta, ticker, -_KE_SENSITIVITY)
-        lo = justified_pb_price(ttm, beta, ticker, +_KE_SENSITIVITY)
+        sf, yrs = reserve_shortfall(ticker, sector)
+        if yrs is not None:
+            params["reserve_years"] = round(yrs, 1)
+            params["reserve_years_sector"] = round(_sector_reserve_years(sector), 1)
+            eq = ttm.get("equity")
+            params["book_haircut"] = round(sf / eq, 4) if (sf and eq and eq > sf) else 0.0
+        bk = bank_book(ttm, ticker, sector)
+        hi = justified_pb_price(bk, beta, ticker, -_KE_SENSITIVITY)
+        lo = justified_pb_price(bk, beta, ticker, +_KE_SENSITIVITY)
         if lo and hi:
             params["pb_lo"], params["pb_hi"] = lo, hi
     methods = {k: (round(x) if isinstance(x, (int, float)) and x and x > 0 else None)
                for k, x in adj.items()}
-    prices = sorted(x for x in adj.values() if isinstance(x, (int, float)) and x and x > 0)
-    m = _winsorized_mean(prices)
+    m = _family_mean(adj, sector)
     if m is None:
         return None, None, methods, params
     up = ((m - price_vnd) / price_vnd) if (price_vnd and price_vnd > 0) else None
