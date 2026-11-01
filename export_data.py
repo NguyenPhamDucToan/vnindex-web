@@ -126,32 +126,24 @@ def load_vnindex() -> "pd.Series | None":
     mean 400+ rate-limited calls here; the maths is identical if we pull the
     index once and align each ticker's own price history against it.
 
-    VNDirect first: vnstock 5 rounds the index to two decimals after dividing
-    it by 1000 (1.74 for 1,741.62), a 0.6% step against daily moves of 0.5-1%,
-    which leaves the beta regression fitting rounding noise.
+    VNDirect first, then VCI/SSI through vndata. (VNDirect led because vnstock
+    5 rounded the index to two decimals after dividing it by 1000; vndata
+    returns the index in points, but the order has a long track record.)
     """
     s = _load_vnindex_vndirect()
     if s is not None:
         return s
-    import warnings
     try:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            from vnstock import Quote
-            raw = Quote(symbol="VNINDEX", source="VCI").history(
-                start=(date.today() - timedelta(days=520)).isoformat(),
-                end=date.today().isoformat(), interval="1D")
+        from vndata import Quote
+        raw = Quote(symbol="VNINDEX").history(
+            start=(date.today() - timedelta(days=520)).isoformat(),
+            end=date.today().isoformat(), interval="1D")
         if raw is None or len(raw) < 60:
             return None
         s = raw[["time", "close"]].copy()
         s["time"] = pd.to_datetime(s["time"]).dt.date
-        # vnstock 5 applies the stock price scale (/1000) to indices too, so
-        # VNINDEX arrives as 1.74 instead of 1,741. No Vietnamese index trades
-        # below 100 points, so a median that low is that bug, not the market.
-        if float(s["close"].median()) < 100:
-            s["close"] = s["close"] * 1000
         return s.set_index("time")["close"]
-    except (Exception, SystemExit):
+    except Exception:
         return None
 
 
@@ -341,12 +333,12 @@ def compute_beta_from(prices_df, vni: "pd.Series | None", days: int = 252) -> fl
 
 
 def fetch_analyst(ticker: str) -> dict | None:
-    """Current analyst target/rating from VCI via vnstock (name omitted on purpose)."""
+    """Current analyst target/rating from VCI via vndata (name omitted on purpose)."""
     import warnings
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            from vnstock import Company
+            from vndata import Company
             ov = Company(symbol=ticker, source="VCI").overview()
         if ov is None or ov.empty:
             return None

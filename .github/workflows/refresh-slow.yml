@@ -58,32 +58,17 @@ jobs:
           python-version: "3.12"
           cache: "pip"
 
-      # vnstock left PyPI for its own index in late September (see deploy.yml).
-      # Unlike the deploy, this job IS vnstock -- every block it backfills comes
-      # from VCI through it -- so here a failed install should fail the job.
+      # Every block this job backfills comes from VCI through the sibling's
+      # vndata package (plain requests), so no vnstock, API key or login.
       - name: Install dependencies
-        env:
-          VNSTOCK_TELEMETRY: "0"
         run: |
           pip install -r vnindex-web/requirements.txt
-          grep -viE '^\s*vnstock' vnindex-valuation/requirements.txt > /tmp/valuation-req.txt
-          pip install -r /tmp/valuation-req.txt
-          pip install --extra-index-url https://vnstocks.com/api/packages "vnstock>=5,<6"
-
-      # vnstock 5.1+ refuses the guest tier on GitHub Actions, and a key alone
-      # is not enough: the runner has to be registered as a device, which
-      # login() does. It persists for the later steps of this job.
-      - name: Log in to vnstock
-        env:
-          VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
-        run: python -c "import os, vnstock; print('vnstock tier:', vnstock.login(os.environ['VNSTOCK_API_KEY'])['tier'])"
+          pip install -r vnindex-valuation/requirements.txt
 
       - name: Commodity prices
         working-directory: vnindex-web
         env:
           PYTHONIOENCODING: utf-8
-          # vnstock 5.1+ refuses the guest tier on GitHub Actions.
-          VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
         # Cheap and independent of the DB, so it runs first and is never the
         # thing a long throttled sweep runs out of time before reaching.
         run: python export_commodities.py
@@ -92,8 +77,6 @@ jobs:
         working-directory: vnindex-web
         env:
           PYTHONIOENCODING: utf-8
-          # vnstock 5.1+ refuses the guest tier on GitHub Actions.
-          VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
         # backfill.py stops on its own when a round makes no progress, so a
         # field the source genuinely has no data for does not spin the job.
         run: |

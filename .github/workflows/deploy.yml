@@ -113,29 +113,14 @@ jobs:
           python-version: "3.12"
           cache: "pip"
 
-      # vnstock left PyPI for its own index in late September (and 4.x's vnai
-      # dependency went with it), so installing the sibling's requirements
-      # as-is failed every run from 2026-09-25. Everything else installs from
-      # PyPI as before; vnstock is tried from its new index and allowed to
-      # fail, because export_data.py only calls it lazily inside try/except
-      # (VNINDEX history, analyst targets) and falls back without it.
+      # Market data now comes from the sibling's vndata package (plain
+      # requests to VCI/SSI/VNDirect), so there is no vnstock to install and
+      # no API key or login step.
       - name: Install dependencies
         if: steps.plan.outputs.export == 'yes'
         run: |
           pip install -r vnindex-web/requirements.txt
-          grep -viE '^\s*vnstock' vnindex-valuation/requirements.txt > /tmp/valuation-req.txt
-          pip install -r /tmp/valuation-req.txt
-          pip install --extra-index-url https://vnstocks.com/api/packages "vnstock>=5,<6" \
-            || echo "::warning::vnstock unavailable; VNINDEX history and analyst targets will fall back"
-
-      # vnstock 5.1+ refuses the guest tier on GitHub Actions, and a key alone
-      # is not enough: the runner has to be registered as a device, which
-      # login() does. It persists for the later steps of this job.
-      - name: Log in to vnstock
-        if: steps.plan.outputs.export == 'yes'
-        env:
-          VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
-        run: python -c "import os, vnstock; print('vnstock tier:', vnstock.login(os.environ['VNSTOCK_API_KEY'])['tier'])" || echo "::warning::vnstock login failed; VNINDEX history and analyst targets will fall back"
+          pip install -r vnindex-valuation/requirements.txt
 
       - name: Export data from the database
         if: steps.plan.outputs.export == 'yes'
@@ -143,8 +128,6 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           PYTHONIOENCODING: utf-8
-          # vnstock 5.1+ refuses the guest tier on GitHub Actions.
-          VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
         # Rewrites the fast-moving files (prices, valuations, screener, macro).
         # The slow side-loaded blocks -- detail, news_events, holders, analyst --
         # are carried forward from the committed data/ by export_data.py itself;

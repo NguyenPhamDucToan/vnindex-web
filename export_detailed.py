@@ -7,9 +7,11 @@ dividends) are drawn in the Streamlit app from `load_detailed_financials()` and
 `Financial` table stores. The static site can't make those calls, so they are
 fetched once here and folded into each ticker's JSON as a `detail` block.
 
-Like export_analyst.py this is a SEPARATE, throttled job: VCI's Guest tier caps
-at ~20 requests/minute and each ticker costs three reports, so the whole
-universe takes roughly an hour. Re-runnable and idempotent -- by default it only
+Like export_analyst.py this is a SEPARATE, throttled job: each ticker costs five
+calls, and the throttle below was sized for vnstock's Guest cap of ~20
+requests/minute, so the whole universe takes roughly an hour. The calls now go
+straight to VCI through vndata, which has no such cap; the throttle stays until
+a CI run shows VCI tolerates more. Re-runnable and idempotent -- by default it only
 fetches tickers that don't have a `detail` block yet; pass --all to refetch.
 
     DATABASE_URL=...  python export_detailed.py [--all]
@@ -115,7 +117,7 @@ def fetch_news_events(ticker: str) -> dict:
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            from vnstock import Company
+            from vndata import Company
             co = Company(symbol=ticker, source="VCI")
             try:
                 df = co.news()
@@ -154,7 +156,7 @@ def fetch_holders(ticker: str) -> dict:
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            from vnstock import Company
+            from vndata import Company
             co = Company(symbol=ticker, source="VCI")
             try:
                 df = co.shareholders()
@@ -189,7 +191,7 @@ def fetch_holders(ticker: str) -> dict:
 def _client(ticker: str):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        from vnstock.explorer.vci import Finance
+        from vndata import Finance
         return Finance(symbol=ticker, period="quarter", get_all=False, show_log=False)
 
 
