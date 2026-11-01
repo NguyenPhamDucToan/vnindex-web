@@ -7,12 +7,15 @@ dividends) are drawn in the Streamlit app from `load_detailed_financials()` and
 `Financial` table stores. The static site can't make those calls, so they are
 fetched once here and folded into each ticker's JSON as a `detail` block.
 
-Like export_analyst.py this is a SEPARATE, throttled job: each ticker costs five
-calls, and the throttle below was sized for vnstock's Guest cap of ~20
-requests/minute, so the whole universe takes roughly an hour. The calls now go
-straight to VCI through vndata, which has no such cap; the throttle stays until
-a CI run shows VCI tolerates more. Re-runnable and idempotent -- by default it only
-fetches tickers that don't have a `detail` block yet; pass --all to refetch.
+A SEPARATE job from export_data.py: each ticker costs about seven calls (three
+reports, the statement metrics, news, events, the holder list). Under vnstock's
+Guest cap of ~20 requests/minute that took well over an hour; through vndata
+the calls go straight to VCI, and the pauses below only keep it near one call a
+second, so a full --all sweep of the ~400 valued tickers is about half an hour.
+refresh-slow.yml runs that sweep weekly. Re-runnable and idempotent -- by
+default it only fetches tickers that don't have a `detail` block yet; pass
+--all to refetch. A block that comes back empty keeps the committed one, so a
+throttled or failed call never wipes good data.
 
     DATABASE_URL=...  python export_detailed.py [--all]
 """
@@ -29,7 +32,8 @@ if _SIBLING.exists():
     sys.path.insert(0, str(_SIBLING))
 
 TICKER_DIR = Path(__file__).resolve().parent / "data" / "ticker"
-THROTTLE_S = 6.0          # 5 calls/ticker with inline sleeps => ~19 req/min
+PAUSE_S = 0.3             # between the calls for one ticker
+THROTTLE_S = 1.0          # between tickers; ~7 calls in ~4s, i.e. under 2/s
 
 # Only the line items the charts actually plot, so the JSON stays small. Keys
 # are our own names; values are the VCI item_ids to try in order (the API's
@@ -131,7 +135,7 @@ def fetch_news_events(ticker: str) -> dict:
                         })
             except Exception:
                 pass
-            time.sleep(2.0)
+            time.sleep(PAUSE_S)
             try:
                 df = co.events()
                 if df is not None and not df.empty:
@@ -170,7 +174,7 @@ def fetch_holders(ticker: str) -> dict:
                         })
             except (Exception, SystemExit):
                 pass
-            time.sleep(2.0)
+            time.sleep(PAUSE_S)
             try:
                 df = co.officers()
                 if df is not None and not df.empty:
@@ -233,9 +237,9 @@ def fetch_detail(ticker: str) -> dict | None:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             inc = fin._get_report("income_statement", period="quarter", lang="en", show_log=False, limit=50)
-            time.sleep(2.0)
+            time.sleep(PAUSE_S)
             bal = fin._get_report("balance_sheet", period="quarter", lang="en", show_log=False, limit=50)
-            time.sleep(2.0)
+            time.sleep(PAUSE_S)
             cfy = fin._get_report("cash_flow", period="year", lang="en", show_log=False, limit=20)
     except (Exception, SystemExit):
         return None
@@ -316,13 +320,22 @@ def main() -> None:
             skipped += 1
             continue
         d = fetch_detail(f.stem)
-        obj["detail"] = d
-        # News + events ride along on the same throttled pass rather than
-        # costing a second full sweep of the universe.
-        time.sleep(2.0)
-        obj["news_events"] = fetch_news_events(f.stem)
-        time.sleep(2.0)
-        obj["holders"] = fetch_holders(f.stem)
+        # News + events ride along on the same pass rather than costing a
+        # second full sweep of the universe.
+        time.sleep(PAUSE_S)
+        ne = fetch_news_events(f.stem)
+        time.sleep(PAUSE_S)
+        h = fetch_holders(f.stem)
+        # Every fetcher swallows its errors and returns None or empty lists, so
+        # an empty result may be a failed call rather than a ticker with no
+        # data. Keep what is already committed in that case: a weekly --all
+        # sweep must never be able to wipe the blocks it is meant to refresh.
+        if d:
+            obj["detail"] = d
+        if any(ne.values()) or not obj.get("news_events"):
+            obj["news_events"] = ne
+        if any(h.values()) or not obj.get("holders"):
+            obj["holders"] = h
         f.write_text(json.dumps(obj, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
         done += 1
         if d is None:

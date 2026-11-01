@@ -11,11 +11,13 @@ on:
     # was still being written, and published a half-updated site every day.
     # 87 minutes of clearance covers a healthy run with real headroom.
     #
-    # Moved to 12:30 on 2026-10-28: vnstock 5's guest tier (10 calls/minute)
-    # stretched the sibling refresh to ~75-100 minutes, and GitHub has been
-    # starting both crons ~5 hours late, so at 10:30 the export often ran
-    # while prices were still being written.
-    - cron: "30 12 * * 1-5"
+    # It sat at 12:30 from 2026-10-28 to 2026-11-01 while vnstock 5's quota
+    # stretched the sibling refresh to ~75-100 minutes. That refresh now calls
+    # VCI directly (~15 min of prices), so this is back at 10:30 -- and the
+    # clock is no longer what keeps the two apart: GitHub starts both crons up
+    # to five hours late, so the step "Wait for the sibling's price refresh"
+    # below asks the Actions API whether today's refresh has finished.
+    - cron: "30 10 * * 1-5"
   push:
     branches: [master]
   workflow_dispatch: {}
@@ -35,8 +37,9 @@ jobs:
     # 30 was not enough once the export started measuring 5.5 years of
     # multiples: the job was cut at exactly 30:16 inside the export step. The
     # per-ticker queries that caused it are now a single read, so this is
-    # headroom rather than a fix.
-    timeout-minutes: 120
+    # headroom rather than a fix. 150 since a scheduled run may also spend up
+    # to 80 minutes waiting for the sibling's refresh.
+    timeout-minutes: 150
     steps:
       # export_data.py imports config, valuation/* and models/* from the
       # sibling project and finds it at ../vnindex-valuation, so both repos
@@ -112,6 +115,16 @@ jobs:
         with:
           python-version: "3.12"
           cache: "pip"
+
+      # Only the daily schedule needs fresh prices; a push or a manual run
+      # exports whatever the database holds right now. Gives up after 80
+      # minutes and exports anyway, so a stuck refresh never costs the deploy.
+      - name: Wait for the sibling's price refresh
+        if: github.event_name == 'schedule' && steps.plan.outputs.export == 'yes'
+        working-directory: vnindex-web
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python wait_for_upstream.py refresh.yml --max-wait-min 80
 
       # Market data now comes from the sibling's vndata package (plain
       # requests to VCI/SSI/VNDirect), so there is no vnstock to install and

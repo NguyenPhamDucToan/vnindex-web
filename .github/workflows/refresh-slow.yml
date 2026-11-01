@@ -1,11 +1,11 @@
 name: Weekly refresh of the slow side-loaded data
 
 # deploy.yml rebuilds the fast-moving files every weekday, but four blocks come
-# from throttled VCI/Yahoo calls that take far too long for a daily job:
+# from per-ticker VCI/Yahoo calls that are too many for a daily job:
 #
-#   detail + news_events   ~80 min   (20 quarters of income/balance per ticker)
-#   holders                ~40 min   (shareholders + officers per ticker)
-#   commodities             ~1 min   (14 Yahoo futures series)
+#   detail + news_events + holders  ~30 min   (one export_detailed.py --all sweep;
+#                                              was 2h+ under vnstock's quota)
+#   commodities                      ~1 min   (14 Yahoo futures series)
 #
 # They also change slowly -- a shareholder register or a quarter's detail moves
 # once a quarter at most -- so weekly is the right cadence. Unlike deploy.yml
@@ -15,7 +15,8 @@ name: Weekly refresh of the slow side-loaded data
 on:
   schedule:
     # 12:00 UTC Sunday = 19:00 ICT Sunday, deliberately AFTER the sibling
-    # repo's financials sweep (Sunday 05:00 UTC, up to 350 minutes). It used to
+    # repo's financials sweep (Sunday 05:00 UTC; the step "Wait for the
+    # sibling's financials refresh" covers GitHub starting it late). It used to
     # run Saturday 18:00, i.e. before that sweep, so `detail` was always up to a
     # week behind `financials`. quarterly.js indexes detail by the quarters
     # financials provides, so during that week the detail-fed charts stopped one
@@ -24,10 +25,10 @@ on:
   workflow_dispatch:
     inputs:
       field:
-        description: "Which block to backfill (detail field or top-level key)"
-        default: "holders"
+        description: "refresh = refetch every ticker; or a field to backfill where missing"
+        default: "refresh"
         type: choice
-        options: [holders, payables, fvtpl, all]
+        options: [refresh, holders, payables, fvtpl]
 
 concurrency:
   group: slow-refresh
@@ -39,9 +40,8 @@ permissions:
 jobs:
   refresh:
     runs-on: ubuntu-24.04
-    # backfill.py restarts export_detailed.py until nothing is left, and the
-    # VCI Guest tier throttles with SystemExit and 57s penalties, so a healthy
-    # full sweep is well over an hour.
+    # Up to 2h waiting for the financials refresh, ~30 min of sweep, and room
+    # for a slow day at VCI.
     timeout-minutes: 300
     steps:
       - uses: actions/checkout@v5
@@ -73,17 +73,33 @@ jobs:
         # thing a long throttled sweep runs out of time before reaching.
         run: python export_commodities.py
 
-      - name: Backfill the throttled blocks
+      # The detail block indexes the quarters `financials` provides, so the
+      # sweep must read what this Sunday's financials refresh stored. Gives up
+      # after two hours and refreshes anyway.
+      - name: Wait for the sibling's financials refresh
+        if: github.event_name == 'schedule'
+        working-directory: vnindex-web
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python wait_for_upstream.py financials_refresh.yml --max-wait-min 120
+
+      # The scheduled run (and field=refresh/all) refetches detail, news/events
+      # and holders for every valued ticker. Until 2026-11-01 this step only ran
+      # `backfill.py holders` and `backfill.py payables`, which fetch tickers
+      # still MISSING a field -- so once every ticker had one, nothing was ever
+      # refreshed and detail stayed at the quarter it was first loaded with
+      # (2026-Q2 while VCI already had Q3). Under vnstock's quota a full sweep
+      # did not fit; through vndata it takes about half an hour.
+      # A single field name still runs the targeted backfill; backfill.py stops
+      # on its own when a round makes no progress.
+      - name: Refresh the side-loaded blocks
         working-directory: vnindex-web
         env:
           PYTHONIOENCODING: utf-8
-        # backfill.py stops on its own when a round makes no progress, so a
-        # field the source genuinely has no data for does not spin the job.
         run: |
           FIELD='${{ inputs.field }}'
-          if [ -z "$FIELD" ] || [ "$FIELD" = "all" ]; then
-            python backfill.py holders
-            python backfill.py payables
+          if [ -z "$FIELD" ] || [ "$FIELD" = "refresh" ] || [ "$FIELD" = "all" ]; then
+            python -u export_detailed.py --all
           else
             python backfill.py "$FIELD"
           fi
@@ -98,5 +114,7 @@ jobs:
             echo "nothing changed"
           else
             git commit -m "Weekly refresh of side-loaded data"
+            # The sweep runs for half an hour; take any push made meanwhile.
+            git pull --rebase
             git push
           fi
