@@ -100,6 +100,27 @@ _FOREIGN_MAX_FAILS = 8
 _foreign_fails = 0
 
 
+def _db_retry(fn, waits=(5, 15)):
+    """Run fn, retrying when the database connection drops mid-export.
+
+    model_price queries Supabase per ticker, and one dropped connection --
+    "connection timed out" to the pooler, seen 2026-11-02 -- otherwise
+    publishes that ticker with no model price until the next day's export.
+    Only connection-level errors are retried; anything else is a real bug
+    and is raised at once.
+    """
+    from sqlalchemy.exc import InterfaceError, OperationalError
+    for wait in (*waits, None):
+        try:
+            return fn()
+        except (OperationalError, InterfaceError) as e:
+            if wait is None:
+                raise
+            print(f"    ~ database connection dropped ({type(e).__name__}); "
+                  f"retrying in {wait}s", flush=True)
+            time.sleep(wait)
+
+
 def fetch_foreign(code: str, sessions: int = 30) -> "list[dict] | None":
     """Foreign net trading (VND) for the last N sessions, from VNDirect finfo.
 
@@ -505,8 +526,8 @@ def main() -> None:
                 # Beta first: the bank valuation needs the ticker's own cost of
                 # equity, so it can no longer be computed after the fact.
                 _beta = compute_beta_from(px, vni)
-                mp, mu, meth, prm = model_price(t, sec_by_ticker.get(t) or "", price_vnd,
-                                                _beta)
+                mp, mu, meth, prm = _db_retry(
+                    lambda: model_price(t, sec_by_ticker.get(t) or "", price_vnd, _beta))
                 prm = dict(prm or {})
                 # Ticker-specific beta + WACC, which is what the ROE-vs-cost-of-
                 # equity verdict compares against (the DCF uses DEFAULT_BETA).

@@ -54,6 +54,12 @@ export function moneyVND(vnd) {
   return Math.round(vnd).toLocaleString("en-US") + " ₫";
 }
 
+// "2026-09-11" -> "11/09/2026"; anything else -> ""
+export function dateVN(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ""));
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : "";
+}
+
 export function escapeHtml(s) {
   return String(s == null ? "" : s)
     .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");

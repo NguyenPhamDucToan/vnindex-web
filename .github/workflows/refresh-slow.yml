@@ -1,10 +1,11 @@
 name: Weekly refresh of the slow side-loaded data
 
-# deploy.yml rebuilds the fast-moving files every weekday, but four blocks come
+# deploy.yml rebuilds the fast-moving files every weekday, but these blocks come
 # from per-ticker VCI/Yahoo calls that are too many for a daily job:
 #
 #   detail + news_events + holders  ~30 min   (one export_detailed.py --all sweep;
 #                                              was 2h+ under vnstock's quota)
+#   analyst                         ~25 min   (export_analyst.py --all, 3s apart)
 #   commodities                      ~1 min   (14 Yahoo futures series)
 #
 # They also change slowly -- a shareholder register or a quarter's detail moves
@@ -103,6 +104,16 @@ jobs:
           else
             python backfill.py "$FIELD"
           fi
+
+      # Analyst targets and ratings, with the date VCI gives for each call;
+      # the stock page shows "Khuyến nghị cập nhật ngày ...". Before this the
+      # block was only filled where missing and went stale. ~25 minutes; a
+      # failed call keeps the committed record.
+      - name: Refresh analyst targets
+        working-directory: vnindex-web
+        env:
+          PYTHONIOENCODING: utf-8
+        run: python -u export_analyst.py --all
 
       - name: Commit whatever changed
         working-directory: vnindex-web

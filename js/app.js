@@ -744,11 +744,17 @@ function valuationSummary(co, v, model, analyst, last) {
     const aUp = priceRaw ? (analyst.target_price - priceRaw) / priceRaw : null;
     const aColor = aUp == null ? "#5b6675" : aUp >= 0 ? "#15803d" : "#b91c1c";
     const rating = (analyst.rating || "").toUpperCase() || "—";
+    // as_of is the date VCI gives for the recommendation; fetched is when the
+    // weekly job read it. Records from before 2026-11 carry neither.
+    const asOf = F.dateVN(analyst.as_of);
+    const fetched = F.dateVN(analyst.fetched);
+    const when = asOf ? ` · Khuyến nghị cập nhật ngày ${asOf}`
+      : fetched ? ` · Dữ liệu cập nhật ngày ${fetched}` : "";
     wrap.appendChild(el(`<div class="ev-card">
       <div class="ev-t">Chuyên viên phân tích</div>
       <div class="ev-m" style="color:${aColor}">${F.rawVND(analyst.target_price)}</div>
       <div class="ev-s">${aUp == null ? "" : F.pctSigned(aUp * 100) + " · Khuyến nghị <b>" + rating + "</b>"}</div>
-      <div class="ev-src">Nguồn: VCI</div></div>`));
+      <div class="ev-src">Nguồn: VCI${when}</div></div>`));
   }
 
   wrap.appendChild(el(`<div class="ev-card">

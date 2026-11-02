@@ -163,6 +163,42 @@ def _all_methods(ttm: dict, ticker: str) -> dict:
 # had yet.
 _PUBLISH_LAG_DAYS = 45
 _MIN_OBS = 200                  # ~2 years of sessions before a median means much
+
+# The prices table is two series spliced together. The first load
+# (2026-03-01/02, 5 x 365 days back, so it starts 2021-03-01/02) stored VCI's
+# history ADJUSTED to that day's share count: across those five years the 21
+# banks alone did dozens of bonus issues and the series shows four one-day
+# drops worse than 20%. Every day since was stored as traded, so later bonus
+# issues show as raw gaps (22 of them by 2026-11). Dividing an adjusted price by
+# a book value per share computed on that quarter's own, smaller share count
+# understates P/B and P/E by the whole bonus factor since: TCB, which doubled
+# its shares in 2025, measured 0.44x book in 2023, HDB's own median P/B came out
+# 0.87x against the 1.50x five-year average SSI Research quotes, and every
+# own- and sector multiple built on them was low. So per-share figures for the
+# quarters in force before the load date are taken on the share count in force
+# AT the load date -- the basis the adjusted prices are on -- and later
+# quarters on their own count, matching the raw prices after it.
+_FIRST_LOAD_YEARS = 5           # collectors/prices.py _DEFAULT_HISTORY_YEARS
+
+
+def _price_basis_date(closes):
+    """The day the first price load ran, from the date most tickers start on.
+
+    The most common first date, not the earliest: the load asked VCI for a
+    count of sessions, so a thinly traded ticker's history reaches further
+    back (TTE starts 2019-08-20), and the earliest date would put the basis in
+    2024 and leave two years of bonus issues uncorrected.
+    """
+    from collections import Counter
+    from datetime import timedelta
+    first = {}
+    for ticker, when, _ in closes:
+        if ticker not in first or when < first[ticker]:
+            first[ticker] = when
+    if not first:
+        return None
+    start = Counter(first.values()).most_common(1)[0][0]
+    return start + timedelta(days=365 * _FIRST_LOAD_YEARS)
 _MIN_SECTOR_TICKERS = 3         # below this, fall back to the market median
 _QUARTER_END_MD = {1: (4, 1), 2: (7, 1), 3: (10, 1), 4: (1, 1)}
 
@@ -215,8 +251,16 @@ def _build_history():
     for row in quarters:
         rows_by_ticker.setdefault(row[0], []).append(row)
 
+    basis_date = _price_basis_date(closes)
     marks = {}
     for ticker, rows in rows_by_ticker.items():
+        # Share count in force on the load date: the basis of the adjusted prices.
+        basis_shares = None
+        if basis_date:
+            for row in rows:
+                usable = _quarter_usable_from(row[1])
+                if usable and usable <= basis_date and row[3] and float(row[3]) > 0:
+                    basis_shares = float(row[3])
         out = []
         for i, row in enumerate(rows):
             _, period, equity, shares, _ni, _rev, _eb, _dep, _ocf, debt, cash = row
@@ -225,7 +269,8 @@ def _build_history():
                 continue
             window = rows[max(0, i - 3):i + 1]
             full = len(window) == 4
-            shares_f = float(shares)
+            shares_f = (basis_shares if basis_shares and usable <= basis_date
+                        else float(shares))
 
             def _sum4(idx):
                 vals = [r[idx] for r in window]
