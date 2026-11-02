@@ -407,7 +407,7 @@ def sector_multiple(sector, key):
     return value
 
 
-def _sector_roe(sector):
+def _sector_roe(sector, years: int = 3):
     """Median trailing ROE of a sector, from the annual cache."""
     h = history()
     annual = h.get("annual") or {}
@@ -417,7 +417,7 @@ def _sector_roe(sector):
         if sectors.get(ticker) != sector or not rows:
             continue
         roes = []
-        for row in rows[:3]:
+        for row in rows[:years]:
             ni, eq = row["net_income"], row["equity"]
             if ni is not None and eq and float(eq) > 0:
                 roes.append(float(ni) / float(eq))
@@ -439,17 +439,33 @@ def justified_sector_pb(ttm, sector, ticker, sec_pb):
 
     Capped at a quarter to four times the sector figure, so a ticker with a
     near-zero or freak ROE cannot run away with it.
+
+    Brokers compare mid-cycle ROE (every annual report on file, up to eight)
+    and are capped at twice the sector rather than four times: their earnings
+    swing with the index, so a three-year ratio measured the cycle, not the
+    business. The floor stays at a quarter -- raising it to a half lifted the
+    weakest (APG, at 0.39x book) instead of only reining in the strongest. VIX's
+    came out at 37,796 VND against a 12,000 share and TVS's at 30,818 against
+    12,500 -- the two widest readings in the sector once the sector P/B was
+    measured on one share basis (2026-11-02).
     """
     equity = ttm.get("equity")
     shares = ttm.get("shares_outstanding") or 0
     if not equity or equity <= 0 or shares <= 0 or not sec_pb:
         return None
     bvps = equity * 1e9 / (shares * 1e6)
-    roe = _avg_annual_roe(ticker)
-    sector_roe = _sector_roe(sector)
+    broker = sector == "Chứng khoán"
+    years = _BROKER_ROE_YEARS if broker else 3
+    lo, hi = (0.25, 2.0) if broker else (0.25, 4.0)
+    roe = _avg_annual_roe(ticker, years)
+    sector_roe = _sector_roe(sector, years)
     scale = 1.0
     if roe and sector_roe and sector_roe > 0 and roe > 0:
-        scale = min(max(roe / sector_roe, 0.25), 4.0)
+        scale = min(max(roe / sector_roe, lo), hi)
+    elif broker and roe is not None and roe <= 0:
+        # A broker that has lost money across the cycle earns the floor, not
+        # the sector's full multiple, which skipping the scaling would give it.
+        scale = lo
     price = bvps * sec_pb * scale
     return round(price) if price > 0 else None
 
@@ -1000,6 +1016,18 @@ def _sector_adjust(v: dict, ttm: dict, sector: str, beta=None,
         v["epv"] = justified_pb_price(ttm, beta, ticker)
         # Graham is sqrt(P/E x P/B), both already in the blend.
         v["graham"] = None
+        if ticker in _LIFE_INSURERS:
+            # A life insurer's book leaves out the value of the policies it has
+            # in force -- most of what embedded value measures -- so every
+            # book-based model (justified P/B, faded RIM) prices only part of
+            # the company, and the sector multiples are the four non-life
+            # insurers'. BVH came out at 46,650 VND, -32% against its 69,000
+            # share and against VCI's 83,600 target (2026-11-02), with the
+            # Gordon P/B alone at 26,205. What the market has paid for BVH
+            # itself already prices the in-force book, so that is the only
+            # family a life insurer keeps.
+            for k in ("pe", "pb", "epv", "ri"):
+                v[k] = None
     elif sector == "Bất động sản":
         # The hand-set 15x EBITDA is gone -- the sector's measured multiple does
         # that job now. Book still stands in for the land bank, which reported

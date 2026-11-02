@@ -97,7 +97,7 @@ export function valuationPanel(co, model, priceRaw) {
   }
 
   if (prm.life_insurer) {
-    panel.appendChild(el(`<div class="vb-note">Mã này chủ yếu là <b>bảo hiểm nhân thọ</b>. Chuẩn định giá của ngành là <b>Embedded Value</b> (lợi nhuận tương lai của các hợp đồng đang hiệu lực cộng giá trị tài sản ròng điều chỉnh), nhưng BCTC công bố không có số này. Các thẻ ở đây dựa trên sổ sách và lợi nhuận kế toán, nên chỉ là ước lượng thay thế.</div>`));
+    panel.appendChild(el(`<div class="vb-note">Mã này chủ yếu là <b>bảo hiểm nhân thọ</b>. Chuẩn định giá của ngành là <b>Embedded Value</b> (lợi nhuận tương lai của các hợp đồng đang hiệu lực cộng giá trị tài sản ròng điều chỉnh), nhưng BCTC công bố không có số này. Sổ sách không chứa giá trị các hợp đồng đang hiệu lực, nên giá mô hình chỉ dựa trên <b>P/E và P/B lịch sử của chính mã</b> (mức thị trường đã trả cho nó, vốn đã tính phần giá trị đó) — không dùng bội số của các công ty bảo hiểm phi nhân thọ hay mô hình dựa trên sổ sách. Đây là ước lượng thay thế.</div>`));
   }
 
   // Highlighted summary — the same winsorized mean the evaluation block shows,
