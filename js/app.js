@@ -1,4 +1,4 @@
-import { loadCompanies, loadScreener, loadTicker, loadMeta, loadCommodities } from "./data.js";
+import { loadCompanies, loadScreener, loadTicker, loadMeta, loadCommodities, loadQuality } from "./data.js";
 import { priceChart } from "./charts.js";
 import { computeQualityScore, classifySignal, SIGNAL_VI, SIGNAL_COLOR, SIGNAL_ORDER } from "./signals.js";
 import { ratingColor, sectorBand } from "./ratings.js";
@@ -77,10 +77,39 @@ async function boot() {
   const meta = await loadMeta().catch(() => null);
   if (meta) $("#meta").textContent =
     `${meta.n_tickers} mã · cập nhật ${meta.generated_at.slice(0, 10)}`;
+  qualityBadge();
 
   const initial = new URLSearchParams(location.search).get("ticker")
     || (COMPANIES.find((c) => c.ticker === "VCB") ? "VCB" : COMPANIES[0].ticker);
   selectTicker(initial);
+}
+
+// Data quality badge under the update line, from the latest audit
+// (data/quality.json). Errors mean a figure on the site may be wrong; warnings
+// are things like suspended tickers whose last close is days old. The tooltip
+// lists the rules; hidden when no audit has run yet.
+const QUALITY_RULE_VI = {
+  no_prices: "mã không có giá", stale_price: "giá chưa cập nhật",
+  price_unit_jump: "giá nhảy bất thường (nghi sai đơn vị)", price_gap: "bước giá chưa điều chỉnh",
+  no_financials: "mã chưa có BCTC", missing_quarter: "thiếu BCTC quý mới",
+  fin_unit_jump: "BCTC nhảy bất thường (nghi sai đơn vị)", revenue_unit: "doanh thu nhảy bất thường",
+  bad_balance: "số liệu cân đối không hợp lệ", negative_equity: "vốn chủ âm",
+  valuations_stale: "định giá chưa tính lại theo giá mới",
+};
+
+async function qualityBadge() {
+  const q = await loadQuality();
+  if (!q) return;
+  const tip = Object.entries(q.by_rule || {})
+    .map(([rule, n]) => `${n} × ${QUALITY_RULE_VI[rule] || rule}`).join("\n");
+  const when = F.dateVN(String(q.run_at).slice(0, 10));
+  const cls = q.errors ? "dq-err" : q.warnings ? "dq-warn" : "dq-ok";
+  const text = q.errors ? `${q.errors} lỗi dữ liệu` + (q.warnings ? `, ${q.warnings} cảnh báo` : "")
+    : q.warnings ? `${q.warnings} cảnh báo dữ liệu` : "Dữ liệu: không phát hiện lỗi";
+  const b = el(`<div class="dq-badge ${cls}"></div>`);
+  b.textContent = text;
+  b.title = `Kiểm tra chất lượng dữ liệu ngày ${when}` + (tip ? `\n${tip}` : "");
+  $("#meta").appendChild(b);
 }
 
 function buildNav() {

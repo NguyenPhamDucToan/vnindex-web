@@ -24,3 +24,7 @@ export const loadMarket = () => getJSON("data/market.json");
 // Optional: absent until export_commodities.py has been run.
 export const loadCommodities = () =>
   getJSON("data/commodities.json").catch(() => null);
+// Optional: the latest data quality audit (quality/audit.py in the sibling
+// repo); absent until the first audit has run.
+export const loadQuality = () =>
+  getJSON("data/quality.json").catch(() => null);

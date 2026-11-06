@@ -135,6 +135,19 @@ jobs:
           pip install -r vnindex-web/requirements.txt
           pip install -r vnindex-valuation/requirements.txt
 
+      # model_valuation.py decides every model price the site publishes; a change
+      # that breaks it should stop here, not ship. Offline and against a
+      # throwaway SQLite file (tests/conftest.py), so it needs no secrets.
+      - name: Lint and unit tests for the valuation model
+        if: steps.plan.outputs.export == 'yes'
+        working-directory: vnindex-web
+        env:
+          PYTHONIOENCODING: utf-8
+        run: |
+          pip install ruff
+          ruff check --select E9,F63,F7,F82 .
+          python -m pytest -q tests
+
       - name: Export data from the database
         if: steps.plan.outputs.export == 'yes'
         working-directory: vnindex-web

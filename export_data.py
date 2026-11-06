@@ -698,6 +698,33 @@ def main() -> None:
     _write(OUT / "macro.json", macro_out)
     print(f"  wrote macro.json ({len(macro_out)} indicators)")
 
+    # ---- quality.json (latest data quality audit) ----------------------
+    # quality/audit.py in the sibling repo appends to data_quality_log after
+    # every price refresh; the sidebar badge reads the latest run from here.
+    # Missing table or no run yet: skip, and the badge stays hidden.
+    try:
+        with engine.connect() as conn:
+            dq = pd.read_sql(text(
+                "SELECT run_at, rule, severity, ticker, detail FROM data_quality_log "
+                "WHERE run_at = (SELECT max(run_at) FROM data_quality_log) "
+                "ORDER BY severity, rule, ticker"), conn)
+        if len(dq):
+            # The run's marker row (rule audit_run, severity info) only says the
+            # audit ran; the findings are everything else.
+            run_at = str(dq["run_at"].iloc[0])
+            dq = dq[dq["severity"] != "info"]
+            _write(OUT / "quality.json", {
+                "run_at": run_at,
+                "errors": int((dq["severity"] == "error").sum()),
+                "warnings": int((dq["severity"] == "warn").sum()),
+                "by_rule": {k: int(v) for k, v in dq.groupby("rule").size().items()},
+                "items": [{k: _clean(r[k]) for k in ("rule", "severity", "ticker", "detail")}
+                          for _, r in dq.head(300).iterrows()],
+            })
+            print(f"  wrote quality.json ({len(dq)} findings from {run_at})")
+    except Exception as e:
+        print(f"  quality.json skipped: {type(e).__name__}")
+
     _write(OUT / "meta.json", {
         "generated_at": datetime.utcnow().isoformat() + "Z",
         "n_tickers": int(len(companies)),
