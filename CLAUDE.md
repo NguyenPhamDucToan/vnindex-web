@@ -19,6 +19,7 @@ python export_commodities.py         # Yahoo futures -> data/commodities.json
 python backfill.py holders|payables|fvtpl   # drives export_detailed.py --missing until no progress
 python export_detailed.py --tickers SSI VCI # 20-quarter detail + news for a subset
 python export_analyst.py / export_news.py / export_market_history.py
+python export_backtest.py            # Phase 10 factor backtest -> data/backtest.json (weekly in refresh-slow.yml, ~2 min)
 
 # Checks (no unit-test suite). Browser ones use Playwright against BASE (default http://localhost:8777)
 python check_css.py                  # every class the JS renders has a CSS rule
@@ -68,6 +69,10 @@ So: a re-export that doesn't read the old file destroys them, and these blocks o
   (quality score + signal classification). Changing a tile's thresholds means also changing its tooltip legend
   (`check_tips.py`).
 - `quarterly.js` indexes the `detail` block by the quarters `financials` provides.
+- `screener.js` (Sàng lọc: presets, min/max filters, `#screen?...` URL state, CSV) and `backtest.js`
+  (Kiểm định chiến lược, reads `data/backtest.json`). Backtest logic: `backtest_engine.py` (price
+  adjustment, simulation with costs/lots, metrics) and `backtest_factors.py` (point-in-time factors:
+  quarters usable 45 days after period end, annual reports 100 days, trade at the next close).
 - Charts that need missing optional data are skipped, not broken.
 
 Goal of the port is parity with the Streamlit original; the `compare_to_original.py`/`diff_*` scripts exist for that.

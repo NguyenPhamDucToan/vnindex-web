@@ -12,6 +12,7 @@ import { renderCompare } from "./compare.js";
 import { renderMacro } from "./macro.js";
 import * as F from "./format.js";
 import { buildScreener, isScreenerHash } from "./screener.js";
+import { renderBacktest } from "./backtest.js";
 
 // Plotly truncates a trace name in the hover box at 15 characters and appends
 // an ellipsis, so "Tổng thu nhập hoạt động" read as "Tổng thu nhậ...". There is
@@ -129,7 +130,7 @@ function buildNav() {
   // (#portfolio), it just isn't advertised in the nav.
   const views = [["stock", "Phân tích cổ phiếu"], ["screen", "Sàng lọc"],
     ["compare", "So sánh cổ phiếu"], ["sector", "Phân tích ngành"],
-    ["market", "Tổng quan thị trường"]];
+    ["market", "Tổng quan thị trường"], ["backtest", "Kiểm định chiến lược"]];
   for (const [id, label] of views) {
     const a = el(`<button class="nav-item" data-view="${id}">${label}</button>`);
     a.onclick = () => showView(id);
@@ -146,6 +147,7 @@ function showView(id) {
   if (id === "portfolio") renderPortfolio();
   if (id === "market") renderMarket();
   if (id === "compare") renderCompareView();
+  if (id === "backtest" && !backtestBuilt) { backtestBuilt = true; renderBacktest($("#view-backtest"), selectTicker); }
 }
 
 // ── ticker picker ───────────────────────────────────────────────────
@@ -901,6 +903,7 @@ async function enrichScreener() {
 }
 
 let screenerBuilt = false;
+let backtestBuilt = false;
 const WL_KEY = "vnindex.watchlist";
 const loadWL = () => {
   // A private window or cleared site data makes this throw; an empty

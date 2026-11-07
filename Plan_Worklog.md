@@ -91,3 +91,39 @@ Việc bạn cần làm: xem các mục "Chưa kiểm" ở trên; đồng ý th�
 - `export_data.py`: thêm `adv20` (giá trị khớp bình quân 20 phiên, tỷ đồng) vào `screener.json`.
 - **Kiểm tra:** chạy Edge tự động (Playwright): không lỗi JS; 6 bộ lọc mẫu ra 204/73/16/29/56/66 mã; sắp xếp + URL; mở lại liên kết khôi phục đúng 55 mã; bấm dòng mở trang cổ phiếu; điện thoại 390px không tràn ngang. `check_css.py`, `check_tips.py`, 11 test web qua.
 - **Sửa trong lúc kiểm:** tham số tìm kiếm trùng tên `q` với ô "Chất lượng" → mở lại link ra 0 mã; đổi thành `t`.
+
+---
+
+# Đợt 3 — Backtest (Phase 10, Day 72–89) (2026-11-07)
+
+### Vì sao làm lại từ đầu
+`backtest_signals.py` cũ (nguồn của biểu đồ "Backtest 2020–2025" đã gỡ): đặt tín hiệu ở **ngày cuối quý** (BCTC 30–45 ngày sau mới có), tăng trưởng DCF lấy từ **dữ liệu hiện tại**, chỉ các mã đang niêm yết, mỗi tín hiệu là một "lệnh" riêng, không phí/thuế → không phải một danh mục có thể giao dịch.
+
+### Làm
+- `backtest_engine.py` (thuần, 12 test):
+  - **Điều chỉnh giá** cho thưởng/chia tách (DB lưu giá thô): chỉ nhận khoảng nhảy khi giá đóng cửa cũng nhảy theo, và (A) >15% đứng riêng hoặc (B) >5% có sự kiện phát hành **hoặc** số cổ phiếu trong BCTC quý tăng đúng tỷ lệ; khoảng nhảy đúng bằng biên độ trần/sàn không bao giờ là quyền. Lần đầu (chỉ dựa biên độ 7,5%) ra 1.547 "quyền" — phần lớn là phiên mở cửa giảm sàn; sau sửa: 176 trên 134 mã, bắt đúng TRA 2:1, VHM 2:1, PHR, TCB ×1,48, không bắt nhầm NTC/CMG/ADG.
+  - **Mô phỏng**: chia đều, đặt lệnh ở giá đóng cửa phiên sau ngày tín hiệu, phí 0,15% + trượt giá 0,1% mỗi chiều, thuế bán 0,1%, vốn 1 tỷ, lô 100 (tiền lẻ không mua được nằm lại).
+  - **Chỉ số**: CAGR, biến động, Sharpe (lãi suất phi rủi ro 4,5%), sụt tối đa, Calmar, so với chuẩn, tỷ lệ quãng 3 tháng thắng VNINDEX, lợi nhuận từng năm.
+- `backtest_factors.py`: chỉ số tại từng thời điểm — quý dùng từ cuối quý + 45 ngày, năm + 100 ngày; vốn hoá dùng số cổ phiếu đã chỉnh theo thưởng sau cuối quý. 10 tiêu chí: P/E thấp, P/B thấp, ROE, điểm chất lượng của app (cùng công thức), Piotroski, động lượng 12-1, biến động thấp, vốn hoá nhỏ, Giá trị+Chất lượng, Giá trị+Chất lượng+Động lượng. Lọc thanh khoản ≥ 1 tỷ/phiên (Day 76).
+- `export_backtest.py`: đọc DB (chỉ đọc), VNINDEX từ VNDirect, tái cơ cấu quý (ngày 20 tháng 2/5/8/11), top-20 mỗi tiêu chí, **5 nhóm** (Day 78), **độ nhạy số mã 10/20/30/50** (Day 85), **trong mẫu ≤ 2023 / ngoài mẫu 2024+** (Day 86), danh mục hiện tại → `data/backtest.json` (thay file tĩnh cũ). Chạy ~2 phút; hằng tuần trong `refresh-slow.yml` (bước mới, có `DATABASE_URL`, `continue-on-error`).
+- Web: trang mới **"Kiểm định chiến lược"** (`js/backtest.js`, Day 87): ô tóm tắt, khung giả định & giới hạn, bảng kết quả, đường vốn (chọn chiến lược, thang log, vạch ngoài mẫu), biểu đồ 5 nhóm, bảng số mã, bảng từng năm, danh mục hiện tại (bấm mã mở trang cổ phiếu).
+
+### Kết quả (2022-05-20 → 2026-11-06, 18 lần tái cơ cấu, 195–267 mã/kỳ)
+| | CAGR | So VNINDEX | Ngoài mẫu |
+|---|---|---|---|
+| VNINDEX | 8,1% | | 16,0% |
+| Chia đều cả thị trường | 1,1% | −7,0% | 1,4% |
+| Giá trị + Chất lượng + Động lượng | 12,1% | +4,0% | 19,1% |
+| P/E thấp | 11,1% | +3,0% | 18,0% |
+| Giá trị + Chất lượng | 10,8% | +2,7% | 11,1% |
+| Điểm chất lượng của app | 5,4% | −2,7% | 8,9% |
+| Piotroski | −5,5% | −13,6% | −2,8% |
+- P/E thấp xếp nhóm rõ nhất: nhóm 1→5: −4,5% / −5,9% / −0,1% / 2,5% / 8,8%. Giá trị+Chất lượng: −5,3% → 10,7%.
+- Không hiệu quả trên HOSE giai đoạn này: Piotroski, động lượng, vốn hoá nhỏ (mã **lớn** thắng: nhóm vốn hoá lớn nhất 8,5%/năm).
+- Cổ phiếu "trung bình" thua VNINDEX 7%/năm: chỉ số bị vài mã vốn hoá lớn kéo.
+
+### Giới hạn (ghi trên trang)
+Lợi nhuận theo giá, chưa có cổ tức tiền mặt (cả chuẩn); thiên lệch sống sót (DB chỉ có mã đang niêm yết); giai đoạn ngắn (4,5 năm, trong mẫu chỉ 1,6 năm); **giá mô hình / tín hiệu Mua-Bán của app chưa kiểm định** (cần bội số lịch sử tại từng thời điểm).
+
+### Chưa làm trong Phase 10
+Day 79–84 phần sâu (đa nhân tố có trọng số, chế độ thị trường, trung lập ngành), Day 89 (thêm mã đã huỷ niêm yết — cần nguồn dữ liệu), kiểm định tín hiệu của app.
