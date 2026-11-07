@@ -133,3 +133,10 @@ Day 79–84 phần sâu (đa nhân tố có trọng số, chế độ thị trư
 - `deploy.yml`: bước "Leave the private backtest out of the upload" xoá `js/backtest.js`, `data/backtest.json` trước khi lên Cloudflare.
 - `refresh-slow.yml`: bước backtest chỉ chạy khi biến repo `RUN_BACKTEST=true`.
 - Bật lại: đổi cờ thành `true`, bỏ bước rm trong deploy.yml, đặt `RUN_BACKTEST=true`. Chạy tay: `python export_backtest.py`.
+
+## Phase 11 — Day 98–99: sự kiện quyền & giá điều chỉnh (2026-11-07)
+- `export_actions.py` → khối `actions` (cổ tức tiền, cổ tức CP, thưởng, quyền mua, ESOP, riêng lẻ; ngày GDKHQ, tỷ lệ, tiền, ngày trả) từ VCI, 10 năm. Khối chậm, export_data mang theo; refresh-slow chạy hằng tuần. Đã có cho ~160 mã (A→H); VCI chặn IP máy (418) giữa chừng, CI sẽ điền nốt.
+- **Kiểm chứng giá (Day 99):** giá lưu trong DB là lịch sử đã điều chỉnh của VCI (gồm cả cổ tức tiền): 98% sự kiện chia CP và gần như mọi cổ tức tiền không để lại khoảng trống. Lỗi thật là *mối nối*: bộ thu giá chỉ nối thêm ngày mới, nên mỗi lần VCI điều chỉnh lại lịch sử thì các dòng cũ ở thang cũ (GMD thưởng 50% ngày 07/10 nằm ở 25/09 — ngày đầu đợt tải bù sau khi pipeline ngưng). Chẩn đoán chỉ đọc: 215/403 mã lệch (46 mã >15%; FPT 11,5%, VCB 0,9%).
+- Sửa gốc ở repo pipeline: `collectors/prices.py` ghi theo lô (`ON CONFLICT`), đọc chồng 14 ngày, `rebase_ratio` lệch >0,3% → tải lại toàn bộ lịch sử mã đó; `collectors/rebase_prices.py` sửa một lần các mối nối cũ (mặc định chỉ đọc, `--apply` để ghi). Test `tests/test_price_rebase.py`.
+- Web: `corp_actions.py` chỉ còn vá mối nối (bộ dò của backtest, ngày GDKHQ làm bằng chứng) — không áp lại tỷ lệ công bố. Trang cổ phiếu: tam giác ▲ ngày GDKHQ trên biểu đồ, thẻ "Quyền & cổ tức" (cổ tức 12 tháng + lợi suất theo giá hiện tại, chia CP 12 tháng, pha loãng 5 năm, sự kiện sắp tới, lịch sử).
+- Bỏ ý định nút "giá thực tế / gồm cổ tức": không dựng lại được giá thô, và giá đã gồm cổ tức sẵn.

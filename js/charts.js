@@ -22,7 +22,9 @@ function sma(vals, n) {
 }
 
 // prices: [{date, open, high, low, close, volume}], already ascending.
-export function priceChart(el, prices, rangeDays = 365) {
+// opts.markers: [{date, low, kind, text}] from corp-actions.js -- ex-rights
+// sessions, drawn as a small triangle under the candle.
+export function priceChart(el, prices, rangeDays = 365, opts = {}) {
   // Moving averages need a run-up: computing them on the visible window alone
   // leaves MA10 blank for 9 bars and MA50 for 49, so both lines visibly start
   // mid-chart. Compute over a 60-bar lookback buffer, then trim to the window
@@ -37,6 +39,10 @@ export function priceChart(el, prices, rangeDays = 365) {
   const x = p.map((r) => r.date);
   const ma10 = ma10Buf.slice(cut), ma50 = ma50Buf.slice(cut);
   const volColors = p.map((r) => (r.close >= r.open ? UP : DOWN));
+  // A point off the window would add a category to the x axis: keep only
+  // markers on a bar that is shown.
+  const shown = new Set(x);
+  const marks = (opts.markers || []).filter((m) => shown.has(m.date));
   // Stored in thousands VND; the axis and the hover both read in raw VND.
   const k = (v) => (typeof v === "number" ? v * 1000 : null);
   const topY = Math.max(...p.map((r) => r.high)) * 1000;
@@ -72,6 +78,14 @@ export function priceChart(el, prices, rangeDays = 365) {
       hoverlabel: { bgcolor: "#ffffff", bordercolor: "#e2e8f0", align: "left",
                     font: { ...FONT, size: 12, color: "#0f172a" } },
     },
+    ...(marks.length ? [{
+      type: "scatter", mode: "markers", yaxis: "y", name: "Ngày GDKHQ",
+      x: marks.map((m) => m.date), y: marks.map((m) => m.low * 1000 * 0.975),
+      text: marks.map((m) => m.text),
+      marker: { symbol: "triangle-up", size: 9, line: { width: 1, color: "#ffffff" },
+                color: marks.map((m) => (opts.colors || {})[m.kind] || "#64748b") },
+      hovertemplate: "GDKHQ: %{text}<extra></extra>",
+    }] : []),
     { type: "bar", x, y: p.map((r) => r.volume), yaxis: "y2",
       marker: { color: volColors }, name: "Khối lượng",
       showlegend: false, hoverinfo: "none" },

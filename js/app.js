@@ -12,6 +12,7 @@ import { renderCompare } from "./compare.js";
 import { renderMacro } from "./macro.js";
 import * as F from "./format.js";
 import { buildScreener, isScreenerHash } from "./screener.js";
+import { markers, actionsSection, KIND_COLOR } from "./corp-actions.js";
 // "Kiểm định chiến lược" (Phase 10 backtest) is built but private for now: the
 // owner doesn't want it public yet. With the flag off nothing loads backtest.js
 // (deploy.yml also leaves it and data/backtest.json out of the upload).
@@ -248,6 +249,8 @@ async function renderStock(t) {
   }
   const hd = holdersSection(d.holders);
   if (hd) root.appendChild(hd);
+  const ca = actionsSection(d.actions, prices);
+  if (ca) root.appendChild(ca);
 
   // Two-column split matching the original: price chart on the left, the
   // valuation-estimates + technical panel down the right.
@@ -255,8 +258,12 @@ async function renderStock(t) {
     <div class="split-l"><div class="range-row" id="range-row"></div><div id="price-chart"></div></div>
     <div class="split-r"></div></div>`);
   root.appendChild(split);
-  buildRangeButtons($("#range-row", split), prices);
-  priceChart($("#price-chart", split), prices, currentRange);
+  // Ex-rights sessions as small triangles under the candles (corp-actions.js).
+  const marks = markers(d.actions, prices);
+  const drawPrice = () => priceChart($("#price-chart", split), prices, currentRange,
+                                     { markers: marks, colors: KIND_COLOR });
+  buildRangeButtons($("#range-row", split), drawPrice);
+  drawPrice();
 
   const right = $(".split-r", split);
   const vp = valuationPanel(co, d.model || {}, F.isNum(last.close) ? last.close * 1000 : null);
@@ -862,7 +869,7 @@ function valuationSummary(co, v, model, analyst, last) {
   return card;
 }
 
-function buildRangeButtons(row, prices) {
+function buildRangeButtons(row, draw) {
   const opts = [["3M", 63], ["6M", 126], ["1Y", 365], ["2Y", 760]];
   row.innerHTML = "";
   for (const [label, days] of opts) {
@@ -871,7 +878,7 @@ function buildRangeButtons(row, prices) {
       currentRange = days;
       row.querySelectorAll(".range-btn").forEach((x) => x.classList.remove("active"));
       b.classList.add("active");
-      priceChart(document.getElementById("price-chart"), prices, days);
+      draw();
     };
     row.appendChild(b);
   }

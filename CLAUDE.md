@@ -16,6 +16,7 @@ python export_data.py                # fast-moving files: companies, screener, m
 python add_mcap.py                   # adds mcap to screener.json from local ticker files (deploy runs this after export)
 python add_macro_indicator.py ...    # patch one macro series without a full re-export
 python export_commodities.py         # Yahoo futures -> data/commodities.json
+python export_actions.py [--all]     # dividends/bonus/rights with ex-dates -> `actions` block (weekly in refresh-slow.yml)
 python backfill.py holders|payables|fvtpl   # drives export_detailed.py --missing until no progress
 python export_detailed.py --tickers SSI VCI # 20-quarter detail + news for a subset
 python export_analyst.py / export_news.py / export_market_history.py
@@ -42,7 +43,7 @@ On Windows set `PYTHONIOENCODING=utf-8` before running Python scripts — output
 NAV proxy for real estate…) so the site and the Streamlit app can't drift. Don't reimplement valuation logic here.
 
 **Fast vs. slow data blocks.** Inside each `data/ticker/<T>.json`, the blocks `analyst`, `detail`, `news_events`,
-`holders` come from slower per-ticker VCI/Yahoo calls (the throttles in `export_detailed.py`/`export_analyst.py`
+`holders`, `actions` come from slower per-ticker VCI/Yahoo calls (the throttles in `export_detailed.py`/`export_analyst.py`
 were sized for vnstock's old ~20 req/min cap) and are **not** produced by `export_data.py` — it carries them forward from the existing committed file on every run.
 So: a re-export that doesn't read the old file destroys them, and these blocks only persist if committed.
 
@@ -73,6 +74,11 @@ So: a re-export that doesn't read the old file destroys them, and these blocks o
   (Kiểm định chiến lược, reads `data/backtest.json`). Backtest logic: `backtest_engine.py` (price
   adjustment, simulation with costs/lots, metrics) and `backtest_factors.py` (point-in-time factors:
   quarters usable 45 days after period end, annual reports 100 days, trade at the next close).
+- Stored prices are VCI's adjusted history (cash dividends and share issues already priced in; checked
+  against the `actions` block, 98% of ex-dates show no gap). Don't re-apply announced ratios. `corp_actions.py`
+  only removes seams where VCI rescaled history between collector runs; the sibling collector now reloads a
+  ticker whose overlap no longer matches (`collectors/prices.py` `rebase_ratio`). `js/corp-actions.js` marks
+  ex-dates on the price chart and renders "Quyền & cổ tức".
 - Charts that need missing optional data are skipped, not broken.
 
 Goal of the port is parity with the Streamlit original; the `compare_to_original.py`/`diff_*` scripts exist for that.

@@ -231,14 +231,8 @@ def _load_vnindex_vndirect() -> "pd.Series | None":
 # true 30.1%). Back-adjusting here rather than in the database keeps the raw
 # series intact -- a bad detection is undone by re-exporting.
 #
-# 15% is deliberately well clear of the band: a cash dividend of a few percent
-# is indistinguishable from a market move and is left alone. Only the large,
-# unmistakable actions are corrected.
-_CA_BAND = 0.15
-_CA_MAX = 25.0          # beyond this it is a data error, not a corporate action
-# Minimum sessions between two genuine actions. A split and a cash dividend on
-# the same ex-date are one gap, not several days of them.
-_CA_MIN_GAP_SESSIONS = 5
+# The rules live in corp_actions.py (exchange ex-dates and ratios) with
+# backtest_engine.adjust_prices as the fallback for tickers without them.
 
 
 def issuance_dates(ticker: str) -> set:
@@ -270,82 +264,13 @@ def issuance_dates(ticker: str) -> set:
     return out
 
 
-def adjust_corporate_actions(df, ticker: str = "", issuances: set | None = None):
-    """Back-adjust OHLC and volume for splits and bonus issues.
-
-    Returns (adjusted_df, events). The newest bar is never touched: adjustment
-    scales history onto today's share base, so current prices stay as traded.
-    Volume is scaled the opposite way, which keeps close * volume -- the
-    turnover the liquidity metrics use -- unchanged across the event.
-    """
-    if df is None or len(df) < 3:
-        return df, []
-    closes = df["close"].astype(float).to_numpy()
-    opens = (df["open"].astype(float).to_numpy()
-             if "open" in df.columns else closes)
-    dates = df["date"].astype(str).to_numpy()
-    n = len(closes)
-
-    # Detect on the OPENING gap, not on close-to-close. An entitlement is priced
-    # in before the session starts, so a split shows a gap at the open and then
-    # trades normally; a crash opens near the previous close and falls during the
-    # day. NTC on 2025-04-03 closed 15.1% down but opened only 2.2% below the
-    # previous close and lost 13.2% intraday -- a limit-down session that
-    # close-to-close detection took for a corporate action.
-    cand = []
-    for i in range(1, n):
-        prev_c, op, cur_c = closes[i - 1], opens[i], closes[i]
-        if prev_c <= 0 or op <= 0 or cur_c <= 0:
-            continue
-        gap = prev_c / op
-        if (gap > 1 + _CA_BAND or gap < 1 / (1 + _CA_BAND)) and 1 / _CA_MAX < gap < _CA_MAX:
-            cand.append(i)
-
-    # A corporate action is a single session, so a cluster of gaps is a falling
-    # market rather than several actions.
-    keep = [i for k, i in enumerate(cand)
-            if (k == 0 or i - cand[k - 1] > _CA_MIN_GAP_SESSIONS)
-            and (k == len(cand) - 1 or cand[k + 1] - i > _CA_MIN_GAP_SESSIONS)]
-
-    # And confirm each survivor against the exchange's event list. Without this
-    # the detector is guessing from prices: NTC's lone remaining gap, a
-    # limit-down open in a selloff, would still have rebased its whole history
-    # by 17%. The event is filed a day or four after the ex-date, so the window
-    # runs forward.
-    if issuances is not None:
-        def _near(i):
-            try:
-                gd = date.fromisoformat(str(dates[i])[:10])
-            except ValueError:
-                return False
-            return any(-2 <= (ed - gd).days <= 10 for ed in issuances)
-        keep = [i for i in keep if _near(i)]
-
-    factors = [1.0] * n
-    f = 1.0
-    events = []
-    for i in range(n - 1, 0, -1):
-        if i in keep:
-            ratio = closes[i - 1] / opens[i]
-            f *= ratio
-            events.append((dates[i], round(ratio, 4)))
-        factors[i - 1] = f
-    if not events:
-        return df, []
-    out = df.copy()
-    fac = pd.Series(factors, index=out.index)
-    for col in ("open", "high", "low", "close"):
-        if col in out.columns:
-            # 4 decimals on a price quoted in thousands of VND is a tenth of a
-            # dong -- finer than any tick, and it keeps the JSON from growing a
-            # dozen digits per bar.
-            out[col] = (out[col].astype(float) / fac).round(4)
-    if "volume" in out.columns:
-        # Volume is a share count, so it stays whole. Scaling it the opposite
-        # way to price is what keeps close * volume -- the turnover behind the
-        # liquidity metrics -- unchanged across the event.
-        out["volume"] = (out["volume"].astype(float) * fac).round(0)
-    return out, list(reversed(events))
+def old_actions(ticker: str) -> list | None:
+    """The committed `actions` block (export_actions.py), or None if absent."""
+    f = OUT / "ticker" / f"{ticker}.json"
+    try:
+        return json.loads(f.read_text(encoding="utf-8")).get("actions")
+    except (ValueError, OSError):
+        return None
 
 
 def compute_beta_from(prices_df, vni: "pd.Series | None", days: int = 252) -> float:
@@ -492,17 +417,23 @@ def main() -> None:
     # Only real companies: covered warrants have no price band, so their genuine
     # swings would be "corrected" into nonsense.
     _real = set(financials["ticker"].unique())
+    # Stored prices are VCI's adjusted history; remove the seams left where it
+    # was rescaled between runs (corp_actions.py), confirmed by ISS events,
+    # the ex-dates in the `actions` block and share-count steps.
+    import corp_actions
+    from backtest_engine import share_steps
+    _raw_fin = {t: g.to_dict("records") for t, g in financials.groupby("ticker")}
     _ca_total = 0
     for _t in list(px_by_ticker):
         if _t not in _real:
             continue
-        _adj, _ev = adjust_corporate_actions(px_by_ticker[_t], _t, issuance_dates(_t))
+        _adj, _ev = corp_actions.adjust(px_by_ticker[_t], old_actions(_t), issuance_dates(_t),
+                                        share_steps(_raw_fin.get(_t, [])))
         if _ev:
             px_by_ticker[_t] = _adj
             _ca_total += len(_ev)
-            print(f"    corporate action {_t}: " +
-                  ", ".join(f"{d} x{r}" for d, r in _ev))
-    print(f"  back-adjusted {_ca_total} corporate actions")
+            print(f"    price seam {_t}: " + ", ".join(f"{d} x{r}" for d, r in _ev))
+    print(f"  removed {_ca_total} price seams")
     hist_by_ticker = {t: g for t, g in val_hist.groupby("ticker")}
 
     # The market's newest session: a ticker whose own last close is older than
@@ -599,7 +530,7 @@ def main() -> None:
         # analyst (~22 min), detail + news_events (~80 min) and holders
         # (~40 min). This has bitten once already, on analyst alone.
         carried = {"analyst": None, "detail": None, "news_events": None, "holders": None,
-                   "foreign": []}
+                   "actions": None, "foreign": []}
         _prev = OUT / "ticker" / f"{t}.json"
         if _prev.exists():
             try:
@@ -635,6 +566,7 @@ def main() -> None:
             "detail": carried["detail"],
             "news_events": carried["news_events"],
             "holders": carried["holders"],
+            "actions": carried["actions"],
             "foreign": foreign,
             "financials": fin_rows,
             "prices": _records(px_by_ticker[t][["date", "open", "high", "low",

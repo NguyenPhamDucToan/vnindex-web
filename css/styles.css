@@ -994,3 +994,28 @@ table.bt-years td { text-align: center; }
   .bt-hrow { grid-template-columns: 1fr; gap: 4px; }
   .bt-kv { font-size: 22px; }
 }
+
+/* ── corporate actions (corp-actions.js) ───────────────────── */
+.ca > summary { cursor: pointer; list-style: none; font-size: 17px; }
+.ca > summary::-webkit-details-marker { display: none; }
+.ca > summary::before { content: "▸ "; color: var(--muted); }
+.ca[open] > summary::before { content: "▾ "; }
+.ca-kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-md); margin: var(--space-md) 0; }
+.ca-kpis > div { border: 1px solid var(--rule); border-radius: var(--radius-sm); padding: 10px 12px; background: var(--paper-2); }
+.ca-k { font-size: 11px; color: var(--muted); }
+.ca-v { font-family: var(--mono); font-size: 18px; color: var(--ink); margin-top: 2px; }
+.ca-s { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.ca-next { border-left: 3px solid #b45309; background: #fffbeb; padding: 8px 12px; margin-bottom: var(--space-md); font-size: 13px; }
+.ca-tw { overflow-x: auto; }
+.ca-t { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ca-t th { text-align: left; font-weight: 500; font-size: 11px; color: var(--muted); border-bottom: 1px solid var(--rule-strong); padding: 6px 8px; white-space: nowrap; }
+.ca-t td { padding: 6px 8px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+.ca-t .num { text-align: right; font-family: var(--mono); }
+.ca-t tr.ca-up td { background: #fffbeb; }
+.ca-t tr.ca-minor td { color: var(--muted); }
+.ca-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 7px; vertical-align: 1px; }
+.ca-nd { color: var(--muted); margin-left: 2px; cursor: help; }
+.ca-more { margin-top: 8px; padding: 5px 12px; border: 1px solid var(--rule-strong); background: var(--paper-2); border-radius: var(--radius-sm); font-size: 12px; cursor: pointer; color: var(--ink-2); }
+@media (max-width: 640px) {
+  .ca-kpis { grid-template-columns: 1fr; }
+}
