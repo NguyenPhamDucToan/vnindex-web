@@ -95,6 +95,7 @@ const QUALITY_RULE_VI = {
   fin_unit_jump: "BCTC nhảy bất thường (nghi sai đơn vị)", revenue_unit: "doanh thu nhảy bất thường",
   bad_balance: "số liệu cân đối không hợp lệ", negative_equity: "vốn chủ âm",
   valuations_stale: "định giá chưa tính lại theo giá mới",
+  ttm_annual_gap: "tổng 4 quý lệch báo cáo năm",
 };
 
 async function qualityBadge() {
@@ -267,6 +268,8 @@ async function renderStock(t) {
 
   const ttm = computeTTM(d.financials || []);
   root.appendChild(scorecard(co, v, ttm, d.detail));
+  const hc = healthCard(co, d.scores);
+  if (hc) root.appendChild(hc);
 
   const dp = dupontSection(v, co.sector);
   if (dp) root.appendChild(dp);
@@ -741,6 +744,51 @@ function scorecard(co, v, ttm, detail) {
     <span><i style="background:#d97706"></i>Cảnh báo</span>
     <span><i style="background:#dc2626"></i>Nguy hiểm</span></div>`);
   card.appendChild(legend);
+  return card;
+}
+
+// ── composite health scores (valuation/scores.py in the sibling repo) ──
+// Piotroski, Altman Z'', net debt/EBITDA and EBIT cover were fitted on
+// industrial companies, so export_data.py leaves them out for banks, brokers
+// and insurers; those get only PEG and the dividend yield.
+const PIOTROSKI_VI = {
+  roa_pos: "ROA dương", ocf_pos: "dòng tiền HĐKD dương", roa_up: "ROA tăng",
+  accrual: "dòng tiền > lợi nhuận", lev_down: "nợ/tài sản giảm", cr_up: "thanh toán hiện hành tăng",
+  no_dilution: "không phát hành thêm cổ phiếu", gm_up: "biên gộp tăng", at_up: "vòng quay tài sản tăng",
+};
+
+function healthCard(co, s) {
+  if (!s || !Object.keys(s).length) return null;
+  const R = ratingColor;
+  const cells = [];
+  const pio = s.piotroski, z = s.altman_z, nd = s.net_debt_ebitda, ic = s.interest_cover;
+  if (F.isNum(pio)) {
+    const ch = s.piotroski_checks || {};
+    const pass = Object.keys(ch).filter((k) => ch[k] === true).map((k) => PIOTROSKI_VI[k] || k);
+    const fail = Object.keys(ch).filter((k) => ch[k] === false).map((k) => PIOTROSKI_VI[k] || k);
+    const detail = `Năm ${s.piotroski_year || ""} so với năm trước. Đạt: ${pass.join(", ") || "—"}. Trượt: ${fail.join(", ") || "—"}. Thưởng cổ phiếu cũng bị tính là phát hành thêm`;
+    cells.push({ label: "Piotroski F-score", value: `${pio}/${s.piotroski_tested || 9}`, color: R(pio, 7, 4) , tip: { f: "9 phép thử đạt/trượt từ hai báo cáo năm liền nhau", d: detail, g: "7 – 9 điểm", w: "4 – 6 điểm", b: "< 4 điểm (0 – 3)" } });
+  }
+  if (F.isNum(z)) {
+    cells.push({ label: "Altman Z''", value: z.toFixed(2), color: R(z, 2.6, 1.1) , tip: { f: "6.56 × VLĐ/TS + 3.26 × LN giữ lại/TS + 6.72 × EBIT/TS + 1.05 × Vốn chủ/Nợ phải trả", d: "Phiên bản Z'' cho doanh nghiệp không phải sản xuất và thị trường mới nổi, dùng vốn chủ sổ sách. Đo nguy cơ kiệt quệ tài chính, không đo mức rẻ đắt", g: "≥ 2.6 · vùng an toàn", w: "1.1 – 2.6 · vùng xám", b: "< 1.1 · vùng nguy hiểm" } });
+  }
+  if (F.isNum(nd)) {
+    cells.push({ label: "Nợ ròng / EBITDA", value: nd < 0 ? "Tiền ròng" : F.mult(nd), color: nd < 0 ? "#16a34a" : R(nd, 2, 4, false) , tip: { f: "(Nợ vay − Tiền) / EBITDA 4 quý gần nhất", d: "Cần bao nhiêu năm lợi nhuận trước lãi vay, thuế, khấu hao để trả hết nợ ròng. Âm nghĩa là tiền mặt nhiều hơn nợ vay. Để trống khi EBITDA âm", g: "≤ 2x", w: "2 – 4x", b: "> 4x" } });
+  }
+  if (F.isNum(ic)) {
+    cells.push({ label: "EBIT / Lãi vay", value: ic > 100 ? "> 100x" : F.mult(ic), color: R(ic, 5, 2) , tip: { f: "EBIT 4 quý / Chi phí lãi vay 4 quý", d: "Lợi nhuận hoạt động gấp bao nhiêu lần tiền lãi phải trả. Doanh nghiệp vốn hoá lãi vay vào dự án (bất động sản) có thể hiện số cao hơn thực tế", g: "≥ 5x", w: "2 – 5x", b: "< 2x" } });
+  }
+  if (F.isNum(s.peg)) {
+    const g = F.isNum(s.ni_cagr_3y) ? ` Tăng trưởng lợi nhuận 3 năm: ${(s.ni_cagr_3y * 100).toFixed(1)}%/năm.` : "";
+    cells.push({ label: "PEG", value: s.peg.toFixed(2), color: R(s.peg, 1, 2, false) , tip: { f: "P/E / Tăng trưởng lợi nhuận ròng 3 năm (%)", d: `P/E đã tính đến tốc độ tăng trưởng: dưới 1 là trả ít hơn mức tăng trưởng.${g} Dùng lợi nhuận ròng thay EPS vì EPS bị thưởng cổ phiếu làm méo. Để trống khi lợi nhuận giảm`, g: "≤ 1", w: "1 – 2", b: "> 2" } });
+  }
+  if (F.isNum(s.div_yield)) {
+    cells.push({ label: `Tỷ suất cổ tức ${s.div_year || ""}`.trim(), value: F.pct(s.div_yield), color: "#666f7c",
+      tip: { f: "Cổ tức tiền mặt đã chi trong năm / Vốn hoá hiện tại", d: "Lấy từ dòng tiền trả cổ tức của báo cáo lưu chuyển tiền tệ năm gần nhất đã kết thúc. Cổ tức bằng cổ phiếu không tính", unrated: true } });
+  }
+  if (!cells.length) return null;
+  const card = el(`<div class="card"><h2 class="sec-h">Sức khoẻ tài chính &amp; cổ tức</h2></div>`);
+  card.appendChild(scoreRow("ĐIỂM TỔNG HỢP", cells));
   return card;
 }
 

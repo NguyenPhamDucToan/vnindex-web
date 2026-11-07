@@ -24,7 +24,7 @@ from valuation.multiples import (
     pb_implied, ev_ebitda_implied, epv_implied,
     ps_implied, residual_income_implied, pocf_implied,
 )
-from valuation.wacc import cost_of_equity, DEFAULT_BETA, DEFAULT_COD
+from valuation.wacc import cost_of_equity, wacc as _wacc, DEFAULT_BETA, DEFAULT_COD
 
 _FINANCIAL = {"Ngân hàng", "Chứng khoán", "Bảo hiểm", "Bất động sản"}
 
@@ -84,15 +84,8 @@ def _normalised(ticker: str, column: str, ttm_value, current_revenue=None):
     return ttm_value
 
 
-def _all_methods(ttm: dict, ticker: str) -> dict:
-    """All 10 implied prices, mirroring get_all_valuations() in the app."""
-    shares = ttm.get("shares_outstanding") or 0
-    equity = ttm.get("equity")
-    net_income = ttm.get("net_income")
-    debt = ttm.get("debt") or 0.0
-    cash = ttm.get("cash") or 0.0
-    net_debt = debt - cash
-
+def _dcf_inputs(ttm: dict, ticker: str):
+    """(fcff_base, growth) exactly as the DCF method uses them."""
     # DCF (canonical pipeline path so it matches the stored dcf_estimate).
     fcff_base = compute_fcff_ttm(ttm)
     # A single year's FCFF is not a run rate; see _normalised above.
@@ -104,6 +97,85 @@ def _all_methods(ttm: dict, ticker: str) -> dict:
     _hg = annual_fcff_growth(ticker)          # takes ticker, not ttm
     if isinstance(_hg, (int, float)):
         growth = max(0.02, min(_hg, 0.35))
+    return fcff_base, growth
+
+
+# The DCF card's two assumptions, moved one at a time and together. WACC in
+# whole points either side; growth four points either side, kept in 0-35% like
+# the base case.
+_GRID_WACC_STEPS = (-0.02, -0.01, 0.0, 0.01, 0.02)
+_GRID_GROWTH_STEPS = (-0.04, 0.0, 0.04)
+
+
+def dcf_grid(ttm: dict, ticker: str) -> list[dict] | None:
+    """WACC x growth sensitivity around the DCF card's own inputs.
+
+    The centre cell reproduces the DCF card exactly (same normalised FCFF, same
+    growth, same WACC), so the table reads as "what if" around the number shown.
+    """
+    shares = ttm.get("shares_outstanding") or 0
+    fcff_base, growth = _dcf_inputs(ttm, ticker)
+    if fcff_base is None or shares <= 0:
+        return None
+    debt = ttm.get("debt") or 0.0
+    net_debt = debt - (ttm.get("cash") or 0.0)
+    # The unrounded WACC the card used; dcf_valuation reports it rounded.
+    w0 = _wacc(DEFAULT_BETA, DEFAULT_COD, debt, ttm.get("equity") or 1.0)
+    if not w0:
+        return None
+    cells = []
+    for dw in _GRID_WACC_STEPS:
+        for dg in _GRID_GROWTH_STEPS:
+            g = max(0.0, min(growth + dg, 0.35))
+            r = dcf_valuation(fcff_base=fcff_base, net_debt_bn=net_debt,
+                              shares_millions=shares, fcff_growth_rate=g,
+                              wacc_override=w0 + dw)
+            p = r.get("price_per_share")
+            cells.append({"wacc": round(w0 + dw, 4), "growth": round(g, 4),
+                          "price": round(p) if isinstance(p, (int, float)) and p > 0 else None})
+    return cells
+
+
+def _family_values(methods: dict, sector: str = "") -> dict:
+    """{family: winsorized mean} for every family with at least one method."""
+    families = _BANK_FAMILIES if sector == "Ngân hàng" else _FAMILIES
+    out = {}
+    for name, keys in families.items():
+        values = sorted(v for k, v in methods.items()
+                        if k in keys and isinstance(v, (int, float)) and v and v > 0)
+        if values:
+            out[name] = _winsorized_mean(values)
+    return out
+
+
+def scenarios(methods: dict, sector: str = "") -> dict | None:
+    """Bear / base / bull from the three method families.
+
+    Base is the model price (mean of the families). Bear takes the most
+    pessimistic family alone, bull the most optimistic: "if only the market's
+    multiples are right" against "if only the cash-flow models are". Needs two
+    families, or there is no disagreement to show.
+    """
+    fam = _family_values(methods, sector)
+    if len(fam) < 2:
+        return None
+    lo = min(fam, key=fam.get)
+    hi = max(fam, key=fam.get)
+    return {"bear": round(fam[lo]), "bear_family": lo,
+            "base": round(sum(fam.values()) / len(fam)),
+            "bull": round(fam[hi]), "bull_family": hi}
+
+
+def _all_methods(ttm: dict, ticker: str) -> dict:
+    """All 10 implied prices, mirroring get_all_valuations() in the app."""
+    shares = ttm.get("shares_outstanding") or 0
+    equity = ttm.get("equity")
+    net_income = ttm.get("net_income")
+    debt = ttm.get("debt") or 0.0
+    cash = ttm.get("cash") or 0.0
+    net_debt = debt - cash
+
+    fcff_base, growth = _dcf_inputs(ttm, ticker)
     dcf_price = None
     wacc_val = None
     if fcff_base is not None and shares > 0:
@@ -1174,5 +1246,16 @@ def model_price(ticker: str, sector: str, price_vnd: float | None, beta=None):
     m = _family_mean(adj, sector)
     if m is None:
         return None, None, methods, params
-    up = ((m - price_vnd) / price_vnd) if (price_vnd and price_vnd > 0) else None
+    # Only where the DCF card is shown: financials have it removed.
+    if isinstance(adj.get("dcf"), (int, float)) and adj["dcf"] > 0:
+        try:
+            g = dcf_grid(ttm, ticker)
+            if g:
+                params["dcf_grid"] = g
+        except Exception:
+            pass
+    sc = scenarios(adj, sector)
+    if sc:
+        params["scenarios"] = sc
+    up =((m - price_vnd) / price_vnd) if (price_vnd and price_vnd > 0) else None
     return round(m), (round(up, 4) if up is not None else None), methods, params

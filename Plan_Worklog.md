@@ -51,3 +51,30 @@ Mỗi mục: đã làm gì · tự kiểm tra thế nào · kết quả · file 
 ## Tóm tắt đợt 1
 5/5 mục xong, tự kiểm như trên. Thêm 1 lỗi thật tìm được và đã sửa (cảnh báo watchlist chưa từng chạy). Commit trên máy, **chưa push**.
 Việc bạn cần làm: xem các mục "Chưa kiểm" ở trên; đồng ý thì tôi push (repo `vnindex-valuation` trước, rồi `vnindex-web`).
+
+---
+
+# Đợt 2 — định giá & chỉ số (2026-11-07)
+
+### 1. Day 57, 59, 60, 61, 56 — PEG, Piotroski, Altman Z'', nợ ròng/EBITDA, EBIT/lãi vay, tỷ suất cổ tức ✅
+- **Làm:** `vnindex-valuation/valuation/scores.py` (mới, hàm thuần): Piotroski 9 phép thử trên 2 báo cáo năm liền nhau (cần ≥7 phép thử chạy được); Altman Z'' bản cho doanh nghiệp phi sản xuất/thị trường mới nổi (vốn chủ sổ sách; ≥2,6 an toàn, 1,1–2,6 xám, <1,1 nguy hiểm); nợ ròng/EBITDA 4 quý; EBIT/lãi vay; PEG = P/E ÷ tăng trưởng lợi nhuận ròng 3 năm (không dùng EPS vì thưởng cổ phiếu làm méo); tỷ suất cổ tức = cổ tức tiền mặt năm gần nhất đã kết thúc / vốn hoá. Ngân hàng/chứng khoán/bảo hiểm: chỉ PEG + cổ tức.
+- `export_data.py` tính và ghi khối `scores` vào từng `ticker/<T>.json`, thêm cột `piotroski, altman_z, net_debt_ebitda, peg, div_yield` vào `screener.json`.
+- Web: thẻ mới **"Sức khoẻ tài chính & cổ tức"** dưới bảng TTM, mỗi ô có chú giải công thức + ngưỡng; Piotroski liệt kê phép thử đạt/trượt.
+- **Kiểm tra:** 11 test mới (`tests/test_scores.py`). Chạy trên 403 mã (dữ liệu ở máy): Piotroski trung vị 6/9; Altman 246 an toàn, 79 xám, 32 nguy hiểm; PEG có ở 214 mã (lợi nhuận tăng). `check_tips.py`: 32 ô, chú giải khớp ngưỡng màu.
+- **Lưu ý:** thưởng cổ phiếu bị Piotroski tính là "phát hành thêm" (106 mã trượt phép thử này), đã ghi trong chú giải. EBIT/lãi vay cao bất thường ở doanh nghiệp vốn hoá lãi vay (vd NVL), đã ghi trong chú giải.
+
+### 2. Day 52, 53 — Bảng độ nhạy DCF + kịch bản bi quan / cơ sở / lạc quan ✅
+- **Làm:** `model_valuation.py`: tách `_dcf_inputs()` (dòng tiền chuẩn hoá + tăng trưởng, dùng chung cho thẻ DCF và bảng); `dcf_grid()` WACC −2…+2 điểm % × tăng trưởng −4/0/+4 điểm %; `scenarios()` bi quan = nhóm phương pháp thấp nhất, lạc quan = cao nhất, cơ sở = giá mô hình. Lưu trong `model.params`.
+- Web: dưới khối "Trung bình N phương pháp" có khối **Kịch bản** (3 ô) và **Độ nhạy DCF** (bảng 5×3, ô giữa = thẻ DCF).
+- **Kiểm tra:** 3 test mới; ô giữa khớp đúng thẻ DCF (đã thử trên DB thật: FPT 50.826 = 50.826, GMD, REE khớp). Ngân hàng/CK/BH không có bảng (không dùng DCF).
+
+### 3. Day 67 — Đối soát tổng 4 quý với báo cáo năm ✅
+- **Làm:** quy tắc `ttm_annual_gap` (cảnh báo) trong `quality/audit.py`: năm đầy đủ gần nhất, doanh thu hoặc lợi nhuận ròng lệch >5% và >5 tỷ. Nhãn tiếng Việt trên web.
+- **Kiểm tra:** 1 test mới. Trên dữ liệu ở máy: năm 2025 có ~8 mã lệch (LDG, VNE, CIG, VCG…), thường do kiểm toán điều chỉnh mà báo cáo quý không sửa.
+
+### 4. Day 41 — Lịch nghỉ lễ VN ⏸ chưa làm
+- Lý do: bộ kiểm tra đã đếm phiên từ dữ liệu thật (ngày lễ không bị tính là chậm giá); job ngày lễ chỉ lấy lại giá phiên trước, vô hại. Giá trị thấp, để sau.
+
+### Môi trường máy
+- Python 3.12 trên máy đã bị gỡ (venv `vnindex-valuation/.venv` hỏng). Test chạy bằng venv tạm trong thư mục nháp (Python 3.9 + pandas/sqlalchemy/pytest). CI dùng 3.12, sẽ chạy lại khi push.
+- Test: web 11/11, valuation 117 qua (bỏ `test_macro_collector.py` vì máy thiếu `truststore`, không liên quan).

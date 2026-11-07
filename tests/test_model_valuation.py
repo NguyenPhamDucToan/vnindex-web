@@ -137,3 +137,37 @@ def test_life_insurer_keeps_only_its_own_history(monkeypatch):
         assert life.get(k) is None, k
     assert life["pb_own"] and life["pe_own"]
     assert non_life["pe"] is not None and non_life["pb"] is not None
+
+
+# ── DCF sensitivity grid and bear/base/bull (plan Day 52-53) ────────────────
+def test_dcf_grid_centre_reproduces_the_dcf_card(monkeypatch):
+    from valuation.dcf import dcf_valuation
+    from valuation.wacc import DEFAULT_BETA, DEFAULT_COD
+    monkeypatch.setattr(mv, "_dcf_inputs", lambda ttm, t: (1000.0, 0.10))
+    ttm = {"shares_outstanding": 500.0, "debt": 2000.0, "cash": 500.0, "equity": 5000.0}
+    card = dcf_valuation(fcff_base=1000.0, net_debt_bn=1500.0, shares_millions=500.0,
+                         fcff_growth_rate=0.10, beta=DEFAULT_BETA, cost_of_debt=DEFAULT_COD,
+                         debt_bn=2000.0, equity_bn=5000.0)
+    grid = mv.dcf_grid(ttm, "AAA")
+    assert len(grid) == 15
+    centre = [c for c in grid if c["wacc"] == round(card["wacc"], 4) and c["growth"] == 0.10]
+    assert centre and abs(centre[0]["price"] - card["price_per_share"]) <= 1
+    # Higher discount rate -> lower value; higher growth -> higher value.
+    by = {(c["wacc"], c["growth"]): c["price"] for c in grid}
+    ws = sorted({c["wacc"] for c in grid})
+    assert by[(ws[0], 0.10)] > by[(ws[-1], 0.10)]
+    assert by[(ws[2], 0.14)] > by[(ws[2], 0.06)]
+
+
+def test_dcf_grid_none_without_cash_flow(monkeypatch):
+    monkeypatch.setattr(mv, "_dcf_inputs", lambda ttm, t: (None, 0.12))
+    assert mv.dcf_grid({"shares_outstanding": 100.0}, "AAA") is None
+
+
+def test_scenarios_take_the_extreme_families():
+    methods = {"pe_own": 100, "pb_own": 100, "pe": 50, "pb": 50, "dcf": 80}
+    sc = mv.scenarios(methods)
+    assert sc["bear"] == 50 and sc["bear_family"] == "sector"
+    assert sc["bull"] == 100 and sc["bull_family"] == "own"
+    assert sc["base"] == round(mv._family_mean(methods))
+    assert mv.scenarios({"pe": 50}) is None      # one family: nothing to compare

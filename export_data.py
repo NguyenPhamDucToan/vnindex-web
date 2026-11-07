@@ -404,6 +404,7 @@ def main() -> None:
     # Imported here so sys.path (set at module load) already includes the
     # sibling valuation package.
     from model_valuation import model_price
+    from valuation.scores import compute_scores
     from valuation.wacc import wacc as _wacc_calc, DEFAULT_COD
 
     engine = create_engine(_DB_URL, pool_pre_ping=True)
@@ -513,6 +514,7 @@ def main() -> None:
     _loop_t0 = time.monotonic()
     model_out = {}          # ticker -> {"price": .., "upside": ..} for screener
     change_out = {}         # ticker -> {"chg": .., "close": .., "vol": ..}
+    scores_out = {}         # ticker -> valuation/scores.py output
     for _, co in companies.iterrows():
         t = co.ticker
         vg = val_by_ticker.get(t)
@@ -605,17 +607,32 @@ def main() -> None:
         if foreign is None:                    # VNDirect failed: keep the last good flow
             foreign = carried["foreign"] or []
 
+        fin_rows = _records(fin_by_ticker[t]) if t in fin_by_ticker else []
+        # Piotroski, Altman Z'', net debt/EBITDA, interest cover, PEG and
+        # dividend yield -- formulas live in the sibling's valuation/scores.py.
+        scores = {}
+        try:
+            _val0 = _records(vg)[0] if vg is not None and len(vg) else {}
+            scores = compute_scores(
+                fin_rows, sec_by_ticker.get(t), price_vnd, pe=_val0.get("pe"),
+                dividends=(carried["detail"] or {}).get("dividends"),
+                today_year=date.today().year)
+        except Exception as e:
+            print(f"    ! scores {t}: {e}")
+        scores_out[t] = scores
+
         obj = {
             "company": {k: _clean(co[k]) for k in
                         ("ticker", "name", "sector", "industry", "exchange")},
             "valuation": (_records(vg)[0] if vg is not None and len(vg) else None),
             "model": model,
+            "scores": scores,
             "analyst": carried["analyst"],
             "detail": carried["detail"],
             "news_events": carried["news_events"],
             "holders": carried["holders"],
             "foreign": foreign,
-            "financials": _records(fin_by_ticker[t]) if t in fin_by_ticker else [],
+            "financials": fin_rows,
             "prices": _records(px_by_ticker[t][["date", "open", "high", "low",
                                                 "close", "volume"]])
                       if t in px_by_ticker else [],
@@ -643,6 +660,8 @@ def main() -> None:
     # Latest close, so the screener can show "Giá (VND)" like the original.
     screener["close"] = screener.ticker.map(lambda t: change_out.get(t, {}).get("close"))
     screener["vol"] = screener.ticker.map(lambda t: change_out.get(t, {}).get("vol"))
+    for _k in ("piotroski", "altman_z", "net_debt_ebitda", "peg", "div_yield"):
+        screener[_k] = screener.ticker.map(lambda t, k=_k: scores_out.get(t, {}).get(k))
     _write(OUT / "screener.json", _records(screener))
     print(f"  wrote screener.json ({len(screener)} rows)")
 

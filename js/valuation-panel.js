@@ -123,7 +123,58 @@ export function valuationPanel(co, model, priceRaw) {
     </div>`));
   }
 
+  const sc = scenarioBlock(prm.scenarios, priceRaw);
+  if (sc) panel.appendChild(sc);
+  const grid2 = dcfGridBlock(prm.dcf_grid, methods.dcf, priceRaw);
+  if (grid2) panel.appendChild(grid2);
+
   return panel;
+}
+
+const FAMILY_VI = { own: "lịch sử chính mã", sector: "bội số ngành", model: "mô hình dòng tiền / thu nhập" };
+
+// Bear / base / bull: the model price is the mean of three method families, so
+// the honest range is what each family alone would say. Bear = the most
+// pessimistic family, bull = the most optimistic (model_valuation.scenarios).
+function scenarioBlock(s, priceRaw) {
+  if (!s || !F.isNum(s.bear) || !F.isNum(s.bull)) return null;
+  const up = (p) => (priceRaw && F.isNum(p)) ? (p - priceRaw) / priceRaw * 100 : null;
+  const cell = (cls, k, p, sub) => {
+    const u = up(p);
+    return `<div class="sc3-cell ${cls}"><div class="sc3-k">${k}</div>
+      <div class="sc3-v">${F.rawVND(p)} <span class="vp-cur">₫</span></div>
+      <div class="sc3-u ${(u ?? 0) >= 0 ? "gain" : "loss"}">${u == null ? "" : F.pctSigned(u)}</div>
+      <div class="sc3-s">${sub}</div></div>`;
+  };
+  return el(`<div class="sc3"><div class="vp-avg-k">KỊCH BẢN</div><div class="sc3-row">
+    ${cell("bear", "Bi quan", s.bear, "chỉ tin " + (FAMILY_VI[s.bear_family] || s.bear_family))}
+    ${cell("base", "Cơ sở", s.base, "trung bình các nhóm")}
+    ${cell("bull", "Lạc quan", s.bull, "chỉ tin " + (FAMILY_VI[s.bull_family] || s.bull_family))}
+  </div><div class="vp-avg-note">Khoảng cách giữa hai đầu là mức các cách định giá đang bất đồng — càng rộng thì giá mô hình càng ít chắc chắn.</div></div>`);
+}
+
+// WACC x growth sensitivity around the DCF card (model_valuation.dcf_grid);
+// the centre cell is the DCF card itself.
+function dcfGridBlock(cells, dcfCard, priceRaw) {
+  if (!Array.isArray(cells) || !cells.length) return null;
+  const ws = [...new Set(cells.map((c) => c.wacc))].sort((a, b) => a - b);
+  const gs = [...new Set(cells.map((c) => c.growth))].sort((a, b) => a - b);
+  const at = (w, g) => (cells.find((c) => c.wacc === w && c.growth === g) || {}).price;
+  const mw = ws[Math.floor(ws.length / 2)], mg = gs[Math.floor(gs.length / 2)];
+  const pc = (x) => `${(x * 100).toFixed(1)}%`;
+  let rows = "";
+  for (const w of ws) {
+    rows += `<tr><th>${pc(w)}</th>` + gs.map((g) => {
+      const p = at(w, g);
+      const u = (priceRaw && F.isNum(p)) ? (p - priceRaw) / priceRaw : null;
+      const cls = (w === mw && g === mg) ? "dg-mid" : u == null ? "" : u >= 0 ? "gain" : "loss";
+      return `<td class="${cls}">${F.isNum(p) ? F.rawVND(p) : "—"}</td>`;
+    }).join("") + `</tr>`;
+  }
+  return el(`<div class="dgrid"><div class="vp-avg-k">ĐỘ NHẠY DCF</div>
+    <table class="dg-table"><thead><tr><th>WACC \\ g</th>${gs.map((g) => `<th>${pc(g)}</th>`).join("")}</tr></thead>
+    <tbody>${rows}</tbody></table>
+    <div class="vp-avg-note">Giá DCF khi đổi chi phí vốn (hàng) và tăng trưởng dòng tiền 5 năm (cột). Ô giữa là thẻ DCF ở trên${F.isNum(dcfCard) ? ` (${F.rawVND(dcfCard)} ₫)` : ""}; xanh là cao hơn thị giá, đỏ là thấp hơn. Lệch 1 điểm % WACC thường làm giá đổi 10–20%.</div></div>`);
 }
 
 // ── technical analysis (computed in the browser from the OHLC we already ship)
