@@ -176,12 +176,26 @@ export function buildScreener(root, rows, { selectTicker, loadWL, saveWL, onFilt
   // Filters
   const ftoggle = el(`<button class="sx-btn sx-ftoggle">Bộ lọc ▾ <span id="sx-fon"></span></button>`);
   root.appendChild(ftoggle);
+  // Four fixed groups, each a vertical list, so the panel lines up at any
+  // width instead of an auto-fill grid leaving one or two orphans on a row.
+  const GROUPS = [
+    ["Quy mô & thanh khoản", ["liq", "mcap"]],
+    ["Định giá", ["up", "pe", "pb", "peg"]],
+    ["Chất lượng", ["q", "roe", "pio"]],
+    ["Cổ tức & an toàn", ["dy", "nd", "z"]],
+  ];
+  const fInput = (id) => {
+    const [, label, unit, kind, , step, ph, hint] = FBY[id];
+    return `<label class="sx-f" title="${esc(hint + (hint ? ". " : "") + "Ví dụ: " + ph)}">
+      <span class="sx-fk">${label.replace(/ (tối thiểu|tối đa)$/, "")}<i>${kind === "min" ? "≥" : "≤"}</i></span>
+      <span class="sx-in"><input type="number" inputmode="decimal" id="sx-f-${id}" step="${step}" placeholder="—" />${unit ? `<em>${unit}</em>` : ""}</span></label>`;
+  };
   const fcard = el(`<div class="card sx-filters">
-    <div class="sx-frow">
-      <div class="sx-f sx-f-wide"><span class="sx-fk">Ngành</span><div class="sf-tags" id="sx-sector"></div></div>
-      ${FILTERS.map(([id, label, unit, , , step, ph, hint]) => `
-        <label class="sx-f" title="${esc(hint + (hint ? ". " : "") + "Ví dụ: " + ph)}"><span class="sx-fk">${label}</span>
-          <span class="sx-in"><input type="number" inputmode="decimal" id="sx-f-${id}" step="${step}" placeholder="—" data-eg="${ph}" />${unit ? `<em>${unit}</em>` : ""}</span></label>`).join("")}
+    <div class="sx-groups">
+      ${GROUPS.map(([title, ids], gi) => `<div class="sx-group">
+        <div class="sx-gh">${title}</div>
+        ${gi === 0 ? `<div class="sx-f sx-f-sec"><span class="sx-fk">Ngành</span><div class="sf-tags" id="sx-sector"></div></div>` : ""}
+        ${ids.map(fInput).join("")}</div>`).join("")}
     </div>
     <div class="sx-fnote">Ô để trống là không lọc. Đặt một ngưỡng thì mã không có số liệu cho chỉ số đó bị loại (riêng nợ ròng/EBITDA: ngành tài chính luôn đạt).</div>
   </div>`);
