@@ -127,3 +127,9 @@ Lợi nhuận theo giá, chưa có cổ tức tiền mặt (cả chuẩn); thiê
 
 ### Chưa làm trong Phase 10
 Day 79–84 phần sâu (đa nhân tố có trọng số, chế độ thị trường, trung lập ngành), Day 89 (thêm mã đã huỷ niêm yết — cần nguồn dữ liệu), kiểm định tín hiệu của app.
+
+### 2026-11-07 — Kiểm định chiến lược: tạm ẩn (chủ dự án chưa muốn công khai)
+- `js/app.js`: `SHOW_BACKTEST = false` → menu không có mục, `backtest.js` không được import (nạp động khi bật).
+- `deploy.yml`: bước "Leave the private backtest out of the upload" xoá `js/backtest.js`, `data/backtest.json` trước khi lên Cloudflare.
+- `refresh-slow.yml`: bước backtest chỉ chạy khi biến repo `RUN_BACKTEST=true`.
+- Bật lại: đổi cờ thành `true`, bỏ bước rm trong deploy.yml, đặt `RUN_BACKTEST=true`. Chạy tay: `python export_backtest.py`.

@@ -119,7 +119,9 @@ jobs:
       # lược" view. ~2 minutes; reads the database only. After the financials
       # refresh above, so the newest quarter is in. A failure keeps last
       # week's committed file.
+      # Off while the view is private; set repo variable RUN_BACKTEST=true to resume.
       - name: Strategy backtest
+        if: ${{ vars.RUN_BACKTEST == 'true' }}
         working-directory: vnindex-web
         continue-on-error: true
         timeout-minutes: 30

@@ -208,6 +208,12 @@ jobs:
       # and their build image would have to redo it inside a 20-minute cap that
       # a 15-minute export leaves no room under. Skipped when the secrets are
       # absent, so the workflow keeps working before Cloudflare is set up.
+      # The strategy backtest is private for now (js/app.js SHOW_BACKTEST):
+      # keep its page and data off the public site.
+      - name: Leave the private backtest out of the upload
+        working-directory: vnindex-web
+        run: rm -f js/backtest.js data/backtest.json
+
       - name: Deploy to Cloudflare Pages
         env:
           # wrangler reads these two names specifically.

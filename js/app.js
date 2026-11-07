@@ -12,7 +12,12 @@ import { renderCompare } from "./compare.js";
 import { renderMacro } from "./macro.js";
 import * as F from "./format.js";
 import { buildScreener, isScreenerHash } from "./screener.js";
-import { renderBacktest } from "./backtest.js";
+// "Kiểm định chiến lược" (Phase 10 backtest) is built but private for now: the
+// owner doesn't want it public yet. With the flag off nothing loads backtest.js
+// (deploy.yml also leaves it and data/backtest.json out of the upload).
+// To turn it on: set this to true, drop the rm step in deploy.yml, and set the
+// repo variable RUN_BACKTEST=true so refresh-slow.yml rebuilds the data weekly.
+const SHOW_BACKTEST = false;
 
 // Plotly truncates a trace name in the hover box at 15 characters and appends
 // an ellipsis, so "Tổng thu nhập hoạt động" read as "Tổng thu nhậ...". There is
@@ -130,7 +135,8 @@ function buildNav() {
   // (#portfolio), it just isn't advertised in the nav.
   const views = [["stock", "Phân tích cổ phiếu"], ["screen", "Sàng lọc"],
     ["compare", "So sánh cổ phiếu"], ["sector", "Phân tích ngành"],
-    ["market", "Tổng quan thị trường"], ["backtest", "Kiểm định chiến lược"]];
+    ["market", "Tổng quan thị trường"],
+    ...(SHOW_BACKTEST ? [["backtest", "Kiểm định chiến lược"]] : [])];
   for (const [id, label] of views) {
     const a = el(`<button class="nav-item" data-view="${id}">${label}</button>`);
     a.onclick = () => showView(id);
@@ -147,7 +153,10 @@ function showView(id) {
   if (id === "portfolio") renderPortfolio();
   if (id === "market") renderMarket();
   if (id === "compare") renderCompareView();
-  if (id === "backtest" && !backtestBuilt) { backtestBuilt = true; renderBacktest($("#view-backtest"), selectTicker); }
+  if (id === "backtest" && SHOW_BACKTEST && !backtestBuilt) {
+    backtestBuilt = true;
+    import("./backtest.js").then((m) => m.renderBacktest($("#view-backtest"), selectTicker));
+  }
 }
 
 // ── ticker picker ───────────────────────────────────────────────────
