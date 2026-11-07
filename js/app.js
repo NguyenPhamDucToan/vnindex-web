@@ -11,6 +11,7 @@ import { dupontSection, roicSection, peerSection, valuationBandSection,
 import { renderCompare } from "./compare.js";
 import { renderMacro } from "./macro.js";
 import * as F from "./format.js";
+import { buildScreener, isScreenerHash } from "./screener.js";
 
 // Plotly truncates a trace name in the hover box at 15 characters and appends
 // an ellipsis, so "Tổng thu nhập hoạt động" read as "Tổng thu nhậ...". There is
@@ -81,7 +82,14 @@ async function boot() {
 
   const initial = new URLSearchParams(location.search).get("ticker")
     || (COMPANIES.find((c) => c.ticker === "VCB") ? "VCB" : COMPANIES[0].ticker);
+  // A shared screener link (#screen?...) opens on the screener with its
+  // filters; selectTicker rewrites the URL, so keep the hash aside first.
+  const screenHash = isScreenerHash() ? location.hash : null;
   selectTicker(initial);
+  if (screenHash) {
+    history.replaceState(null, "", `${location.pathname}${location.search}${screenHash}`);
+    showView("screen");
+  }
 }
 
 // Data quality badge under the update line, from the latest audit
@@ -133,10 +141,6 @@ function buildNav() {
 function showView(id) {
   document.querySelectorAll(".nav-item").forEach((n) => n.classList.toggle("active", n.dataset.view === id));
   document.querySelectorAll(".view").forEach((v) => v.classList.toggle("hidden", v.id !== `view-${id}`));
-  // The screener's filters live in the sidebar, as they do in the original;
-  // they only make sense while that view is on screen.
-  const sf = $("#side-filters");
-  if (sf) sf.classList.toggle("hidden", id !== "screen");
   if (id === "screen") renderScreener();
   if (id === "sector") renderSector();
   if (id === "portfolio") renderPortfolio();
@@ -908,315 +912,66 @@ const saveWL = (set) => {
   try { localStorage.setItem(WL_KEY, JSON.stringify([...set])); } catch { /* ignore */ }
 };
 
-// Sliders, ranges and steps copied from the original's sidebar.
-// Tonal / filled pairs copied from the original's _QC_COLORS: [tint, ink].
-const QC_COLORS = {
-  "Strong Buy": ["#bbf7d0", "#14532d"],
-  "Buy": ["#dcfce7", "#166534"],
-  "Watch": ["#fef3c7", "#92400e"],
-  "Neutral": ["#f1f5f9", "#475569"],
-  "Reduce": ["#fef2f2", "#b91c1c"],
-  "Sell": ["#fee2e2", "#991b1b"],
-  "Strong Sell": ["#fecaca", "#7f1d1d"],
-};
-
-const SCREEN_FILTERS = [
-  ["f-roe", "ROE tối thiểu (%)", -50, 50, 5, -50],
-  ["f-nm", "Biên lợi nhuận ròng tối thiểu (%)", -50, 50, 1, -50],
-  ["f-pb", "Max P/B (×)", 0, 10, 0.1, 10],
-  ["f-qs", "Quality tối thiểu", 0, 100, 5, 0],
-  ["f-de", "D/E tối đa (x)", 0, 30, 0.5, 30],
-  ["f-pe", "Max P/E (×)", 0, 100, 1, 100],
-  ["f-up", "Avg Upside tối thiểu (%)", -1000, 200, 50, -1000],
-];
-
-const SORT_OPTIONS = [
-  ["Tín hiệu (Strong Buy trước)", (a, b) => SIGNAL_ORDER.indexOf(a.sig) - SIGNAL_ORDER.indexOf(b.sig) || b.q - a.q],
-  ["Tín hiệu (Strong Sell trước)", (a, b) => SIGNAL_ORDER.indexOf(b.sig) - SIGNAL_ORDER.indexOf(a.sig) || b.q - a.q],
-  ["Upside (tốt nhất trước)", (a, b) => (b.upFrac ?? -9e9) - (a.upFrac ?? -9e9)],
-  ["Quality (tốt nhất trước)", (a, b) => b.q - a.q],
-  ["ROE (tốt nhất trước)", (a, b) => (b.roe ?? -9e9) - (a.roe ?? -9e9)],
-  ["Biên LN ròng (tốt nhất trước)", (a, b) => (b.net_margin ?? -9e9) - (a.net_margin ?? -9e9)],
-  ["Mã (A-Z)", (a, b) => a.ticker.localeCompare(b.ticker)],
-];
-
 async function renderScreener() {
   if (screenerBuilt) return;
   screenerBuilt = true;
   const root = $("#view-screen");
   root.innerHTML = `<div class="loading">Đang tải…</div>`;
   const rows = await enrichScreener();
-  // The quarter the market as a whole is on -- the commonest last_q, not a
-  // calendar guess -- so a row sitting behind it can be marked as stale.
-  const qCount = {};
-  for (const r of rows) if (r.last_q) qCount[r.last_q] = (qCount[r.last_q] || 0) + 1;
-  const lastQExpected = Object.keys(qCount).sort((a, b) => qCount[b] - qCount[a])[0] || null;
-  const sectors = [...new Set(rows.map((r) => r.sector).filter(Boolean))].sort();
-  const wl = loadWL();
-
-  // ── sidebar filter panel (the original keeps these in the sidebar) ──
-  let side = $("#side-filters");
-  if (!side) {
-    side = el(`<div id="side-filters" class="side-filters"></div>`);
-    $("#nav").after(side);
-  }
-  // The sliders sit in two columns in the original, in this order.
-  const slider = ([id, label, lo, hi, step, def]) => `
-    <label class="sf-l"><span class="sf-k">${label}</span><span class="sf-v" id="${id}-v">${def}</span>
-      <input id="${id}" type="range" min="${lo}" max="${hi}" step="${step}" value="${def}" /></label>`;
-  const byId = Object.fromEntries(SCREEN_FILTERS.map((f) => [f[0], f]));
-  const colA = ["f-roe", "f-nm", "f-pb", "f-qs"].map((k) => slider(byId[k])).join("");
-  const colB = ["f-de", "f-pe", "f-up"].map((k) => slider(byId[k])).join("");
-
-  side.innerHTML = `
-    <div class="sf-h">Filters</div>
-    <div class="sf-l">Ngành<div class="sf-tags" id="f-sector"></div></div>
-    <div class="sf-cols"><div>${colA}</div><div>${colB}
-      <label class="sf-c"><input id="f-pinned" type="checkbox" /> Chỉ Theo dõi</label></div></div>
-    <label class="sf-l">Sắp xếp theo
-      <select id="f-sort">${SORT_OPTIONS.map(([n], i) =>
-        `<option value="${i}">${n}</option>`).join("")}</select></label>
-    <div class="sf-l">Lọc theo Tín hiệu<div class="sf-tags" id="f-signal"></div></div>
-    <button id="f-reset" class="range-btn sf-reset">Xóa lọc</button>
-    <details class="sf-exp"><summary>Kiểm tra Tình trạng Dữ liệu</summary>
-      <button id="f-health" class="range-btn sf-reset">Kiểm tra đầy đủ dữ liệu</button>
-      <div id="f-health-out" class="sf-l"></div></details>`;
-
-  // Compact tag pickers, in place of the tall list boxes. Selected values show
-  // as removable chips; typing filters an overlay list.
-  const tagPicker = (host, options, placeholder, onChange) => {
-    const chosen = new Set();
-    host.innerHTML = `<div class="tp-box"><span class="tp-chips"></span>
-      <input class="tp-in" placeholder="${placeholder}" autocomplete="off" spellcheck="false" />
-      </div><div class="tp-list hidden"></div>`;
-    const chips = host.querySelector(".tp-chips");
-    const input = host.querySelector(".tp-in");
-    const list = host.querySelector(".tp-list");
-    const draw = () => {
-      chips.innerHTML = "";
-      for (const v of chosen) {
-        const c = el(`<span class="tp-chip">${F.escapeHtml(v)}<button title="Bỏ">✕</button></span>`);
-        c.querySelector("button").onclick = (ev) => {
-          ev.stopPropagation();
-          chosen.delete(v); draw(); onChange([...chosen]);
-        };
-        chips.appendChild(c);
-      }
-      input.placeholder = chosen.size ? "" : placeholder;
-    };
-    const openList = () => {
-      const term = input.value.trim().toUpperCase();
-      const hits = options.filter((o) => !chosen.has(o) && o.toUpperCase().includes(term));
-      list.innerHTML = "";
-      for (const o of hits.slice(0, 40)) {
-        const it = el(`<div class="tp-opt">${F.escapeHtml(o)}</div>`);
-        it.onmousedown = (ev) => {
-          ev.preventDefault();
-          chosen.add(o); input.value = ""; draw(); openList(); onChange([...chosen]);
-        };
-        list.appendChild(it);
-      }
-      list.classList.toggle("hidden", !hits.length);
-    };
-    input.addEventListener("focus", openList);
-    input.addEventListener("input", openList);
-    input.addEventListener("blur", () => setTimeout(() => list.classList.add("hidden"), 150));
-    host.reset = () => { chosen.clear(); draw(); };
-    host.value = () => [...chosen];
-    host.setOnly = (v) => { chosen.clear(); if (v) chosen.add(v); draw(); };
-    draw();
-    return host;
-  };
-
+  const host = el(`<div></div>`);
   root.innerHTML = "";
-  // On a phone the sidebar stacks above the content, so nine filters push the
-  // table off the first two screens. Collapse them behind a toggle there; on
-  // desktop the button is hidden and the panel is always open.
-  const filtToggle = el(`<button class="range-btn sf-toggle">Bộ lọc ▾</button>`);
-  filtToggle.onclick = () => {
-    const open = side.classList.toggle("sf-open");
-    filtToggle.textContent = open ? "Bộ lọc ▴" : "Bộ lọc ▾";
-  };
-  root.appendChild(filtToggle);
-  root.appendChild(el(`<div class="range-row sc-tabs"></div>`));
-  root.appendChild(el(`<h2 class="view-title" id="sc-title">Lọc cổ phiếu</h2>`));
-
-  const card = el(`<div class="card">
-    <div class="sig-counts" id="sig-counts"></div>
-    <div class="sc-quick">
-      <input id="q-ticker" placeholder="Tìm mã, VD: DSN, NCT" autocomplete="off" spellcheck="false" />
-      <select id="q-sector"><option>Tất cả ngành</option></select>
-      <span id="f-count" class="fcount"></span>
-    </div>
-    <div class="ta-scroll"><table class="screen screen-wide"><thead><tr>
-      <th>★</th><th>Mã</th><th>Tín hiệu</th><th>Ngành</th><th>Giá (VND)</th><th>Avg Estimate</th>
-      <th>Avg Upside</th><th>DCF Estimate</th><th>FCFE Estimate</th><th>Upside</th>
-      <th>Quality</th><th>Graham Number</th><th>P/E</th><th>P/B</th><th>Biên LN ròng</th>
-    </tr></thead><tbody></tbody></table></div></div>`);
-  root.appendChild(card);
-  const tb = $("tbody", card);
-
-  const secPick = tagPicker($("#f-sector"), sectors, "Tất cả ngành", () => apply());
-  const sigPick = tagPicker($("#f-signal"), SIGNAL_ORDER.slice(), "Tất cả tín hiệu", () => apply());
-
-  const qs = $("#q-sector", card);
-  for (const x of sectors) qs.appendChild(el(`<option>${F.escapeHtml(x)}</option>`));
-
-  const counts = $("#sig-counts", card);
-  for (const sg of SIGNAL_ORDER) {
-    const n = rows.filter((r) => r.sig === sg).length;
-    const b = el(`<button class="sig-c" data-sig="${sg}">
-      <div class="sig-n">${n}</div><div class="sig-l">${sg}</div></button>`);
-    b.onclick = () => {
-      const on = sigPick.value();
-      sigPick.setOnly(on.length === 1 && on[0] === sg ? null : sg);
-      apply();
-    };
-    counts.appendChild(b);
-  }
-
-  // Tonal when unselected, solid when selected -- the original's two-tier chip.
-  const paintTiles = (active) => {
-    for (const b of counts.querySelectorAll(".sig-c")) {
-      const [tint, ink] = QC_COLORS[b.dataset.sig] || ["#f1f5f9", "#475569"];
-      const on = active.includes(b.dataset.sig);
-      b.style.background = on ? ink : tint;
-      b.style.color = on ? "#ffffff" : ink;
-      b.style.border = `${on ? 2 : 1.5}px solid ${ink}`;
-    }
-  };
-
-  const sliderVal = (id) => parseFloat($(id).value);
-
-  function apply() {
-    for (const [id] of SCREEN_FILTERS) $(`#${id}-v`).textContent = $(`#${id}`).value;
-    const secs = secPick.value(), sigs = sigPick.value();
-    const minRoe = sliderVal("#f-roe"), minNm = sliderVal("#f-nm"), maxPb = sliderVal("#f-pb");
-    const minQs = sliderVal("#f-qs"), maxDe = sliderVal("#f-de"), maxPe = sliderVal("#f-pe");
-    const minUp = sliderVal("#f-up"), pinned = $("#f-pinned").checked;
-    const watchOnly = pinned || currentScTab === "Theo dõi";
-    const qTicker = ($("#q-ticker", card).value || "").trim().toUpperCase();
-    const qSector = $("#q-sector", card).value;
-    paintTiles(sigs);
-
-    let out = rows.filter((r) =>
-      (!secs.length || secs.includes(r.sector)) &&
-      (!sigs.length || sigs.includes(r.sig)) &&
-      (!qTicker || r.ticker.includes(qTicker)) &&
-      (qSector === "Tất cả ngành" || r.sector === qSector) &&
-      (!watchOnly || wl.has(r.ticker)) &&
-      (F.isNum(r.roe) ? r.roe * 100 >= minRoe : minRoe <= -50) &&
-      (F.isNum(r.net_margin) ? r.net_margin * 100 >= minNm : minNm <= -50) &&
-      (F.isNum(r.pb) ? r.pb <= maxPb : maxPb >= 10) &&
-      (F.isNum(r.q) ? r.q >= minQs : minQs <= 0) &&
-      (F.isNum(r.debt_to_equity) ? r.debt_to_equity <= maxDe : maxDe >= 30) &&
-      (F.isNum(r.pe) ? r.pe <= maxPe : maxPe >= 100) &&
-      (F.isNum(r.upFrac) ? r.upFrac * 100 >= minUp : minUp <= -1000));
-    out = out.slice().sort(SORT_OPTIONS[parseInt($("#f-sort").value, 10)][1]);
-
-    tb.innerHTML = "";
-    for (const r of out) {
-      const tr = el(`<tr>
-        <td class="wl-cell"><button class="wl-star ${wl.has(r.ticker) ? "on" : ""}" title="Theo dõi">${wl.has(r.ticker) ? "★" : "☆"}</button></td>
-        <td><b>${r.ticker}</b>${(r.px_age ?? 0) > 10 || (r.last_q && lastQExpected && r.last_q < lastQExpected)
-          ? ` <span class="stale-tag" title="Giá gần nhất ${r.px_date || "?"} · Báo cáo gần nhất ${r.last_q || "?"}">cũ</span>` : ""}</td>
-        <td>${r.sig ? `<span style="color:${SIGNAL_COLOR[r.sig]}">${SIGNAL_VI[r.sig]}</span>` : "—"}</td>
-        <td class="dim">${F.escapeHtml(r.sector || "")}</td>
-        <td>${F.priceVND(r.close)}</td>
-        <td>${F.rawVND(r.avg_intrinsic_value)}</td>
-        <td style="color:${(r.upFrac ?? 0) >= 0 ? "#15803d" : "#b91c1c"}">${fmtUpside(r.upFrac)}</td>
-        <td>${F.rawVND(r.dcf_estimate)}</td>
-        <td>${F.rawVND(r.fcfe_estimate)}</td>
-        <td style="color:${(r.upside_pct ?? 0) >= 0 ? "#15803d" : "#b91c1c"}">${fmtUpside(r.upside_pct)}</td>
-        <td>${r.q.toFixed(0)}</td>
-        <td>${F.rawVND(r.graham_number)}</td>
-        <td>${F.mult(r.pe)}</td><td>${F.mult(r.pb)}</td>
-        <td>${F.pct(r.net_margin)}</td></tr>`);
-      tr.querySelector(".wl-star").onclick = (ev) => {
-        ev.stopPropagation();
-        if (wl.has(r.ticker)) wl.delete(r.ticker); else wl.add(r.ticker);
-        saveWL(wl);
-        apply();
-      };
-      tr.onclick = () => selectTicker(r.ticker);
-      tb.appendChild(tr);
-    }
-    $("#f-count", card).textContent = `${out.length} / ${rows.length} mã`;
-  }
-
-  // ── the original's two tabs ────────────────────────────────────
-  let currentScTab = "Lọc cổ phiếu";
-  const tabRow = $(".sc-tabs", root);
-  for (const name of ["Lọc cổ phiếu", "Theo dõi"]) {
-    const btn = el(`<button class="range-btn ${name === currentScTab ? "active" : ""}">${name}</button>`);
-    btn.onclick = () => {
-      currentScTab = name;
-      tabRow.querySelectorAll(".range-btn").forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-      $("#sc-title", root).textContent = name === "Theo dõi" ? "Lọc & Theo dõi" : "Lọc cổ phiếu";
-      apply();
-    };
-    tabRow.appendChild(btn);
-  }
-
-  // The tag pickers fire apply() themselves; their own text inputs must not.
-  side.querySelectorAll("select, input[type=range], input[type=checkbox]")
-      .forEach((c) => c.addEventListener("input", apply));
-  card.querySelectorAll("#q-ticker, #q-sector").forEach((c) => c.addEventListener("input", apply));
-  $("#f-reset").onclick = () => {
-    secPick.reset(); sigPick.reset();
-    for (const [id, , , , , def] of SCREEN_FILTERS) $(`#${id}`).value = def;
-    $("#f-pinned").checked = false;
-    $("#f-sort").value = "0";
-    $("#q-ticker", card).value = "";
-    $("#q-sector", card).value = "Tất cả ngành";
-    apply();
-  };
-  // The original recomputes completeness from the DB; here the exported files
-  // already say what is missing, so report on those.
-  $("#f-health").onclick = () => {
-    const need = rows.filter((r) => !F.isNum(r.pe) || !F.isNum(r.pb) || !F.isNum(r.roe));
-    $("#f-health-out").innerHTML = need.length
-      ? `<b>${need.length}</b> / ${rows.length} mã thiếu chỉ số: `
-        + `${need.slice(0, 12).map((r) => r.ticker).join(", ")}${need.length > 12 ? "…" : ""}`
-      : `Tất cả ${rows.length} mã đã có đầy đủ chỉ số.`;
-  };
-
-  apply();
-
-  screenerAnalytics(root, rows);
+  root.appendChild(host);
+  const charts = screenerAnalytics(root, rows);
+  buildScreener(host, rows, { selectTicker, loadWL, saveWL, onFiltered: charts.update });
 }
 
-// Analytics that sit under the screener table in the original: signal
-// distribution, opportunities by sector, quality-vs-upside scatter, the upside
-// histogram, and the historical signal backtest.
+// Charts under the screener table: opportunities by sector (whole market) and
+// quality vs upside, which follows the table's filters. The old "historical
+// signal performance" chart is gone: it read a static file from 2026-09 whose
+// method nobody could reconstruct (look-ahead? delisted names?), and a chart
+// that looks like proof should be one. The Phase 10 backtest replaces it.
 function screenerAnalytics(root, rows) {
   const P = { family: "Fira Code, monospace", size: 10, color: "#0a121d" };
   const GRID = "rgba(148,163,184,0.22)";
-  const pend = [];
   const card = (title, id, note = "") => {
     const c = el(`<div class="card"><h2 class="sec-h">${title}</h2>${note}<div id="${id}"></div></div>`);
     root.appendChild(c);
     return c;
   };
 
-  // ── signal distribution donut ───────────────────────────────────
-  const counts = SIGNAL_ORDER.map((s) => rows.filter((r) => r.sig === s).length);
-  const dc = card("Phân bố Tín hiệu", "sc-donut");
-  pend.push(() => window.Plotly.react(dc.querySelector("#sc-donut"), [{
-    type: "pie", hole: 0.55, labels: SIGNAL_ORDER.map((s) => SIGNAL_VI[s]), values: counts,
-    marker: { colors: SIGNAL_ORDER.map((s) => SIGNAL_COLOR[s]) },
-    textinfo: "label+percent", textposition: "outside",
-    hovertemplate: "%{label}: %{value} mã (%{percent})<extra></extra>",
-  }], {
-    height: 380, margin: { l: 20, r: 20, t: 20, b: 20 }, showlegend: false,
-    paper_bgcolor: "rgba(0,0,0,0)", font: P,
-  }, { displayModeBar: false, responsive: true }));
+  // ── quality vs upside, coloured by signal (follows the filters) ──
+  const qc = card("Chất lượng và upside của các mã đang lọc", "sc-scatter",
+    `<div class="vb-note">Góc trên bên phải là chất lượng cao mà còn rẻ so với mô hình. Vạch chia tại upside 0% và chất lượng 50. Bấm vào một điểm để mở mã đó.</div>`);
+  const plotEl = qc.querySelector("#sc-scatter");
+  const drawScatter = (subset) => {
+    const traces = SIGNAL_ORDER.map((s) => {
+      const pts = subset.filter((r) => r.sig === s && F.isNum(r.upFrac) && F.isNum(r.q));
+      return {
+        type: "scatter", mode: "markers", name: SIGNAL_VI[s],
+        x: pts.map((r) => Math.max(-100, Math.min(300, r.upFrac * 100))),
+        y: pts.map((r) => r.q), text: pts.map((r) => r.ticker),
+        marker: { size: 9, color: SIGNAL_COLOR[s], opacity: 0.8, line: { width: 0.5, color: "#fff" } },
+        hovertemplate: "<b>%{text}</b><br>Upside %{x:.0f}% · Chất lượng %{y:.0f}<extra></extra>",
+      };
+    }).filter((t) => t.x.length);
+    window.Plotly.react(plotEl, traces, {
+      height: 440, dragmode: false, margin: { l: 54, r: 14, t: 10, b: 44 },
+      paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: P,
+      legend: { orientation: "h", y: -0.16, font: { size: 10 } },
+      xaxis: { title: { text: "Upside so với giá mô hình (%)", font: { size: 10 } }, gridcolor: GRID, zeroline: false, ticksuffix: "%" },
+      yaxis: { title: { text: "Điểm chất lượng", font: { size: 10 } }, gridcolor: GRID, range: [0, 100] },
+      shapes: [
+        { type: "line", x0: 0, x1: 0, yref: "paper", y0: 0, y1: 1, line: { color: "#94a3b8", width: 1, dash: "dot" } },
+        { type: "line", xref: "paper", x0: 0, x1: 1, y0: 50, y1: 50, line: { color: "#94a3b8", width: 1, dash: "dot" } },
+      ],
+    }, { displayModeBar: false, responsive: true });
+    if (!plotEl._sxClick) {
+      plotEl._sxClick = true;
+      plotEl.on("plotly_click", (ev) => { const t = ev.points?.[0]?.text; if (t) selectTicker(t); });
+    }
+  };
 
-  // ── buy opportunities by sector ─────────────────────────────────
-  // Counts as a stack, median upside as a line on a second axis, ordered by
-  // that upside. Ordering by count alone would put a big sector with weak
-  // upside above a cheap small one.
+  // ── buy opportunities by sector (whole market) ──
   const secStats = {};
   for (const r of rows) {
     if (!r.sector) continue;
@@ -1230,147 +985,46 @@ function screenerAnalytics(root, rows) {
     .filter((x) => F.isNum(x.up))
     .sort((a, b) => b.up - a.up);
   if (secs.length) {
-    const oc = card("Cơ hội theo Ngành", "sc-opps",
-      `<div class="vb-note">Cột = số mã Mua mạnh / Mua trong ngành (trục trái).
-        Đường = upside trung vị của ngành (trục phải); ngành xếp theo upside giảm dần.</div>`);
+    const oc = card("Cơ hội theo ngành (toàn thị trường)", "sc-opps",
+      `<div class="vb-note">Cột là số mã Mua mạnh / Mua trong ngành (trục trái). Đường là upside trung vị của ngành (trục phải); ngành xếp theo upside giảm dần.</div>`);
     const maxCnt = Math.max(...secs.map((x) => x.sb + x.buy)) + 1;
     const upMin = Math.min(...secs.map((x) => x.up));
     const upMax = Math.max(...secs.map((x) => x.up));
     const x = secs.map((s2) => s2.sector);
-    pend.push(() => window.Plotly.react(oc.querySelector("#sc-opps"), [
-      { type: "bar", name: "Strong Buy", x, y: secs.map((s2) => s2.sb),
-        marker: { color: "#15803d" }, yaxis: "y",
-        hovertemplate: "%{x}: %{y} Strong Buy<extra></extra>" },
-      { type: "bar", name: "Buy", x, y: secs.map((s2) => s2.buy),
-        marker: { color: "#4ade80" }, yaxis: "y",
-        hovertemplate: "%{x}: %{y} Buy<extra></extra>" },
+    window.Plotly.react(oc.querySelector("#sc-opps"), [
+      { type: "bar", name: SIGNAL_VI["Strong Buy"], x, y: secs.map((s2) => s2.sb),
+        marker: { color: "#15803d" }, yaxis: "y", hovertemplate: "%{x}: %{y}<extra></extra>" },
+      { type: "bar", name: SIGNAL_VI.Buy, x, y: secs.map((s2) => s2.buy),
+        marker: { color: "#4ade80" }, yaxis: "y", hovertemplate: "%{x}: %{y}<extra></extra>" },
       { type: "scatter", mode: "lines+markers", name: "Upside trung vị %", x,
-        y: secs.map((s2) => s2.up), yaxis: "y2",
-        line: { color: "#3b82f6", width: 2 },
-        marker: { size: 9, color: secs.map((s2) => (s2.up >= 0 ? "#22c55e" : "#ef4444")),
+        y: secs.map((s2) => s2.up), yaxis: "y2", line: { color: "#3b82f6", width: 2 },
+        marker: { size: 8, color: secs.map((s2) => (s2.up >= 0 ? "#22c55e" : "#ef4444")),
                   line: { width: 1.5, color: "#1d4ed8" } },
-        hovertemplate: "%{x}: %{y:.1f}% upside<extra></extra>" },
+        hovertemplate: "%{x}: %{y:.1f}%<extra></extra>" },
     ], {
-      height: 560, barmode: "stack", dragmode: false,
-      // Long Vietnamese sector names run vertically; they need real room.
+      height: 540, barmode: "stack", dragmode: false,
       margin: { l: 46, r: 50, t: 20, b: 200 },
       paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: P,
       legend: { orientation: "h", y: -0.55, x: 0, font: { size: 11 } },
       hovermode: "x unified",
       hoverlabel: { bgcolor: "white", font: { size: 12, color: "#374151" } },
       xaxis: { gridcolor: GRID, tickangle: -90, automargin: true, tickfont: { size: 11 } },
-      yaxis: { title: { text: "Số mã", font: { size: 10 } }, dtick: 1, tick0: 0,
+      yaxis: { title: { text: "Số mã", font: { size: 10 } }, dtick: maxCnt > 12 ? 5 : 1, tick0: 0,
                range: [0, maxCnt + 0.5], gridcolor: GRID },
       yaxis2: { title: { text: "Upside (%)", font: { size: 10 } }, overlaying: "y", side: "right",
                 range: [Math.min(0, upMin) - Math.max(5, Math.abs(upMin) * 0.1),
                         upMax > 0 ? upMax * 1.25 : 10],
                 showgrid: false, zeroline: true, zerolinecolor: GRID },
-    }, { displayModeBar: false, responsive: true }));
-  }
-
-  // ── quality vs upside, coloured by signal ───────────────────────
-  const qc = card("Quality vs Avg Upside (tất cả mã đã lọc)", "sc-scatter",
-    `<div class="vb-note">Góc trên-phải = chất lượng cao và còn rẻ. Đường kẻ chia tại upside 0% và quality 50.</div>`);
-  const traces = SIGNAL_ORDER.map((s) => {
-    const pts = rows.filter((r) => r.sig === s && F.isNum(r.upFrac) && F.isNum(r.q));
-    return {
-      type: "scatter", mode: "markers", name: SIGNAL_VI[s],
-      x: pts.map((r) => Math.max(-100, Math.min(300, r.upFrac * 100))),
-      y: pts.map((r) => r.q), text: pts.map((r) => r.ticker),
-      marker: { size: 8, color: SIGNAL_COLOR[s], opacity: 0.75 },
-      hovertemplate: "%{text}<br>Upside %{x:.0f}% · Quality %{y:.0f}<extra></extra>",
-    };
-  }).filter((t) => t.x.length);
-  pend.push(() => window.Plotly.react(qc.querySelector("#sc-scatter"), traces, {
-    height: 460, dragmode: false, margin: { l: 54, r: 14, t: 10, b: 40 },
-    paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: P,
-    legend: { font: { size: 9 } },
-    xaxis: { title: { text: "Avg Upside %", font: { size: 10 } }, gridcolor: GRID, zeroline: true, ticksuffix: "%" },
-    yaxis: { title: { text: "Quality Score", font: { size: 10 } }, gridcolor: GRID, range: [0, 100] },
-    shapes: [
-      { type: "line", x0: 0, x1: 0, yref: "paper", y0: 0, y1: 1, line: { color: "#cbd5e1", width: 1, dash: "dot" } },
-      { type: "line", xref: "paper", x0: 0, x1: 1, y0: 50, y1: 50, line: { color: "#cbd5e1", width: 1, dash: "dot" } },
-    ],
-  }, { displayModeBar: false, responsive: true }));
-
-  // ── upside distribution ─────────────────────────────────────────
-  // Unclamped: the chart reports how many fall outside its window rather than
-  // stacking them onto the end bars.
-  const rawUps = rows.map((r) => r.upFrac).filter(F.isNum).map((v) => v * 100);
-  if (rawUps.length > 10) {
-    // Fixed 10% bins across a -100..+150 window, coloured by side of zero.
-    const LO = -100, HI = 150, STEP = 10;
-    const edges = [];
-    for (let e = LO; e <= HI; e += STEP) edges.push(e);
-    const counts = new Array(edges.length - 1).fill(0);
-    let off = 0;
-    for (const v of rawUps) {
-      if (v < LO || v > HI) { off++; continue; }
-      const k = Math.min(counts.length - 1, Math.floor((v - LO) / STEP));
-      counts[k]++;
-    }
-    const centres = counts.map((_, i) => (edges[i] + edges[i + 1]) / 2);
-    const hc = card("Phân bố Avg Upside", "sc-hist",
-      `<div class="vb-note">Mỗi cột = số mã có mức upside trong khoảng đó.
-        🟢 Xanh (bên phải vạch 0) = đang bị định giá thấp, có thể tăng giá.
-        🔴 Đỏ (bên trái vạch 0) = đang đắt hơn giá trị ước tính, có thể giảm giá.${
-        off ? ` — ${off} mã có upside ngoài khoảng ${LO}%…${HI}% không hiển thị.` : ""}</div>`);
-    pend.push(() => window.Plotly.react(hc.querySelector("#sc-hist"), [{
-      type: "bar", x: centres, y: counts, width: STEP * 0.9,
-      marker: { color: centres.map((c) => (c < 0 ? "#ef4444" : "#22c55e")) },
-      customdata: counts.map((_, i) => [edges[i], edges[i + 1]]),
-      hovertemplate: "%{customdata[0]:.0f}% đến %{customdata[1]:.0f}%: %{y} mã<extra></extra>",
-    }], {
-      height: 300, dragmode: false, bargap: 0.05, margin: { l: 50, r: 14, t: 12, b: 40 },
-      paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: P,
-      xaxis: { title: { text: "Avg Upside %", font: { size: 10 } }, gridcolor: GRID,
-               range: [LO, HI], ticksuffix: "%" },
-      yaxis: { title: { text: "Số mã", font: { size: 10 } }, gridcolor: GRID },
-      shapes: [{ type: "line", x0: 0, x1: 0, yref: "paper", y0: 0, y1: 1,
-                 line: { color: "#64748b", width: 1, dash: "dot" }, opacity: 0.6 }],
-    }, { displayModeBar: false, responsive: true }));
-  }
-
-  // ── historical signal performance (backtest) ────────────────────
-  fetch("data/backtest.json").then((r) => r.json()).then((bt) => {
-    if (!Array.isArray(bt) || !bt.length) return;
-    const bc = card("Hiệu quả tín hiệu lịch sử (Backtest 2020–2025)", "sc-bt",
-      `<div class="vb-note">Lợi nhuận trung bình sau 1 năm kể từ khi tín hiệu xuất hiện, tính trên toàn bộ lịch sử — kiểm chứng xem thang tín hiệu có thực sự phân biệt được hay không.</div>`);
-    const order = bt.slice().sort((a, b) => SIGNAL_ORDER.indexOf(a.signal) - SIGNAL_ORDER.indexOf(b.signal));
-    window.Plotly.react(bc.querySelector("#sc-bt"), [
-      { type: "bar", name: "Lợi nhuận trung bình 1 năm", x: order.map((r) => SIGNAL_VI[r.signal] || r.signal),
-        y: order.map((r) => r.mean_return),
-        marker: { color: order.map((r) => (r.mean_return >= 0 ? "#22c55e" : "#ef4444")) },
-        hovertemplate: "%{x}: %{y:.1f}%<extra></extra>" },
-      { type: "scatter", mode: "lines+markers", name: "Tỷ lệ thắng", yaxis: "y2",
-        x: order.map((r) => SIGNAL_VI[r.signal] || r.signal), y: order.map((r) => r.win_rate),
-        line: { color: "#2563eb", width: 1.8 }, marker: { size: 6 },
-        hovertemplate: "%{x}: thắng %{y:.1f}%<extra></extra>" },
-    ], {
-      height: 360, dragmode: false, margin: { l: 52, r: 52, t: 30, b: 40 },
-      paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: P,
-      legend: { orientation: "h", y: 1.1, x: 0, font: { size: 10 } },
-      xaxis: { type: "category", tickfont: { size: 10 } },
-      yaxis: { title: { text: "LN TB 1 năm (%)", font: { size: 10 } }, gridcolor: GRID, zeroline: true, ticksuffix: "%" },
-      yaxis2: { title: { text: "Tỷ lệ thắng (%)", font: { size: 10 } }, overlaying: "y", side: "right", showgrid: false, ticksuffix: "%" },
-      hovermode: "x unified",
     }, { displayModeBar: false, responsive: true });
+  }
 
-    const tb = el(`<table class="screen"><thead><tr>
-      <th>Tín hiệu</th><th>Số lần</th><th>LN TB 1 năm</th><th>LN trung vị</th><th>Tỷ lệ thắng</th>
-    </tr></thead><tbody></tbody></table>`);
-    for (const r of order) {
-      tb.querySelector("tbody").appendChild(el(`<tr>
-        <td><span style="color:${SIGNAL_COLOR[r.signal] || "var(--ink)"}">${SIGNAL_VI[r.signal] || r.signal}</span></td>
-        <td>${r.count.toLocaleString("en-US")}</td>
-        <td style="color:${r.mean_return >= 0 ? "#15803d" : "#b91c1c"}">${r.mean_return.toFixed(1)}%</td>
-        <td>${r.median_return.toFixed(1)}%</td>
-        <td>${r.win_rate.toFixed(1)}%</td></tr>`));
-    }
-    bc.appendChild(tb);
-  }).catch(() => {});
-
-  pend.forEach((fn) => fn());
+  let timer = null;
+  return {
+    update: (subset) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => drawScatter(subset), 120);
+    },
+  };
 }
 
 // ── sector view ─────────────────────────────────────────────────────

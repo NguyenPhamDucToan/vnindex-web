@@ -580,7 +580,11 @@ def main() -> None:
         change_out[t] = {"chg": _clean(chg), "close": _clean(last_close),
                          "vol": _clean(float(px["volume"].iloc[-1]) if px is not None and len(px) else None),
                          "px_date": _clean(px["date"].iloc[-1]) if px is not None and len(px) else None,
-                         "px_age": _clean(px_age)}
+                         "px_age": _clean(px_age),
+                         # Mean traded value over the last 20 rows, VND billions
+                         # (close is in thousands): the screener's liquidity floor.
+                         "adv20": _clean(round(float((px["close"].tail(20) * px["volume"].tail(20)).mean()) / 1e6, 3))
+                                  if px is not None and len(px) else None}
 
         # Fast VNDirect foreign flow inline. Analyst rec is a rate-limited VCI
         # call (~20/min Guest cap, with 57s penalties) so it can't run in this
@@ -660,6 +664,7 @@ def main() -> None:
     # Latest close, so the screener can show "Giá (VND)" like the original.
     screener["close"] = screener.ticker.map(lambda t: change_out.get(t, {}).get("close"))
     screener["vol"] = screener.ticker.map(lambda t: change_out.get(t, {}).get("vol"))
+    screener["adv20"] = screener.ticker.map(lambda t: change_out.get(t, {}).get("adv20"))
     for _k in ("piotroski", "altman_z", "net_debt_ebitda", "peg", "div_yield"):
         screener[_k] = screener.ticker.map(lambda t, k=_k: scores_out.get(t, {}).get(k))
     _write(OUT / "screener.json", _records(screener))

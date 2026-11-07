@@ -78,3 +78,16 @@ Việc bạn cần làm: xem các mục "Chưa kiểm" ở trên; đồng ý th�
 ### Môi trường máy
 - Python 3.12 trên máy đã bị gỡ (venv `vnindex-valuation/.venv` hỏng). Test chạy bằng venv tạm trong thư mục nháp (Python 3.9 + pandas/sqlalchemy/pytest). CI dùng 3.12, sẽ chạy lại khi push.
 - Test: web 11/11, valuation 117 qua (bỏ `test_macro_collector.py` vì máy thiếu `truststore`, không liên quan).
+
+### 5. Làm lại tab Sàng lọc — Day 16, 61, 76, 83, 119, 122 ✅ (chờ bạn xem)
+- **Vì sao:** bảng cũ trộn số đã điều chỉnh theo ngành với số thô trong DB (CTG "Upside" +6.310%, DCF 2 triệu ₫/cp); không lọc thanh khoản (209/403 mã < 1 tỷ/phiên); hai ô chọn ngành; thanh trượt upside −1000…+200%; biểu đồ "Backtest 2020–2025" lấy từ file tĩnh 2/9 không rõ cách tính.
+- **Làm:** module mới `js/screener.js`.
+  - 6 bộ lọc mẫu: Tất cả · Giá trị · Chất lượng · Cổ tức · Tăng trưởng giá hợp lý · An toàn tài chính; bấm là điền ngưỡng vào ô, thấy được vì sao mã lọt.
+  - 12 ô ngưỡng min/max (thanh khoản 20 phiên, vốn hoá, upside, chất lượng, P/E, P/B, ROE, Piotroski, PEG, cổ tức, nợ ròng/EBITDA, Altman Z''); mặc định chỉ lọc thanh khoản ≥ 1 tỷ/phiên (Day 76).
+  - Bảng: chỉ số đã điều chỉnh (giá mô hình = trang cổ phiếu), bấm tiêu đề để sắp xếp, mã thiếu số luôn xuống cuối; cột mã cố định khi cuộn ngang; **hạng trong ngành** theo phân vị upside + chất lượng (Day 83).
+  - Bộ lọc lưu lên URL `#screen?...` (Day 122), nút sao chép liên kết; **Xuất CSV** có BOM cho Excel (Day 119).
+  - Ô tín hiệu đếm theo các bộ lọc khác; biểu đồ chấm chất lượng–upside đi theo bộ lọc, bấm điểm mở mã. Gỡ biểu đồ backtest cũ và biểu đồ tròn trùng với ô tín hiệu.
+  - Điện thoại: bộ lọc gập sau nút "Bộ lọc ▾ · n đang bật", ô tín hiệu 4 cột.
+- `export_data.py`: thêm `adv20` (giá trị khớp bình quân 20 phiên, tỷ đồng) vào `screener.json`.
+- **Kiểm tra:** chạy Edge tự động (Playwright): không lỗi JS; 6 bộ lọc mẫu ra 204/73/16/29/56/66 mã; sắp xếp + URL; mở lại liên kết khôi phục đúng 55 mã; bấm dòng mở trang cổ phiếu; điện thoại 390px không tràn ngang. `check_css.py`, `check_tips.py`, 11 test web qua.
+- **Sửa trong lúc kiểm:** tham số tìm kiếm trùng tên `q` với ô "Chất lượng" → mở lại link ra 0 mã; đổi thành `t`.
