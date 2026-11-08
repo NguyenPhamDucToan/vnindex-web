@@ -264,15 +264,6 @@ def issuance_dates(ticker: str) -> set:
     return out
 
 
-def old_actions(ticker: str) -> list | None:
-    """The committed `actions` block (export_actions.py), or None if absent."""
-    f = OUT / "ticker" / f"{ticker}.json"
-    try:
-        return json.loads(f.read_text(encoding="utf-8")).get("actions")
-    except (ValueError, OSError):
-        return None
-
-
 def compute_beta_from(prices_df, vni: "pd.Series | None", days: int = 252) -> float:
     """β = Cov(stock, market) / Var(market) on daily returns — same as wacc.compute_beta."""
     DEFAULT_BETA = 1.2
@@ -417,18 +408,14 @@ def main() -> None:
     # Only real companies: covered warrants have no price band, so their genuine
     # swings would be "corrected" into nonsense.
     _real = set(financials["ticker"].unique())
-    # Stored prices are VCI's adjusted history; remove the seams left where it
-    # was rescaled between runs (corp_actions.py), confirmed by ISS events,
-    # the ex-dates in the `actions` block and share-count steps.
+    # Stored prices are VCI's adjusted history. corp_actions.py is a safety net
+    # for a seam the collector failed to reload (an isolated gap beyond 15%).
     import corp_actions
-    from backtest_engine import share_steps
-    _raw_fin = {t: g.to_dict("records") for t, g in financials.groupby("ticker")}
     _ca_total = 0
     for _t in list(px_by_ticker):
         if _t not in _real:
             continue
-        _adj, _ev = corp_actions.adjust(px_by_ticker[_t], old_actions(_t), issuance_dates(_t),
-                                        share_steps(_raw_fin.get(_t, [])))
+        _adj, _ev = corp_actions.adjust(px_by_ticker[_t])
         if _ev:
             px_by_ticker[_t] = _adj
             _ca_total += len(_ev)

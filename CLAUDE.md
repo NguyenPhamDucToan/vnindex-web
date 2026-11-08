@@ -75,9 +75,9 @@ So: a re-export that doesn't read the old file destroys them, and these blocks o
   adjustment, simulation with costs/lots, metrics) and `backtest_factors.py` (point-in-time factors:
   quarters usable 45 days after period end, annual reports 100 days, trade at the next close).
 - Stored prices are VCI's adjusted history (cash dividends and share issues already priced in; checked
-  against the `actions` block, 98% of ex-dates show no gap). Don't re-apply announced ratios. `corp_actions.py`
-  only removes seams where VCI rescaled history between collector runs; the sibling collector now reloads a
-  ticker whose overlap no longer matches (`collectors/prices.py` `rebase_ratio`). `js/corp-actions.js` marks
+  against the `actions` block, 98% of ex-dates show no gap). Don't re-apply announced ratios. The sibling collector
+  reloads a ticker whose recent overlap no longer matches VCI (`collectors/prices.py` `rebase_ratio`);
+  `corp_actions.py` is only a safety net for a missed seam (isolated gap >15%). `js/corp-actions.js` marks
   ex-dates on the price chart and renders "Quyền & cổ tức".
 - Charts that need missing optional data are skipped, not broken.
 

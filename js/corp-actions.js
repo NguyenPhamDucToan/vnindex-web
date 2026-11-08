@@ -27,7 +27,7 @@ const ratioText = (r) => (r * 100).toLocaleString("en-US", { maximumFractionDigi
 export function describe(a) {
   const name = KIND_VI[a.kind] || a.kind;
   if (a.kind === "cash") return `${name} ${F.rawVND(a.cash)}đ/cp`;
-  return F.isNum(a.ratio) ? `${name} ${ratioText(a.ratio)}` : name;
+  return F.isNum(a.ratio) && a.ratio > 0 ? `${name} ${ratioText(a.ratio)}` : name;
 }
 
 // Chart markers: actions that moved the reference price, on their ex-date
@@ -69,7 +69,7 @@ export function actionsSection(actions, prices) {
 
   const row = (a, up) => {
     const amount = a.kind === "cash" ? (F.isNum(a.cash) ? F.rawVND(a.cash) + "đ" : "—")
-                                     : (F.isNum(a.ratio) ? ratioText(a.ratio) : "—");
+                                     : (F.isNum(a.ratio) && a.ratio > 0 ? ratioText(a.ratio) : "—");
     const cls = [up ? "ca-up" : "", PRICED.has(a.kind) ? "" : "ca-minor"].join(" ").trim();
     return `<tr class="${cls}">
       <td>${F.dateVN(key(a))}${a.ex ? "" : "<span class='ca-nd' title='Nguồn không ghi ngày giao dịch không hưởng quyền; đây là ngày công bố'>*</span>"}</td>

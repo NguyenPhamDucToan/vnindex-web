@@ -1,6 +1,4 @@
 """corp_actions.py and export_actions.parse on synthetic data -- no database, no network."""
-from datetime import date
-
 import pandas as pd
 import pytest
 
@@ -15,35 +13,29 @@ def _bars(closes, opens=None, start="2026-09-14"):
                          "volume": [1000.0] * len(closes)})
 
 
-def test_seam_confirmed_by_an_action_ex_date_is_removed():
-    # GMD-like: old rows on the pre-bonus scale, new rows on the new one. A
-    # 10% seam is below the 15% "unmistakable" bar, so it needs the ex-date.
-    df = _bars([110.0] * 8 + [100.0] * 8)
+def test_big_isolated_seam_is_removed():
+    # GMD-like seam: old rows on the pre-bonus scale (x1.5), new rows on the new one.
+    df = _bars([150.0] * 8 + [100.0] * 8)
     seam = df["date"][8]
-    out, ev = ca.adjust(df, [{"kind": "bonus", "ex": seam, "ratio": 0.10}])
+    out, ev = ca.adjust(df)
     assert [d for d, _ in ev] == [seam]
     assert out["close"][0] == pytest.approx(100.0)
     assert out["close"].iloc[-1] == 100.0                  # newest bar untouched
-    assert (out["close"] * out["volume"])[0] == pytest.approx(110.0 * 1000)   # turnover kept
+    assert (out["close"] * out["volume"])[0] == pytest.approx(150.0 * 1000)   # turnover kept
 
 
-def test_same_gap_without_confirmation_is_left_alone():
+def test_gaps_inside_the_band_are_left_alone():
+    # 10% is a genuine move on UPCoM (band 15%): never a seam on its own.
     df = _bars([110.0] * 8 + [100.0] * 8)
-    out, ev = ca.adjust(df, [{"kind": "cash", "ex": df["date"][8], "cash": 1000.0}])
+    out, ev = ca.adjust(df)
     assert ev == [] and out["close"].tolist() == df["close"].tolist()
-
-
-def test_cash_and_esop_do_not_confirm_but_share_kinds_do():
-    acts = [{"kind": "cash", "ex": "2026-01-02"}, {"kind": "esop", "ex": "2026-01-03"},
-            {"kind": "stock", "ex": "2026-01-05"}, {"kind": "rights", "ex": None, "date": "2026-01-06"}]
-    assert ca.confirm_dates(acts, {date(2025, 5, 5)}) == {date(2025, 5, 5), date(2026, 1, 5), date(2026, 1, 6)}
 
 
 def test_clean_history_and_short_input():
     df = _bars([10.0, 10.1, 10.2, 10.1, 10.3])
-    out, ev = ca.adjust(df, [])
+    out, ev = ca.adjust(df)
     assert ev == [] and out["close"].tolist() == df["close"].tolist()
-    assert ca.adjust(_bars([10.0, 10.0]), None)[1] == []
+    assert ca.adjust(_bars([10.0, 10.0]))[1] == []
 
 
 def test_parse_kinds_and_dedup():
