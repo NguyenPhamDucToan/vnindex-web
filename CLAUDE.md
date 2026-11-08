@@ -16,7 +16,7 @@ python export_data.py                # fast-moving files: companies, screener, m
 python add_mcap.py                   # adds mcap to screener.json from local ticker files (deploy runs this after export)
 python add_macro_indicator.py ...    # patch one macro series without a full re-export
 python export_commodities.py         # Yahoo futures -> data/commodities.json
-python export_actions.py [--all]     # dividends/bonus/rights with ex-dates -> `actions` block (weekly in refresh-slow.yml)
+python export_actions.py [--all]     # dividends/issues (`actions`) + insider deals (`insiders`), one VCI call/ticker (weekly)
 python backfill.py holders|payables|fvtpl   # drives export_detailed.py --missing until no progress
 python export_detailed.py --tickers SSI VCI # 20-quarter detail + news for a subset
 python export_analyst.py / export_news.py / export_market_history.py
@@ -43,7 +43,7 @@ On Windows set `PYTHONIOENCODING=utf-8` before running Python scripts — output
 NAV proxy for real estate…) so the site and the Streamlit app can't drift. Don't reimplement valuation logic here.
 
 **Fast vs. slow data blocks.** Inside each `data/ticker/<T>.json`, the blocks `analyst`, `detail`, `news_events`,
-`holders`, `actions` come from slower per-ticker VCI/Yahoo calls (the throttles in `export_detailed.py`/`export_analyst.py`
+`holders`, `actions`, `insiders` come from slower per-ticker VCI/Yahoo calls (the throttles in `export_detailed.py`/`export_analyst.py`
 were sized for vnstock's old ~20 req/min cap) and are **not** produced by `export_data.py` — it carries them forward from the existing committed file on every run.
 So: a re-export that doesn't read the old file destroys them, and these blocks only persist if committed.
 
@@ -79,6 +79,9 @@ So: a re-export that doesn't read the old file destroys them, and these blocks o
   reloads a ticker whose recent overlap no longer matches VCI (`collectors/prices.py` `rebase_ratio`);
   `corp_actions.py` is only a safety net for a missed seam (isolated gap >15%). `js/corp-actions.js` marks
   ex-dates on the price chart and renders "Quyền & cổ tức".
+- `insiders.js` renders "Giao dịch nội bộ" from `insiders`. Net figures count executed deals only (a filing
+  published after its window closed is a result report; registration + result are merged in `export_actions.py`).
+  The screener's `ins_net12` (12-month net, fraction of shares) comes from `export_actions.insider_net`.
 - Charts that need missing optional data are skipped, not broken.
 
 Goal of the port is parity with the Streamlit original; the `compare_to_original.py`/`diff_*` scripts exist for that.

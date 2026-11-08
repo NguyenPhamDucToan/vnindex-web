@@ -320,6 +320,7 @@ def main() -> None:
     # Imported here so sys.path (set at module load) already includes the
     # sibling valuation package.
     from model_valuation import model_price
+    from export_actions import insider_net
     from valuation.scores import compute_scores
     from valuation.wacc import wacc as _wacc_calc, DEFAULT_COD
 
@@ -433,6 +434,7 @@ def main() -> None:
     model_out = {}          # ticker -> {"price": .., "upside": ..} for screener
     change_out = {}         # ticker -> {"chg": .., "close": .., "vol": ..}
     scores_out = {}         # ticker -> valuation/scores.py output
+    ins_out = {}            # ticker -> insider net buying, fraction of shares, 12 months
     for _, co in companies.iterrows():
         t = co.ticker
         vg = val_by_ticker.get(t)
@@ -517,7 +519,7 @@ def main() -> None:
         # analyst (~22 min), detail + news_events (~80 min) and holders
         # (~40 min). This has bitten once already, on analyst alone.
         carried = {"analyst": None, "detail": None, "news_events": None, "holders": None,
-                   "actions": None, "foreign": []}
+                   "actions": None, "insiders": None, "foreign": []}
         _prev = OUT / "ticker" / f"{t}.json"
         if _prev.exists():
             try:
@@ -542,6 +544,9 @@ def main() -> None:
         except Exception as e:
             print(f"    ! scores {t}: {e}")
         scores_out[t] = scores
+        _q = [r for r in fin_rows if r.get("period_type") == "Q" and r.get("shares_outstanding")]
+        ins_out[t] = insider_net(carried["insiders"], float(_q[-1]["shares_outstanding"]) if _q else None,
+                                 date.today())
 
         obj = {
             "company": {k: _clean(co[k]) for k in
@@ -554,6 +559,7 @@ def main() -> None:
             "news_events": carried["news_events"],
             "holders": carried["holders"],
             "actions": carried["actions"],
+            "insiders": carried["insiders"],
             "foreign": foreign,
             "financials": fin_rows,
             "prices": _records(px_by_ticker[t][["date", "open", "high", "low",
@@ -586,6 +592,8 @@ def main() -> None:
     screener["adv20"] = screener.ticker.map(lambda t: change_out.get(t, {}).get("adv20"))
     for _k in ("piotroski", "altman_z", "net_debt_ebitda", "peg", "div_yield"):
         screener[_k] = screener.ticker.map(lambda t, k=_k: scores_out.get(t, {}).get(k))
+    # Executed insider buys minus sells, last 12 months, fraction of shares (export_actions.py).
+    screener["ins_net12"] = screener.ticker.map(lambda t: ins_out.get(t))
     _write(OUT / "screener.json", _records(screener))
     print(f"  wrote screener.json ({len(screener)} rows)")
 

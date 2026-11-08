@@ -1019,3 +1019,19 @@ table.bt-years td { text-align: center; }
 @media (max-width: 640px) {
   .ca-kpis { grid-template-columns: 1fr; }
 }
+
+/* ── insider deals (insiders.js) ────────────────────────────── */
+.ins-mood { font-family: var(--sans); font-size: 12px; font-weight: 500; margin-left: 10px; padding: 2px 9px;
+  border-radius: 999px; vertical-align: 2px; border: 1px solid currentColor; }
+.ins-chart { margin: 0 0 var(--space-md); }
+.ins-nm { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+.ins-side { display: inline-block; min-width: 36px; text-align: center; padding: 1px 7px; border-radius: 4px;
+  font-size: 12px; font-weight: 500; color: #fff; }
+.ins-side.buy { background: #16a34a; }
+.ins-side.sell { background: #dc2626; }
+.ca-t tr.ins-reg td { color: var(--muted); }
+.ca-v.gain { color: var(--gain); } .ca-v.loss { color: var(--loss); }
+@media (max-width: 640px) {
+  .ins-mood { display: inline-block; margin: 4px 0 0; }
+  .ins-nm { max-width: 150px; }
+}

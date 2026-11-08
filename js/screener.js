@@ -34,6 +34,8 @@ const FILTERS = [
   ["dy", "Cổ tức tối thiểu", "%", "min", (r) => F.isNum(r.div_yield) ? r.div_yield * 100 : null, 0.5, "5", "Cổ tức tiền mặt năm gần nhất / vốn hoá"],
   ["nd", "Nợ ròng/EBITDA tối đa", "x", "max", (r) => r.net_debt_ebitda, 0.5, "2", "Âm = tiền mặt nhiều hơn nợ. Ngành tài chính luôn đạt"],
   ["z", "Altman Z'' tối thiểu", "", "min", (r) => r.altman_z, 0.1, "2.6", "≥ 2.6 là vùng an toàn. Không tính cho ngành tài chính"],
+  ["ins", "Nội bộ mua ròng tối thiểu", "% CP", "min", (r) => F.isNum(r.ins_net12) ? r.ins_net12 * 100 : null, 0.05, "0.1",
+    "Mua trừ bán đã thực hiện (có báo cáo kết quả) của lãnh đạo, người liên quan và tổ chức trong 12 tháng, theo % cổ phần"],
 ];
 const FBY = Object.fromEntries(FILTERS.map((f) => [f[0], f]));
 
@@ -80,6 +82,10 @@ const COLS = [
     : `<span class="sx-na">—</span>`), -1, "9 phép thử sức khoẻ tài chính"],
   ["dy", "Cổ tức", (r) => r.div_yield, (r) => (F.isNum(r.div_yield) && r.div_yield > 0 ? `<span class="${r.div_yield >= 0.05 ? "sx-g" : ""}">${F.pct(r.div_yield, 1)}</span>` : `<span class="sx-na">—</span>`), -1,
     "Tỷ suất cổ tức tiền mặt"],
+  ["ins", "Nội bộ 12T", (r) => r.ins_net12, (r) => (F.isNum(r.ins_net12) && r.ins_net12 !== 0
+    ? `<span class="${r.ins_net12 > 0 ? "sx-g" : "sx-r"}">${r.ins_net12 > 0 ? "+" : ""}${(r.ins_net12 * 100).toFixed(2)}%</span>`
+    : `<span class="sx-na">—</span>`), -1,
+    "Lãnh đạo, người liên quan và tổ chức mua trừ bán đã thực hiện trong 12 tháng, % cổ phần"],
   ["nd", "Nợ ròng/ EBITDA", (r) => r.net_debt_ebitda, (r) => (F.isNum(r.net_debt_ebitda)
     ? (r.net_debt_ebitda < 0 ? `<span class="sx-g">tiền ròng</span>` : `<span class="${r.net_debt_ebitda > 4 ? "sx-r" : ""}">${r.net_debt_ebitda.toFixed(1)}x</span>`)
     : `<span class="sx-na">—</span>`), 1, ""],
@@ -181,7 +187,7 @@ export function buildScreener(root, rows, { selectTicker, loadWL, saveWL, onFilt
   const GROUPS = [
     ["Quy mô & thanh khoản", ["liq", "mcap"]],
     ["Định giá", ["up", "pe", "pb", "peg"]],
-    ["Chất lượng", ["q", "roe", "pio"]],
+    ["Chất lượng & nội bộ", ["q", "roe", "pio", "ins"]],
     ["Cổ tức & an toàn", ["dy", "nd", "z"]],
   ];
   const fInput = (id) => {
@@ -377,7 +383,7 @@ export function buildScreener(root, rows, { selectTicker, loadWL, saveWL, onFilt
 function downloadCSV(rows) {
   const head = ["Mã", "Tên", "Ngành", "Tín hiệu", "Giá (VND)", "Giá mô hình (VND)", "Upside (%)",
     "Hạng ngành", "Chất lượng", "P/E", "P/B", "ROE (%)", "PEG", "Piotroski", "Cổ tức (%)",
-    "Nợ ròng/EBITDA", "Altman Z''", "Vốn hoá (tỷ)", "Thanh khoản 20 phiên (tỷ)"];
+    "Nợ ròng/EBITDA", "Altman Z''", "Vốn hoá (tỷ)", "Thanh khoản 20 phiên (tỷ)", "Nội bộ mua ròng 12T (% CP)"];
   const n = (v, d = 2) => (F.isNum(v) ? v.toFixed(d) : "");
   const lines = rows.map((r) => [
     r.ticker, r.name || "", r.sector || "", r.sig ? SIGNAL_VI[r.sig] : "",
@@ -386,6 +392,7 @@ function downloadCSV(rows) {
     n(r.q, 0), n(r.pe, 1), n(r.pb), F.isNum(r.roe) ? n(r.roe * 100, 1) : "", n(r.peg),
     F.isNum(r.piotroski) ? r.piotroski : "", F.isNum(r.div_yield) ? n(r.div_yield * 100, 1) : "",
     n(r.net_debt_ebitda, 1), n(r.altman_z), n(r.mcap, 0), n(liq(r), 2),
+    F.isNum(r.ins_net12) ? n(r.ins_net12 * 100, 3) : "",
   ]);
   const csv = [head, ...lines].map((row) => row.map((x) => {
     const s = String(x);

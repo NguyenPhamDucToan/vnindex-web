@@ -3,7 +3,9 @@ import pandas as pd
 import pytest
 
 import corp_actions as ca
-from export_actions import kind_of, parse
+from datetime import date
+
+from export_actions import insider_net, kind_of, parse, parse_insiders
 
 
 def _bars(closes, opens=None, start="2026-09-14"):
@@ -47,3 +49,52 @@ def test_parse_kinds_and_dedup():
            "exright_date": "2026-09-21", "exercise_ratio": 0.1}
     out = parse([row, dict(row), {"event_code": "AGME"}])
     assert len(out) == 1 and out[0]["kind"] == "bonus" and out[0]["ex"] == "2026-09-21"
+
+
+def _deal(title, code="DDIND", start=None, end=None, pub=None):
+    return {"event_code": code, "event_title_vi": title, "start_date": start, "end_date": end,
+            "public_date": pub}
+
+
+def test_insider_registration_and_result_merge_into_one_deal():
+    rows = [
+        _deal("Doãn Thị Bích Ngọc - Đăng kí Bán 350,000 HPG", "DDRP", "2026-09-15", "2026-10-14", "2026-09-10"),
+        _deal("Doãn Thị Bích Ngọc - Đăng kí Bán 350,000 HPG", "DDRP", "2026-10-09", "2026-10-14", "2026-10-15"),
+        _deal("Trần Vũ Minh - Đăng kí Mua 50,000,000 HPG", "DDIND", "2026-03-12", "2026-04-09", "2026-04-13"),
+        _deal("Công ty ABC - Đăng kí Mua 1.000.000 HPG", "DDINS", "2026-11-04", "2026-12-03", "2026-10-30"),
+        {"event_code": "DIV", "event_title_vi": "Trả cổ tức"},
+    ]
+    out = parse_insiders(rows)
+    by = {(d["name"], d["status"]) for d in out}
+    assert len(out) == 3
+    assert ("Doãn Thị Bích Ngọc", "done") in by                # registration + its result
+    assert ("Trần Vũ Minh", "result") in by                     # result only, older history
+    assert ("Công ty ABC", "reg") in by                         # still open
+    abc = next(d for d in out if d["name"] == "Công ty ABC")
+    assert abc["who"] == "org" and abc["side"] == "buy" and abc["qty"] == 1_000_000
+
+
+def test_insider_net_counts_executed_deals_in_the_window_only():
+    deals = [
+        {"side": "buy", "qty": 50_000_000, "start": "2026-03-12", "status": "result"},
+        {"side": "sell", "qty": 350_000, "start": "2026-09-15", "status": "done"},
+        {"side": "buy", "qty": 9_000_000, "start": "2026-11-04", "status": "reg"},     # not executed
+        {"side": "sell", "qty": 7_000_000, "start": "2025-01-10", "status": "result"},  # too old
+    ]
+    v = insider_net(deals, 8_000.0, date(2026, 11, 8))
+    assert v == pytest.approx((50_000_000 - 350_000) / 8_000e6, abs=1e-6)   # rounded to 6 dp
+    assert insider_net([], 8_000.0, date(2026, 11, 8)) == 0.0
+    assert insider_net(None, 8_000.0, date(2026, 11, 8)) is None
+    assert insider_net(deals, None, date(2026, 11, 8)) is None
+
+
+def test_insider_net_counts_each_person_once_at_their_largest_filing():
+    # ADG: FSN Asia re-registered the unsold rest four times; summing gave -111%.
+    fsn = [("2025-12-02", 6_165_900), ("2026-01-08", 6_165_900), ("2026-02-26", 5_165_900),
+           ("2026-04-06", 4_154_900), ("2026-05-12", 4_165_900)]
+    deals = [{"name": "FSN Asia", "side": "sell", "qty": q, "start": s, "status": "result"} for s, q in fsn]
+    deals.append({"name": "Nguyễn Khánh Trình", "side": "buy", "qty": 1_000_000, "start": "2026-01-21", "status": "result"})
+    deals.append({"name": "Nguyễn Khánh Trình", "side": "buy", "qty": 1_000_000, "start": "2026-05-18", "status": "result"})
+    v = insider_net(deals, 21.38, date(2026, 11, 8))
+    assert v == pytest.approx((1_000_000 - 6_165_900) / 21.38e6, abs=1e-6)
+    assert v > -1                                       # never more than the company

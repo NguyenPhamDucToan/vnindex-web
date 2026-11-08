@@ -141,3 +141,11 @@ Day 79–84 phần sâu (đa nhân tố có trọng số, chế độ thị trư
 - Đã chạy `rebase_prices --apply` (được duyệt): 215/215 mã tải lại, 0 lỗi; chạy lại bản chỉ đọc → 0 mã lệch. Bản sao giá trước khi sửa: scratchpad `prices-backup-2026-11-07.pkl`.
 - Web: `corp_actions.py` chỉ còn là lưới an toàn — khoảng trống >15% đứng riêng (5 chỗ trên DB đã sửa, đều có trong dữ liệu VCI: chuyển sàn/niêm yết). Quy tắc lỏng (5–15% gần sự kiện ISS) bắt nhầm 39 biến động thật sau khi DB sạch nên bỏ. Không áp lại tỷ lệ công bố. Trang cổ phiếu: tam giác ▲ ngày GDKHQ trên biểu đồ, thẻ "Quyền & cổ tức" (cổ tức 12 tháng + lợi suất theo giá hiện tại, chia CP 12 tháng, pha loãng 5 năm, sự kiện sắp tới, lịch sử).
 - Bỏ ý định nút "giá thực tế / gồm cổ tức": không dựng lại được giá thô, và giá đã gồm cổ tức sẵn.
+
+## Phase 11 — Day 102: giao dịch nội bộ (2026-11-08)
+- `export_actions.py` gọi VCI một lần/mã cho cả `DIV,ISS,DDIND,DDINS,DDRP` → khối `actions` + `insiders` (403/403 mã, 14.133 giao dịch). Công bố sau khi hết thời hạn = báo cáo kết quả; đăng ký + kết quả gộp thành một giao dịch (`status`: done/result/reg).
+- `insider_net` (pure, có test): mua − bán đã thực hiện 12 tháng / cổ phiếu lưu hành → `ins_net12` trong screener.json.
+- Trang cổ phiếu: thẻ "Giao dịch nội bộ" — ròng 3/6/12 tháng (% cổ phần, adaptive precision), nhãn "đang mua/bán ròng" (≥ 0,2% CP), đăng ký đang hiệu lực, biểu đồ mua/bán theo tháng 24 tháng, bảng giao dịch.
+- Sàng lọc: bộ lọc "Nội bộ mua ròng tối thiểu" (nhóm "Chất lượng & nội bộ"), cột "Nội bộ 12T", cột CSV.
+- CI: bước tuần trong refresh-slow.yml đổi tên, timeout 30 → 75 phút (403 mã × 4 s ≈ 30 phút).
+- Lưu ý: giao dịch trong gia đình hiện thành một bán + một mua (HPG: Vũ Thị Hiền bán / Trần Vũ Minh mua) — số ròng tự triệt tiêu, bảng vẫn hiển thị.

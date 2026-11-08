@@ -115,13 +115,16 @@ jobs:
           PYTHONIOENCODING: utf-8
         run: python -u export_analyst.py --all
 
-      # Corporate actions (dividends, bonus/stock issues, rights) with the
-      # exchange's ex-dates -> the `actions` block that export_data.py uses to
-      # back-adjust prices. One call per ticker, ~10 minutes.
-      - name: Refresh corporate actions
+      # Corporate actions (dividends, bonus/stock issues, rights, with the
+      # exchange's ex-dates) and insider deals -> the `actions` and `insiders`
+      # blocks ("Quyền & cổ tức", "Giao dịch nội bộ", the screener's insider
+      # column). One VCI call per ticker at 4 s apart: ~30 minutes for 403
+      # tickers, longer when VCI throttles and the script backs off. A ticker
+      # whose call fails keeps last week's committed blocks.
+      - name: Refresh corporate actions and insider deals
         working-directory: vnindex-web
         continue-on-error: true
-        timeout-minutes: 30
+        timeout-minutes: 75
         env:
           PYTHONIOENCODING: utf-8
         run: python -u export_actions.py --all
