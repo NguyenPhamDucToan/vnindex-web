@@ -102,6 +102,9 @@ export function actionsSection(actions, prices) {
     card.querySelector("tbody").insertAdjacentHTML("beforeend", past.slice(LIMIT).map((a) => row(a, false)).join(""));
     more.remove();
   };
-  if (upcoming.length) card.open = true;
+  if (upcoming.length) {
+    card.open = true;
+    card.dataset.alert = `Sắp có quyền · GDKHQ ${F.dateVN(key(upcoming[0]))}`;   // shown by js/tabcard.js
+  }
   return card;
 }

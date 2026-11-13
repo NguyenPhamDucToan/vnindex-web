@@ -181,7 +181,11 @@ b, strong { font-weight: 600; }
 .ev-u { font-size: 14px; color: var(--muted); font-weight: 500; }
 .ev-s { font-size: 12px; color: var(--ink-2); margin-top: 6px; }
 .ev-note { font-size: 11px; color: var(--muted); margin-top: var(--space-md); line-height: 1.55; }
-.ev-src { font-size: 10px; color: var(--muted); margin-top: 4px; font-style: italic; }
+.ev-src { font-size: 11px; color: var(--muted); margin-top: 4px; font-style: italic; }
+.ev-src b { font-style: normal; color: var(--ink-2); font-weight: 600; }
+.ev-stale { color: #c2410c; font-style: normal; font-weight: 600; }
+.ev-src b.ev-fresh { color: #15803d; }
+.ev-src b.ev-old { color: #c2410c; }
 
 /* ── two-column split: chart left, valuation panel right ──── */
 .split { display: grid; grid-template-columns: 5fr 2fr; gap: 32px; align-items: start; }
@@ -1032,6 +1036,9 @@ table.bt-years td { text-align: center; }
 .ins-side.buy { background: #16a34a; }
 .ins-side.sell { background: #dc2626; }
 .ca-t tr.ins-reg td { color: var(--muted); }
+.ins-legend { font-size: 12px; color: var(--muted); margin: 6px 0 var(--space-sm); }
+.ins-lg-done { color: var(--ink); font-weight: 600; }
+.ins-lg-reg { color: var(--muted); font-weight: 600; }
 .ca-v.gain { color: var(--gain); } .ca-v.loss { color: var(--loss); }
 @media (max-width: 640px) {
   .ins-mood { display: inline-block; margin: 4px 0 0; }
@@ -1055,4 +1062,22 @@ table.bt-years td { text-align: center; }
   .tc-tabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .tc-tab { white-space: nowrap; font-size: 13px; padding: 8px 10px; }
   .tc-tab .ins-mood { display: none; }
+}
+.tc-sum { cursor: pointer; list-style: none; margin: 0; }
+.tc-sum::-webkit-details-marker { display: none; }
+.tc-sum::before { content: "▸ "; color: var(--muted); }
+.tabcard[open] > .tc-sum::before { content: "▾ "; }
+.tabcard[open] > .tc-sum { margin-bottom: var(--space-md); }
+.tc-hint { display: block; font-family: var(--sans); font-size: 13px; font-weight: 400; color: var(--muted); margin: 4px 0 0 1.2em; }
+.tabcard[open] .tc-hint { display: none; }
+/* A section asked for attention (upcoming ex-date, open insider registration). */
+.tabcard.tc-urgent { border-left: 4px solid #ea580c; background: #fff7ed; padding: var(--space-md) var(--space-lg);
+  border-radius: var(--radius); border-bottom: 1px solid #fed7aa; }
+.tc-flag { display: inline-block; margin-left: 12px; vertical-align: 5px; font-family: var(--sans); font-size: 13px;
+  font-weight: 600; color: #fff; background: #ea580c; padding: 3px 10px; border-radius: 999px; }
+.tc-tab.tc-alert::after { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #ea580c; margin-left: 2px; }
+.tc-urgent .ca-next { border-left: 4px solid #ea580c; background: #ffedd5; font-size: 14px; color: #7c2d12; }
+@media (max-width: 640px) {
+  .tabcard.tc-urgent { padding: var(--space-sm) var(--space-md); }
+  .tc-flag { display: block; width: fit-content; margin: 6px 0 0 1.2em; vertical-align: 0; white-space: normal; }
 }

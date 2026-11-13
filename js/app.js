@@ -306,7 +306,7 @@ async function renderStock(t) {
   const rw = roicSection(d.financials || [], d.model || {}, co.sector);
   if (rw) root.appendChild(rw);
 
-  root.appendChild(valuationSummary(co, v, d.model || {}, d.analyst, last));
+  root.appendChild(valuationSummary(co, v, d.model || {}, d.analyst, last, d.financials));
   if (ownership) root.appendChild(ownership);
   newsEventsSection(root, d.news_events);
 }
@@ -824,7 +824,7 @@ function healthCard(co, s) {
 }
 
 // ── valuation summary (model + analyst + quality/signal) ────────────
-function valuationSummary(co, v, model, analyst, last) {
+function valuationSummary(co, v, model, analyst, last, financials) {
   const priceRaw = F.isNum(last.close) ? last.close * 1000 : null;
   // model.upside is a FRACTION (0.15 = +15%), already sector-adjusted and
   // winsorized by model_valuation.py -- unlike the raw dcf_estimate, which is
@@ -841,10 +841,27 @@ function valuationSummary(co, v, model, analyst, last) {
     <div class="ev-note"></div></div>`);
   const wrap = $(".ev-cards", card);
 
+  // The model is recomputed on every export from the latest close and the
+  // newest quarterly statement; say which, so a reader knows how fresh it is.
+  const lastQ = (financials || []).filter((r) => r.period_type === "Q").map((r) => r.period).sort().pop();
+  // Green = current, orange = behind. The price is current within 4 days
+  // (weekend, a short holiday); the quarter is current if it is the newest one
+  // whose end is more than 35 days past (most companies have filed by then).
+  const fresh = (ok) => (ok ? "ev-fresh" : "ev-old");
+  const ageOf = (iso) => (Date.now() - Date.parse(iso)) / 86400000;
+  const dueQ = (() => {
+    const d = new Date(Date.now() - 35 * 86400000);
+    const q = Math.floor(d.getMonth() / 3);              // last quarter fully ended before d
+    return q === 0 ? `${d.getFullYear() - 1}-Q4` : `${d.getFullYear()}-Q${q}`;
+  })();
+  const qText = lastQ ? ` · BCTC <b class="${fresh(lastQ >= dueQ)}">Q${lastQ.slice(6)}/${lastQ.slice(0, 4)}</b>` : "";
+  const modelWhen = upFrac == null || !last.date ? ""
+    : `<div class="ev-src">Tính theo giá ngày <b class="${fresh(ageOf(last.date) <= 4)}">${F.dateVN(last.date)}</b>${qText}</div>`;
   wrap.appendChild(el(`<div class="ev-card">
     <div class="ev-t">Mô hình định giá</div>
     <div class="ev-m" style="color:${mColor}">${F.rawVND(model.price)}</div>
-    <div class="ev-s">${upFrac == null ? "Thiếu dữ liệu" : F.pctSigned(upFrac * 100) + " so với thị giá " + F.rawVND(priceRaw)}</div></div>`));
+    <div class="ev-s">${upFrac == null ? "Thiếu dữ liệu" : F.pctSigned(upFrac * 100) + " so với thị giá " + F.rawVND(priceRaw)}</div>
+    ${modelWhen}</div>`));
 
   if (hasAnalyst) {
     // Analyst target from VCI; the individual analyst's name is deliberately
@@ -856,7 +873,11 @@ function valuationSummary(co, v, model, analyst, last) {
     // weekly job read it. Records from before 2026-11 carry neither.
     const asOf = F.dateVN(analyst.as_of);
     const fetched = F.dateVN(analyst.fetched);
-    const when = asOf ? ` · Khuyến nghị cập nhật ngày ${asOf}`
+    // A target is a 12-month call; one older than six months is flagged so it
+    // isn't read as a current view.
+    const ageDays = analyst.as_of ? (Date.now() - Date.parse(analyst.as_of)) / 86400000 : null;
+    const stale = ageDays != null && ageDays > 182 ? ` <span class="ev-stale">· dữ liệu cũ</span>` : "";
+    const when = asOf ? ` · Khuyến nghị ngày <b class="${stale ? "ev-old" : "ev-fresh"}">${asOf}</b>${stale}`
       : fetched ? ` · Dữ liệu cập nhật ngày ${fetched}` : "";
     wrap.appendChild(el(`<div class="ev-card">
       <div class="ev-t">Chuyên viên phân tích</div>

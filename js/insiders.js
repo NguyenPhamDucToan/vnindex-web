@@ -97,6 +97,7 @@ export function insidersSection(insiders, financials) {
       <thead><tr><th>Ngày</th><th>Người / tổ chức</th><th>Nhóm</th><th>Lệnh</th><th class="num">Khối lượng</th><th class="num">% cổ phần</th><th>Trạng thái</th></tr></thead>
       <tbody>${hist.slice(0, LIMIT).map(row).join("")}</tbody>
     </table></div>
+    <div class="ins-legend"><span class="ins-lg-done">Dòng đậm</span>: đã thực hiện (có báo cáo kết quả) · <span class="ins-lg-reg">Dòng nhạt</span>: mới đăng ký, chưa có kết quả — không tính vào số ròng</div>
     ${hist.length > LIMIT ? `<button class="ca-more">Xem thêm ${hist.length - LIMIT} giao dịch cũ hơn</button>` : ""}
     <div class="vb-note">Nguồn: công bố giao dịch của người nội bộ, người liên quan và cổ đông lớn (qua VCI). Số ròng chỉ tính giao dịch
       đã có báo cáo kết quả. Khối lượng trên công bố là khối lượng <b>đăng ký</b>, và người chưa bán/mua hết thường đăng ký lại phần còn lại,
@@ -145,6 +146,11 @@ export function insidersSection(insiders, financials) {
     }, { displayModeBar: false, responsive: true });
   };
   card.addEventListener("toggle", () => { if (card.open) draw(); });
-  if (open.length) card.open = true;          // its toggle handler draws once visible
+  if (open.length) {
+    card.open = true;                           // its toggle handler draws once visible
+    // Why it opened, for the tabbed card's header (js/tabcard.js).
+    const sides = new Set(open.map((d) => d.side));
+    card.dataset.alert = "Nội bộ đang đăng ký " + (sides.size > 1 ? "mua & bán" : sides.has("buy") ? "mua" : "bán");
+  }
   return card;
 }
