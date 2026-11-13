@@ -16,9 +16,9 @@ const GROUPS = {
     { title: "Tăng trưởng GDP (so với cùng kỳ năm trước)", kind: "bar", unit: "%", series: [["GDP", "gdp_growth", BLUE]] },
     { title: "Lạm phát (so với cùng kỳ năm trước)", kind: "bar", unit: "%", series: [["CPI YoY", "cpi_yoy", ORANGE]] },
     { title: "Lạm phát (so với tháng trước)", kind: "bar", unit: "%", series: [["CPI MoM", "cpi_mom", ORANGE]] },
-    { title: "Cán cân thương mại", kind: "bar", unit: "tr USD", series: [["Cán cân", "trade_balance", GREEN]] },
+    { title: "Cán cân thương mại", kind: "bar", unit: "tỷ USD", series: [["Cán cân", "trade_balance", GREEN]] },
     { title: "Tăng trưởng bán lẻ (so với cùng kỳ năm trước)", kind: "bar", unit: "%", series: [["Bán lẻ", "retail_sales_growth", PURPLE]] },
-    { title: "Vốn đầu tư nước ngoài (FDI đăng ký, theo quý)", kind: "bar", unit: "tr USD", series: [["FDI", "fdi", TEAL]] },
+    { title: "Vốn đầu tư nước ngoài (FDI đăng ký, theo quý)", kind: "bar", unit: "tỷ USD", series: [["FDI", "fdi", TEAL]] },
   ],
   "Tăng trưởng kinh tế": [
     { title: "Tăng trưởng GDP theo khu vực (so với cùng kỳ)", kind: "line", unit: "%", series: [
@@ -40,15 +40,15 @@ const GROUPS = {
   ],
   "Đầu tư & Tiết kiệm": [
     { title: "Tăng trưởng vốn đầu tư toàn xã hội", kind: "line", unit: "%", series: [["Vốn đầu tư", "investment_growth", BLUE]] },
-    { title: "Vốn đầu tư nước ngoài (FDI đăng ký)", kind: "line", unit: "tr USD", series: [
+    { title: "Vốn đầu tư nước ngoài (FDI đăng ký)", kind: "line", unit: "tỷ USD", series: [
       ["FDI theo quý", "fdi", TEAL], ["FDI lũy kế", "fdi_cumulative", BLUE]] },
     { title: "Tổng vốn hình thành gộp (% GDP, World Bank)", kind: "line", unit: "%", series: [["Vốn hình thành", "wb_capital_formation", ORANGE]] },
     { title: "Tổng tiết kiệm (% GDP, World Bank)", kind: "line", unit: "%", series: [["Tiết kiệm", "wb_gross_savings", GREEN]] },
   ],
   "Xuất nhập khẩu": [
-    { title: "Xuất khẩu & Nhập khẩu (theo tháng)", kind: "line", unit: "tr USD", series: [
+    { title: "Xuất khẩu & Nhập khẩu (theo tháng)", kind: "line", unit: "tỷ USD", series: [
       ["Xuất khẩu", "exports", GREEN], ["Nhập khẩu", "imports", RED]] },
-    { title: "Cán cân thương mại (theo tháng)", kind: "bar", unit: "tr USD", series: [["Cán cân", "trade_balance", BLUE]] },
+    { title: "Cán cân thương mại (theo tháng)", kind: "bar", unit: "tỷ USD", series: [["Cán cân", "trade_balance", BLUE]] },
     { title: "Cán cân vãng lai (% GDP, World Bank)", kind: "line", unit: "%", series: [["Vãng lai", "wb_current_account_gdp", PURPLE]] },
     { title: "Độ mở thương mại (% GDP, World Bank)", kind: "line", unit: "%", series: [["Thương mại/GDP", "wb_trade_pct_gdp", TEAL]] },
   ],
@@ -175,10 +175,20 @@ export async function renderMacro(root) {
         if (!series.length) continue;
       }
 
-      const box = el(`<div class="qchart"><div class="qtitle">${spec.title}</div><div></div></div>`);
+      const annual = series.every(([, pts]) => isAnnual(pts));
+      // Say so when the newest point is old (World Bank's M2 stops at 2022,
+      // SBV's rate bulletin at May 2026) -- otherwise it reads as current.
+      // Annual series are allowed ~2 years (a year's figure arrives late).
+      const newest = series.reduce((a, [, pts]) => (String(pts.at(-1).period) > a ? String(pts.at(-1).period) : a), "");
+      const ageDays = (Date.now() - Date.parse(newest)) / 86400000;
+      // World Bank years are stored as YYYY-01-01.
+      const yearly = annual || series.every(([, pts]) => pts.every((q) => String(q.period).slice(5, 10) === "01-01"));
+      const stale = ageDays > (yearly ? 800 : 120)
+        ? `<div class="qstale">Số mới nhất: ${yearly ? "năm " + newest.slice(0, 4) : `T${+newest.slice(5, 7)}/${newest.slice(0, 4)}`}
+            — chưa có số mới hơn</div>` : "";
+      const box = el(`<div class="qchart"><div class="qtitle">${spec.title}</div>${stale}<div></div></div>`);
       drawn.push(box);
       const canvas = box.lastElementChild;
-      const annual = series.every(([, pts]) => isAnnual(pts));
       const traces = series.map(([label, pts, colour]) => ({
         type: spec.kind === "bar" ? "bar" : "scatter",
         mode: spec.kind === "bar" ? undefined : "lines+markers",
