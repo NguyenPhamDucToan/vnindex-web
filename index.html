@@ -24,6 +24,15 @@
     <div id="meta" class="meta"></div>
   </aside>
   <main class="main">
+    <!-- Shown on a first visit until dismissed (js/app.js, localStorage "disclaimer-ok"); the
+         same text stays in the footer for good. -->
+    <div id="disclaimer" class="disc hidden" role="note">
+      <span class="disc-i" aria-hidden="true">⚠</span>
+      <div class="disc-t"><b>Thông tin chỉ để tham khảo — không phải khuyến nghị mua, bán hay nắm giữ cổ phiếu.</b>
+        Giá mô hình tính tự động, có thể sai hoặc chậm cập nhật; giá mục tiêu là của chuyên viên phân tích (VCI),
+        không phải của trang này. Bạn tự chịu trách nhiệm với quyết định đầu tư của mình.</div>
+      <button type="button" class="disc-ok">Đã hiểu</button>
+    </div>
     <section id="view-stock" class="view"></section>
     <section id="view-screen" class="view hidden"></section>
     <section id="view-sector" class="view hidden"></section>

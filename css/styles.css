@@ -1082,3 +1082,21 @@ table.bt-years td { text-align: center; }
   .tabcard.tc-urgent { padding: var(--space-sm) var(--space-md); }
   .tc-flag { display: block; width: fit-content; margin: 6px 0 0 1.2em; vertical-align: 0; white-space: normal; }
 }
+
+/* ── first-visit disclaimer banner ── */
+.disc { display: flex; align-items: center; gap: 14px; background: #fffbeb; border: 1px solid #fcd34d;
+  border-left: 5px solid #d97706; border-radius: var(--radius); padding: 12px 16px; margin: 0 0 var(--space-lg);
+  font-size: 13.5px; line-height: 1.5; color: #451a03; }
+.disc-i { font-size: 22px; color: #d97706; flex: none; }
+.disc-t { flex: 1; min-width: 0; }
+.disc-t b { color: #7c2d12; }
+.disc-ok { flex: none; font-family: var(--sans); font-size: 13px; font-weight: 600; color: #fff; background: #d97706;
+  border: none; border-radius: var(--radius-sm); padding: 7px 16px; cursor: pointer; }
+.disc-ok:hover { background: #b45309; }
+.disc-ok:focus-visible { outline: none; box-shadow: 0 0 0 3px #fde68a; }
+@media (max-width: 640px) {
+  .disc { flex-wrap: wrap; gap: 8px 10px; padding: 10px 12px; font-size: 13px; }
+  .disc-i { font-size: 18px; }
+  .disc-t { flex-basis: calc(100% - 30px); }
+  .disc-ok { margin-left: auto; }
+}

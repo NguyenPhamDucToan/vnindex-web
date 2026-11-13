@@ -83,6 +83,7 @@ async function boot() {
     .then((rows) => new Set(rows.map((r) => r.ticker)))
     .catch(() => null);
   if (listed && listed.size) COMPANIES = COMPANIES.filter((c) => listed.has(c.ticker));
+  showDisclaimer();
   buildPicker();
   buildNav();
   const meta = await loadMeta().catch(() => null);
@@ -1823,3 +1824,19 @@ async function renderCompareView() {
 
 
 boot();
+
+// First-visit disclaimer banner (index.html #disclaimer). Dismissed once per
+// browser; bump the key if the wording changes materially so it shows again.
+function showDisclaimer() {
+  const KEY = "disclaimer-ok-v1";
+  const box = document.getElementById("disclaimer");
+  if (!box) return;
+  let seen = false;
+  try { seen = localStorage.getItem(KEY) === "1"; } catch { /* private mode: show it */ }
+  if (seen) return;
+  box.classList.remove("hidden");
+  box.querySelector(".disc-ok").onclick = () => {
+    try { localStorage.setItem(KEY, "1"); } catch { /* ignore */ }
+    box.classList.add("hidden");
+  };
+}
