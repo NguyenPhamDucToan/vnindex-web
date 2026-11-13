@@ -14,7 +14,9 @@ export_data.py before importing this).
 """
 from __future__ import annotations
 
+import json
 import statistics
+from pathlib import Path
 
 from config import MARKET_PE
 from valuation.dcf import dcf_valuation
@@ -288,6 +290,40 @@ def _quarter_usable_from(period):
         return None
 
 
+_VCI_MULTIPLES = Path(__file__).resolve().parent / "data" / "own_multiples.json"
+
+
+def _load_vci_multiples() -> dict:
+    """export_multiples.py's per-ticker medians, or {} when the file is absent."""
+    try:
+        return json.loads(_VCI_MULTIPLES.read_text(encoding="utf-8")).get("tickers") or {}
+    except (OSError, ValueError):
+        return {}
+
+
+def overlay_vci_multiples(per_ticker: dict, vci: dict) -> dict:
+    """VCI's quarter-end multiples replace the self-measured ones, key by key.
+
+    The self-measured medians divide VCI's ADJUSTED price history by each
+    quarter's as-reported per-share figures; the two are on different share
+    bases once a company pays cash dividends or issues shares, and against
+    VCI's own quarterly ratios they read P/E -12% and P/B -14% at the median
+    on 40 names (TCB 5.0x vs 8.1x, VHM 3.4x vs 8.3x; ORS 33.8x vs 13.8x the
+    other way, from rights issues). A key VCI doesn't have keeps the old value.
+    """
+    if not vci:
+        return per_ticker
+    out = {t: dict(e) for t, e in per_ticker.items()}
+    n = 0
+    for ticker, m in vci.items():
+        vals = {k: float(m[k]) for k in _MULT_KEYS if isinstance(m.get(k), (int, float)) and m[k] > 0}
+        if vals:
+            out.setdefault(ticker, {}).update(vals)
+            n += 1
+    print(f"    own multiples: VCI quarter-end history for {n} tickers")
+    return out
+
+
 def _build_history():
     """Trailing P/E, P/B and P/S medians per ticker, then per sector."""
     from models.database import get_session
@@ -398,6 +434,7 @@ def _build_history():
         entry = {k: statistics.median(v) for k, v in series.items() if len(v) >= _MIN_OBS}
         if entry:
             per_ticker[ticker] = entry
+    per_ticker = overlay_vci_multiples(per_ticker, _load_vci_multiples())
 
     market = {}
     for key in _MULT_KEYS:

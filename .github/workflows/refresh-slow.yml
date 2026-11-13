@@ -163,6 +163,23 @@ jobs:
         working-directory: vnindex-web
         run: bash ci-commit-data.sh "Weekly refresh - earnings"
 
+      # Each ticker's historical P/E, P/B, P/S, P/OCF, EV/EBITDA from VCI's
+      # quarter-end ratios -> data/own_multiples.json, which model_valuation
+      # reads for the "own history" and sector-median methods. One VCI call per
+      # ticker at 2 s apart, ~15 minutes. A failed call keeps last week's figure.
+      - name: Refresh historical valuation multiples
+        working-directory: vnindex-web
+        continue-on-error: true
+        timeout-minutes: 45
+        env:
+          PYTHONIOENCODING: utf-8
+        run: python -u export_multiples.py
+
+      - name: Save (historical multiples)
+        if: ${{ !cancelled() }}
+        working-directory: vnindex-web
+        run: bash ci-commit-data.sh "Weekly refresh - historical multiples"
+
       # Phase 10 backtest -> data/backtest.json, read by the "Kiểm định chiến
       # lược" view. ~2 minutes; reads the database only. After the financials
       # refresh above, so the newest quarter is in. A failure keeps last
