@@ -519,7 +519,7 @@ def main() -> None:
         # analyst (~22 min), detail + news_events (~80 min) and holders
         # (~40 min). This has bitten once already, on analyst alone.
         carried = {"analyst": None, "detail": None, "news_events": None, "holders": None,
-                   "actions": None, "insiders": None, "foreign": []}
+                   "actions": None, "insiders": None, "earnings": None, "foreign": []}
         _prev = OUT / "ticker" / f"{t}.json"
         if _prev.exists():
             try:
@@ -560,6 +560,7 @@ def main() -> None:
             "holders": carried["holders"],
             "actions": carried["actions"],
             "insiders": carried["insiders"],
+            "earnings": carried["earnings"],
             "foreign": foreign,
             "financials": fin_rows,
             "prices": _records(px_by_ticker[t][["date", "open", "high", "low",

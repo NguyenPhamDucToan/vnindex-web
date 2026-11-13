@@ -109,6 +109,11 @@ jobs:
       # the stock page shows "Khuyến nghị cập nhật ngày ...". Before this the
       # block was only filled where missing and went stale. ~25 minutes; a
       # failed call keeps the committed record.
+      - name: Save (side-loaded blocks)
+        if: ${{ !cancelled() }}
+        working-directory: vnindex-web
+        run: bash ci-commit-data.sh "Weekly refresh - side-loaded blocks"
+
       - name: Refresh analyst targets
         working-directory: vnindex-web
         env:
@@ -121,6 +126,11 @@ jobs:
       # column). One VCI call per ticker at 4 s apart: ~30 minutes for 403
       # tickers, longer when VCI throttles and the script backs off. A ticker
       # whose call fails keeps last week's committed blocks.
+      - name: Save (analyst targets)
+        if: ${{ !cancelled() }}
+        working-directory: vnindex-web
+        run: bash ci-commit-data.sh "Weekly refresh - analyst targets"
+
       - name: Refresh corporate actions and insider deals
         working-directory: vnindex-web
         continue-on-error: true
@@ -128,6 +138,30 @@ jobs:
         env:
           PYTHONIOENCODING: utf-8
         run: python -u export_actions.py --all
+
+      - name: Save (corporate actions, insiders)
+        if: ${{ !cancelled() }}
+        working-directory: vnindex-web
+        run: bash ci-commit-data.sh "Weekly refresh - corporate actions, insiders"
+
+      # Earnings release dates (VCI's statement feed) and the price reaction
+      # around each one -> the `earnings` block ("Giá phản ứng khi ra báo cáo
+      # quý"). One VCI call per ticker at 4 s apart, ~30 minutes; reads prices
+      # from the database. After the financials wait, so the newest quarter is
+      # in. A ticker whose call fails keeps its committed release dates.
+      - name: Refresh earnings releases and reaction
+        working-directory: vnindex-web
+        continue-on-error: true
+        timeout-minutes: 75
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          PYTHONIOENCODING: utf-8
+        run: python -u export_earnings.py
+
+      - name: Save (earnings)
+        if: ${{ !cancelled() }}
+        working-directory: vnindex-web
+        run: bash ci-commit-data.sh "Weekly refresh - earnings"
 
       # Phase 10 backtest -> data/backtest.json, read by the "Kiểm định chiến
       # lược" view. ~2 minutes; reads the database only. After the financials
@@ -145,16 +179,6 @@ jobs:
         run: python -u export_backtest.py
 
       - name: Commit whatever changed
+        if: ${{ !cancelled() }}
         working-directory: vnindex-web
-        run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data
-          if git diff --cached --quiet; then
-            echo "nothing changed"
-          else
-            git commit -m "Weekly refresh of side-loaded data"
-            # The sweep runs for half an hour; take any push made meanwhile.
-            git pull --rebase
-            git push
-          fi
+        run: bash ci-commit-data.sh "Weekly refresh of side-loaded data"

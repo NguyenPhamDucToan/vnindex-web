@@ -14,6 +14,7 @@ import * as F from "./format.js";
 import { buildScreener, isScreenerHash } from "./screener.js";
 import { markers, actionsSection, KIND_COLOR } from "./corp-actions.js";
 import { insidersSection } from "./insiders.js";
+import { earningsSection } from "./earnings.js";
 // "Kiểm định chiến lược" (Phase 10 backtest) is built but private for now: the
 // owner doesn't want it public yet. With the flag off nothing loads backtest.js
 // (deploy.yml also leaves it and data/backtest.json out of the upload).
@@ -254,6 +255,8 @@ async function renderStock(t) {
   if (ca) root.appendChild(ca);
   const ins = insidersSection(d.insiders, d.financials);
   if (ins) root.appendChild(ins);
+  const ern = earningsSection(d.earnings);
+  if (ern) root.appendChild(ern);
 
   // Two-column split matching the original: price chart on the left, the
   // valuation-estimates + technical panel down the right.

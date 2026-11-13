@@ -149,3 +149,13 @@ Day 79–84 phần sâu (đa nhân tố có trọng số, chế độ thị trư
 - Sàng lọc: bộ lọc "Nội bộ mua ròng tối thiểu" (nhóm "Chất lượng & nội bộ"), cột "Nội bộ 12T", cột CSV.
 - CI: bước tuần trong refresh-slow.yml đổi tên, timeout 30 → 75 phút (403 mã × 4 s ≈ 30 phút).
 - Lưu ý: giao dịch trong gia đình hiện thành một bán + một mua (HPG: Vũ Thị Hiền bán / Trần Vũ Minh mua) — số ròng tự triệt tiêu, bảng vẫn hiển thị.
+
+## Số liệu vĩ mô chậm — sửa (2026-11-08)
+- nso.gov.vn chặn IP đám mây → từ 07/2026 GitHub chỉ lấy SBV/tỉ giá/World Bank; CPI, GDP, XNK, lao động không ai chạy. Repo pipeline: `run_macro_local.py` chạy từ máy nhà (tác vụ hẹn giờ do chủ dự án tự đăng ký).
+- Bộ đọc: thêm mục `tin-tuc-thong-ke/` (CPI T5–T8/2026 và nhiều tháng cũ chưa từng lấy), đọc PDF đính kèm khi trang chỉ có tóm tắt (từ T5/2026), ưu tiên câu "so với tháng trước" cho nhóm hàng (sửa 12 số giao thông sai, vd T6/2026 +5,23 → −4,85), mẫu câu quý 2/3 cho thất nghiệp, lực lượng lao động, vốn đầu tư. Bù 118 điểm. Còn thiếu: lãi suất SBV từ T6/2026 (WAF + tên PDF có mã ngẫu nhiên), quý 2/2026 lao động/đầu tư.
+
+## Phase 11 — Day 107–108: phản ứng giá quanh báo cáo quý (2026-11-08)
+- Ngày công bố: `createDate` của VCI trên báo cáo quý (lúc báo cáo lên hệ thống) — 18–35 ngày sau khi hết quý ở gần như mọi quý; dấu thời gian ngoài 10–75 ngày là lần nạp lại, bỏ. Sau 15h → tính từ phiên kế tiếp.
+- `export_earnings.py` → khối `earnings` {releases, events, summary}: lợi nhuận vượt VNINDEX (mua-giữ, beta 1) các cửa sổ [−5,−1], [0,+1], [0,+5], [0,+20]; gắn tăng trưởng LNST so cùng kỳ; dự kiến ngày báo cáo kỳ tới (trễ trung vị cùng quý). Khối chậm: export_data mang theo, refresh-slow chạy hằng tuần (~30 phút). Test `tests/test_earnings.py`.
+- Trang cổ phiếu: thẻ "Giá phản ứng khi ra báo cáo quý" — biến động 2 phiên đầu, % kỳ vượt VNINDEX, 5 phiên sau theo lãi tăng/giảm, ngày báo cáo kỳ tới; biểu đồ cột 5 phiên mỗi quý (màu theo lãi tăng/giảm); bảng từng kỳ.
+- Day 107 gốc (nghị quyết ĐHCĐ, kế hoạch) chưa làm: cần nguồn văn bản.
