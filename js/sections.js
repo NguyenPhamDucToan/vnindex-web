@@ -486,7 +486,7 @@ export function holdersSection(holders) {
     window.Plotly.react(card.querySelector("#hd-pie"), [{
       type: "pie", hole: 0.5, labels, values: labels.map((k) => byType[k]),
       marker: { colors: labels.map((k) => OWNER_COLORS[k] || "#94a3b8") },
-      textinfo: "label+percent", textposition: "outside",
+      textinfo: "label+percent", textposition: "outside", automargin: true,   // outside labels were clipped at the edges
       hovertemplate: "%{label}: %{value:.2f}%<extra></extra>",
     }], {
       height: 400, margin: { l: 20, r: 20, t: 20, b: 20 }, showlegend: false,

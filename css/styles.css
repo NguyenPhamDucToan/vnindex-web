@@ -1037,3 +1037,22 @@ table.bt-years td { text-align: center; }
   .ins-mood { display: inline-block; margin: 4px 0 0; }
   .ins-nm { max-width: 150px; }
 }
+
+/* ── tabbed card: ownership, dividends, insiders, earnings (js/tabcard.js) ── */
+.tabcard { min-width: 0; }
+.tc-body { min-width: 0; }
+.tc-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 var(--space-lg); border-bottom: 1px solid var(--rule); }
+.tc-tab { font-family: var(--sans); font-size: 14px; font-weight: 500; color: var(--muted); background: none;
+  border: none; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 8px 12px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 4px; }
+.tc-tab:hover { color: var(--ink); }
+.tc-tab:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--primary-ring); }
+.tc-tab.on { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+.tc-tab .ins-mood { margin-left: 6px; font-size: 11px; padding: 1px 7px; }
+.tc-pane { margin: 0; padding: 0; border: none; }
+.tc-pane > summary { display: none; }
+@media (max-width: 640px) {
+  .tc-tabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .tc-tab { white-space: nowrap; font-size: 13px; padding: 8px 10px; }
+  .tc-tab .ins-mood { display: none; }
+}

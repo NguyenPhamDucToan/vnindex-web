@@ -145,6 +145,6 @@ export function insidersSection(insiders, financials) {
     }, { displayModeBar: false, responsive: true });
   };
   card.addEventListener("toggle", () => { if (card.open) draw(); });
-  if (open.length) { card.open = true; requestAnimationFrame(draw); }
+  if (open.length) card.open = true;          // its toggle handler draws once visible
   return card;
 }

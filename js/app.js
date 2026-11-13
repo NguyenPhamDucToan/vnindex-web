@@ -15,6 +15,7 @@ import { buildScreener, isScreenerHash } from "./screener.js";
 import { markers, actionsSection, KIND_COLOR } from "./corp-actions.js";
 import { insidersSection } from "./insiders.js";
 import { earningsSection } from "./earnings.js";
+import { tabbedCard } from "./tabcard.js";
 // "Kiểm định chiến lược" (Phase 10 backtest) is built but private for now: the
 // owner doesn't want it public yet. With the flag off nothing loads backtest.js
 // (deploy.yml also leaves it and data/backtest.json out of the upload).
@@ -249,14 +250,15 @@ async function renderStock(t) {
         : null);
     if (note) root.appendChild(note);
   }
-  const hd = holdersSection(d.holders);
-  if (hd) root.appendChild(hd);
-  const ca = actionsSection(d.actions, prices);
-  if (ca) root.appendChild(ca);
-  const ins = insidersSection(d.insiders, d.financials);
-  if (ins) root.appendChild(ins);
-  const ern = earningsSection(d.earnings);
-  if (ern) root.appendChild(ern);
+  // Ownership, dividends, insider deals and the earnings reaction share one
+  // tabbed card near the bottom (built below), not four stacked cards above
+  // the price chart.
+  const ownership = tabbedCard("Sở hữu, cổ tức & sự kiện", [
+    [holdersSection(d.holders), "Cổ đông lớn"],
+    [actionsSection(d.actions, prices), "Quyền & cổ tức"],
+    [insidersSection(d.insiders, d.financials), "Giao dịch nội bộ"],
+    [earningsSection(d.earnings), "Phản ứng báo cáo quý"],
+  ]);
 
   // Two-column split matching the original: price chart on the left, the
   // valuation-estimates + technical panel down the right.
@@ -305,6 +307,7 @@ async function renderStock(t) {
   if (rw) root.appendChild(rw);
 
   root.appendChild(valuationSummary(co, v, d.model || {}, d.analyst, last));
+  if (ownership) root.appendChild(ownership);
   newsEventsSection(root, d.news_events);
 }
 

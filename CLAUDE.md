@@ -86,6 +86,10 @@ So: a re-export that doesn't read the old file destroys them, and these blocks o
 - `earnings.js` renders "Giá phản ứng khi ra báo cáo quý" from `earnings` (export_earnings.py): release date = VCI's
   `createDate` on the quarter's statement (stamps outside 10–75 days after quarter end are reloads, dropped; after
   15:00 → next session), returns minus VNINDEX over [−5,−1], [0,+1], [0,+5], [0,+20] sessions.
+- Holders, "Quyền & cổ tức", insiders and the earnings reaction are `<details>` sections shown as tabs of one
+  card ("Sở hữu, cổ tức & sự kiện", `tabcard.js`) below the valuation summary — not stacked above the price chart
+  (the owner found that cluttered). Opening a tab opens its `<details>`, whose own `toggle` handler draws the chart,
+  so a section must draw on `toggle`, never while hidden.
 - Charts that need missing optional data are skipped, not broken.
 
 Goal of the port is parity with the Streamlit original; the `compare_to_original.py`/`diff_*` scripts exist for that.
