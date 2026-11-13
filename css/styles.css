@@ -788,9 +788,14 @@ table.screen.cmp-heat tbody tr { cursor: default; }
   border: 1px solid var(--rule); border-radius: var(--radius-sm); background: var(--paper); }
 .sc3-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-sm); margin: 6px 0; }
 .sc3-cell { padding: 6px 8px; border-radius: var(--radius-sm); background: var(--bg); border-top: 3px solid var(--rule-strong); }
-.sc3-cell.bear { border-top-color: var(--loss); }
-.sc3-cell.base { border-top-color: var(--primary-light); }
-.sc3-cell.bull { border-top-color: var(--gain); }
+/* Scenario colours are their own (blue / green / purple), not gain/loss red-green,
+   which stays reserved for the % vs the market price underneath. */
+.sc3-cell.bear { border-top-color: #2563eb; }
+.sc3-cell.base { border-top-color: #16a34a; }
+.sc3-cell.bull { border-top-color: #7c3aed; }
+.sc3-cell.bear .sc3-k { color: #1d4ed8; font-weight: 600; }
+.sc3-cell.base .sc3-k { color: #15803d; font-weight: 600; }
+.sc3-cell.bull .sc3-k { color: #6d28d9; font-weight: 600; }
 .sc3-k { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
 .sc3-v { font-family: var(--mono); font-weight: 700; font-size: 15px; color: var(--ink); }
 .sc3-u { font-family: var(--mono); font-size: 12px; }
