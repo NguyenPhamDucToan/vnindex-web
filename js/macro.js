@@ -198,6 +198,56 @@ function macroPulse(macro, box, sum) {
     <b class="loss">${down}</b> xấu đi, còn lại đi ngang hoặc chưa đủ dữ liệu.`;
 }
 
+// When each source publishes, and when the next figure is due. NSO holds its
+// monthly press release on the 6th of the following month (the quarterly one
+// is the same day for the quarter's last month), so the next date follows from
+// the latest period we hold. A due date more than 3 days past with no new
+// figure is flagged: the daily NSO job should have picked it up by then.
+const CAL = [
+  // [label, key that marks the latest period, cadence, what it brings]
+  ["Báo cáo tháng của NSO", "cpi_yoy", "m",
+   "CPI, lạm phát cơ bản, IIP, bán lẻ, xuất nhập khẩu, ngân sách, đầu tư công, doanh nghiệp mới, khách quốc tế"],
+  ["Báo cáo quý của NSO", "gdp_growth", "q", "GDP theo khu vực, thất nghiệp, lực lượng lao động, thu nhập, PPI"],
+  ["Lãi suất tiết kiệm (CafeF)", "deposit_12m_avg", "d", "Bảng 28 ngân hàng, trung bình / cao nhất / thấp nhất"],
+  ["Giá vàng SJC", "sjc_gold_sell", "d", "Mua vào / bán ra vàng miếng"],
+  ["Tỷ giá USD/VND (VNDirect)", "exchange_rate", "d", "Tỷ giá đóng cửa"],
+  ["Tín dụng theo ngành (NHNN)", "credit_growth_total", "x", "Không theo lịch cố định, NHNN công bố khi họp báo"],
+  ["World Bank", "wb_gdp_growth", "y", "Số năm (GDP USD, tiết kiệm, M2…), thường cập nhật khoảng tháng 7"],
+];
+
+function releaseCalendar(macro, box, headNext) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const fmt = (d) => d.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
+  const lastOf = (key) => { const p = macro[key] || []; return p.length ? String(p[p.length - 1].period).slice(0, 10) : null; };
+  let soonest = null;
+  const rows = CAL.map(([label, key, cad, what]) => {
+    const last = lastOf(key);
+    let next = "—", cls = "";
+    if (last && (cad === "m" || cad === "q")) {
+      const [y, m] = last.split("-").map(Number);
+      const step = cad === "m" ? 1 : 3;
+      // period month m+step is reported on the 6th of the month after it
+      const due = new Date(y, m - 1 + step + 1, 6);
+      next = `${cad === "m" ? "Tháng" : "Quý"} ${cad === "m" ? ((m - 1 + step) % 12) + 1 : Math.ceil((((m - 1 + step) % 12) + 1) / 3)}`
+        + ` · khoảng ${fmt(due)}`;
+      if ((today - due) / 86400000 > 3) { cls = "mc-late"; next += " · đang trễ"; }
+      if (!soonest || due < soonest.due) soonest = { due, label };
+    } else if (cad === "d") {
+      next = "Mỗi ngày làm việc";
+      if (last && (today - new Date(last)) / 86400000 > 4) { cls = "mc-late"; next += " · số cuối đã cũ"; }
+    } else if (cad === "y") next = "Hằng năm";
+    else next = "Không định kỳ";
+    const lastTxt = !last ? "—" : cad === "d" ? fmt(new Date(last)) : cad === "y" ? last.slice(0, 4)
+      : cad === "q" ? `Quý ${Math.ceil(Number(last.slice(5, 7)) / 3)}/${last.slice(0, 4)}` : `${last.slice(5, 7)}/${last.slice(0, 4)}`;
+    return `<tr class="${cls}"><td><b>${label}</b><div class="mc-what">${what}</div></td><td>${lastTxt}</td><td>${next}</td></tr>`;
+  });
+  box.innerHTML = `<table class="screen mc-tab"><thead><tr><th>Nguồn</th><th>Số mới nhất</th><th>Lần tới</th></tr></thead>
+    <tbody>${rows.join("")}</tbody></table>
+    <div class="vb-note">Ngày dự kiến theo lịch họp báo của NSO (ngày 6 tháng sau). Dữ liệu được lấy tự động mỗi ngày làm việc,
+      thường có trên trang trong ngày công bố hoặc ngày kế tiếp.</div>`;
+  if (soonest) headNext.textContent = `· số NSO tiếp theo khoảng ${fmt(soonest.due)}`;
+}
+
 export async function renderMacro(root) {
   root.innerHTML = `<div class="loading">Đang tải dữ liệu vĩ mô…</div>`;
   const macro = await loadMacro();
@@ -219,6 +269,8 @@ export async function renderMacro(root) {
     </div>
     <div class="range-row macro-tabs"></div>
     <div class="card"><div id="macro-grid"></div></div>
+    <details class="card mc-cal"><summary class="sec-h">🗓 Lịch cập nhật số liệu <span class="mc-next"></span></summary>
+      <div id="macro-cal"></div></details>
     <div class="vb-note">Nguồn: Tổng cục Thống kê (nso.gov.vn), Ngân hàng Nhà nước, World Bank.</div>
   </div>`);
   root.appendChild(shell);
@@ -226,6 +278,7 @@ export async function renderMacro(root) {
   const grid = shell.querySelector("#macro-grid");
 
   macroPulse(macro, shell.querySelector("#macro-kpi"), shell.querySelector("#macro-sum"));
+  releaseCalendar(macro, shell.querySelector("#macro-cal"), shell.querySelector(".mc-next"));
 
   // Groups whose first chart is the theme's headline series and runs the full
   // width in the original. The overview is the exception: six equal charts.

@@ -1184,3 +1184,10 @@ table.screen.flow-sum td.num, table.screen.flow-sum th.num { text-align: right; 
 .sm-sum b.gain { color: var(--gain); } .sm-sum b.loss { color: var(--loss); } .sm-sum b.flat { color: var(--muted); }
 .sm-link { font-size: 13px; }
 .sm-sec .sm-grid { margin-top: 4px; }
+
+/* Macro page: release calendar */
+.mc-next { font-size: 13px; font-weight: 400; color: var(--muted); margin-left: 6px; }
+.mc-tab td { vertical-align: top; }
+.mc-what { font-size: 12px; color: var(--muted); font-weight: 400; margin-top: 2px; }
+.mc-late td:last-child { color: #c2410c; font-weight: 600; }
+@media (min-width: 901px) { .mc-tab td:last-child { white-space: nowrap; } }
