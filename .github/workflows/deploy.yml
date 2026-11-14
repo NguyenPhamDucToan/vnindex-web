@@ -212,6 +212,36 @@ jobs:
           print("export looks sane")
           PY
 
+      # The daily macro series come from the sibling's NSO job (CafeF, SJC,
+      # VNDirect FX) and the monthly ones from NSO's report. A source that
+      # stops answering doesn't fail anything, the chart just goes flat, so
+      # list anything overdue in the run summary. A warning, not a failure:
+      # the site is still worth publishing with one stale series.
+      - name: Freshness of the macro series
+        working-directory: vnindex-web
+        run: |
+          python - <<'PY' | tee -a "$GITHUB_STEP_SUMMARY"
+          import json
+          from datetime import date
+          macro = json.loads(open("data/macro.json", encoding="utf-8").read())
+          today = date.today()
+          # key -> days allowed since its latest period (monthly: period is the 1st,
+          # the next one lands ~the 6th of the month after next: up to ~66 days)
+          limits = {"deposit_12m_avg": 4, "sjc_gold_sell": 4, "exchange_rate": 5,
+                    "cpi_yoy": 70, "iip_yoy": 70, "retail_yoy": 70, "budget_revenue": 70}
+          late = []
+          for k, days in limits.items():
+              pts = macro.get(k) or []
+              last = date.fromisoformat(str(pts[-1]["period"])[:10]) if pts else None
+              age = (today - last).days if last else None
+              if age is None or age > days:
+                  late.append(f"- `{k}`: latest {last or 'none'} ({age if age is not None else '?'} days, limit {days})")
+          print("### Macro freshness")
+          print("\n".join(late) if late else "All daily and monthly macro series are current.")
+          if late:
+              print(f"::warning::{len(late)} macro series overdue: " + ", ".join(l.split('`')[1] for l in late))
+          PY
+
       # Cloudflare Pages, for a URL without a username in it. Direct upload
       # rather than Cloudflare's git integration: the export already ran here,
       # and their build image would have to redo it inside a 20-minute cap that
