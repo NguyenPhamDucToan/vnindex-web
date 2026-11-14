@@ -1,7 +1,7 @@
 // Macro sub-tab of the market view, matching the original's nine indicator
 // groups. Everything comes from the flat data/macro.json the export writes; the
 // grouping lives here so adding an indicator is a one-line change.
-import { loadMacro } from "./data.js";
+import { loadMacro, loadBankRates } from "./data.js";
 import * as F from "./format.js";
 
 const el = (h) => { const t = document.createElement("template"); t.innerHTML = h.trim(); return t.content.firstElementChild; };
@@ -77,6 +77,8 @@ const GROUPS = {
     { title: "Tiêu dùng / GDP (World Bank)", kind: "line", unit: "%", series: [["Tiêu dùng/GDP", "wb_consumption_gdp", ORANGE]] },
   ],
   "Lãi suất": [
+    { title: "Lãi suất tiết kiệm 12 tháng — 28 ngân hàng (CafeF, hằng ngày)", kind: "line", unit: "%/năm", series: [
+      ["Cao nhất", "deposit_12m_max", GREEN], ["Trung bình", "deposit_12m_avg", BLUE], ["Thấp nhất", "deposit_12m_min", RED]] },
     { title: "Lãi suất cho vay & tiền gửi (SBV)", kind: "line", unit: "%/năm", series: [
       ["Cho vay", "lending_rate", RED], ["Tiền gửi 6-12T", "deposit_rate", BLUE]] },
     { title: "Lãi suất thực (World Bank)", kind: "line", unit: "%", series: [["Lãi suất thực", "wb_real_interest_rate", PURPLE]] },
@@ -241,9 +243,14 @@ export async function renderMacro(root) {
     }
     // Checked on `drawn`, not on grid.children: the boxes are appended just
     // above, so testing the grid before placement always reported empty.
-    if (!drawn.length) grid.innerHTML = `<div class="loading">Chưa có dữ liệu cho nhóm này.</div>`;
+    if (!drawn.length && active !== "Lãi suất") grid.innerHTML = `<div class="loading">Chưa có dữ liệu cho nhóm này.</div>`;
     pending.forEach((fn) => fn());
+    if (active === "Lãi suất") {
+      bankRates = bankRates || loadBankRates();
+      bankRates.then((br) => { if (active === "Lãi suất") { const t = bankRateTable(br); if (t) grid.prepend(t); } });
+    }
   };
+  let bankRates = null;
 
   for (const n of names) {
     const b = el(`<button class="range-btn ${n === active ? "active" : ""}">${n}</button>`);
@@ -256,4 +263,43 @@ export async function renderMacro(root) {
     tabs.appendChild(b);
   }
   draw();
+}
+
+// Today's savings rates bank by bank (data/bank_rates.json), highest of each
+// tenor in green and lowest in red, average underneath. Sorted by the 12-month
+// rate, the tenor most people compare.
+const TENORS = [["1m", "1 tháng"], ["3m", "3 tháng"], ["6m", "6 tháng"], ["9m", "9 tháng"],
+  ["12m", "12 tháng"], ["18m", "18 tháng"], ["24m", "24 tháng"]];
+function bankRateTable(br) {
+  const banks = (br && br.banks) || [];
+  if (banks.length < 5) return null;
+  const stat = {};
+  for (const [k] of TENORS) {
+    const v = banks.map((b) => b.rates[k]).filter(F.isNum);
+    if (v.length) stat[k] = { max: Math.max(...v), min: Math.min(...v), avg: v.reduce((a, x) => a + x, 0) / v.length };
+  }
+  const who = (k, side) => banks.filter((b) => b.rates[k] === stat[k][side]).map((b) => b.bank).join(", ");
+  const rows = banks.slice().sort((a, b) => (b.rates["12m"] ?? -1) - (a.rates["12m"] ?? -1));
+  const cell = (b, k) => {
+    const v = b.rates[k];
+    if (!F.isNum(v)) return `<td class="num muted">—</td>`;
+    const s = stat[k];
+    const cls = s && v === s.max ? "br-hi" : s && v === s.min ? "br-lo" : "";
+    return `<td class="num ${cls}">${v.toFixed(2)}%</td>`;
+  };
+  const s12 = stat["12m"];
+  const box = el(`<div class="br">
+    <div class="qtitle">Lãi suất tiết kiệm tại quầy — ${banks.length} ngân hàng · ${F.dateVN(br.asof)}</div>
+    ${s12 ? `<div class="br-sum">Kỳ hạn 12 tháng: trung bình <b>${s12.avg.toFixed(2)}%</b>
+      · cao nhất <b class="br-hi">${s12.max.toFixed(2)}%</b> (${who("12m", "max")})
+      · thấp nhất <b class="br-lo">${s12.min.toFixed(2)}%</b> (${who("12m", "min")})</div>` : ""}
+    <div class="br-tw"><table class="br-t">
+      <thead><tr><th>Ngân hàng</th>${TENORS.map(([, h]) => `<th class="num">${h}</th>`).join("")}</tr></thead>
+      <tbody>${rows.map((b) => `<tr><td>${F.escapeHtml(b.bank)}</td>${TENORS.map(([k]) => cell(b, k)).join("")}</tr>`).join("")}</tbody>
+      <tfoot><tr><td>Trung bình</td>${TENORS.map(([k]) => `<td class="num">${stat[k] ? stat[k].avg.toFixed(2) + "%" : "—"}</td>`).join("")}</tr></tfoot>
+    </table></div>
+    <div class="vb-note">%/năm, gửi tại quầy, lĩnh lãi cuối kỳ, chưa gồm ưu đãi hay gửi trực tuyến. Xanh = cao nhất, đỏ = thấp nhất
+      ở mỗi kỳ hạn. Nguồn: CafeF, cập nhật mỗi ngày làm việc.</div>
+  </div>`);
+  return box;
 }

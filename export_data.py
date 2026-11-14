@@ -708,6 +708,9 @@ def main() -> None:
         "wb_consumption_growth", "wb_consumption_gdp",
         # Lãi suất
         "lending_rate", "deposit_rate", "wb_real_interest_rate",
+        # ~28 banks' counter savings rates (CafeF), daily from 2026-11-14
+        "deposit_12m_avg", "deposit_12m_max", "deposit_12m_min",
+        "deposit_6m_avg", "deposit_6m_max", "deposit_6m_min",
     ]
     with engine.connect() as conn:
         macro = pd.read_sql(text(
@@ -720,6 +723,19 @@ def main() -> None:
                           for _, r in g.iterrows()]
     _write(OUT / "macro.json", macro_out)
     print(f"  wrote macro.json ({len(macro_out)} indicators)")
+
+    # Today's bank-by-bank savings rates for the macro page's table. The daily
+    # summary (average / highest / lowest) is in macro.json via the sibling's
+    # NSO job; this is the full board. A failed fetch keeps the last file.
+    try:
+        from collectors.macro_collector import fetch_cafef_rates, CAFEF_RATES_URL
+        banks = fetch_cafef_rates()
+        if banks:
+            _write(OUT / "bank_rates.json", {"asof": date.today().isoformat(),
+                                             "source": CAFEF_RATES_URL, "banks": banks})
+            print(f"  wrote bank_rates.json ({len(banks)} banks)")
+    except Exception as e:
+        print(f"  ! bank rates skipped: {e}")
 
     # ---- quality.json (latest data quality audit) ----------------------
     # quality/audit.py in the sibling repo appends to data_quality_log after

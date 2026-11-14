@@ -20,6 +20,8 @@ export const loadCompanies = () => getJSON("data/companies.json");
 export const loadScreener = () => getJSON("data/screener.json");
 export const loadTicker = (t) => getJSON(`data/ticker/${t}.json`);
 export const loadMacro = () => getJSON("data/macro.json");
+// Optional: today's bank-by-bank savings rates (export_data, CafeF).
+export const loadBankRates = () => getJSON("data/bank_rates.json").catch(() => null);
 export const loadMarket = () => getJSON("data/market.json");
 // Optional: absent until export_commodities.py has been run.
 export const loadCommodities = () =>

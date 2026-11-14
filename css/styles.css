@@ -1109,3 +1109,18 @@ table.bt-years td { text-align: center; }
 }
 .ev-warn { background: #fff7ed; border: 1px solid #fed7aa; border-left: 4px solid #ea580c; border-radius: var(--radius-sm);
   padding: 10px 14px; margin: 0 0 var(--space-md); font-size: 13.5px; color: #7c2d12; line-height: 1.5; }
+
+/* ── bank savings-rate table (macro page, "Lãi suất") ── */
+.br { margin-bottom: var(--space-lg); }
+.br-sum { font-size: 13.5px; margin: 4px 0 10px; color: var(--ink-2); }
+.br-tw { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.br-t { width: 100%; border-collapse: collapse; font-size: 13px; }
+.br-t th, .br-t td { padding: 5px 8px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+.br-t th { font-size: 11px; color: var(--muted); font-weight: 600; text-align: left; }
+.br-t .num { text-align: right; font-family: var(--mono); }
+.br-t tfoot td { font-weight: 700; border-top: 2px solid var(--rule-strong); }
+.br-t td.br-hi, .br-sum .br-hi { color: #15803d; font-weight: 700; }
+.br-t td.br-hi { background: #dcfce7; }
+.br-t td.br-lo, .br-sum .br-lo { color: #b91c1c; font-weight: 700; }
+.br-t td.br-lo { background: #fee2e2; }
+.br-t td.muted { color: var(--muted); }
