@@ -211,25 +211,34 @@ let sectorCard = null;
 export async function sectorMacroCard(sectors) {
   const macro = await loadMacro();
   const banks = ((await loadBankRates().catch(() => null)) || {}).banks || null;
-  const names = sectors.filter((s) => DRIVERS[s]);
+  const names = sectors.filter((s) => DRIVERS[s] && tally(macro, s));
   if (!names.length) return null;
+  // One chip per sector: how many of its drivers currently help it. Best
+  // first, so the row itself reads as "where the macro wind is behind you".
+  const T = Object.fromEntries(names.map((s) => [s, tally(macro, s)]));
+  const order = [...names].sort((a, b) => (T[b].up - T[b].down) / T[b].n - (T[a].up - T[a].down) / T[a].n);
   const card = el(`<div class="card" id="sector-macro">
     <h2 class="sec-h">Vĩ mô tác động tới ngành</h2>
-    <div class="sel-lab">Chọn ngành:</div>
-    <select class="sm-sel">${names.map((s) => `<option>${s}</option>`).join("")}</select>
+    <div class="vb-note">Số trên mỗi ngành = bao nhiêu chỉ báo vĩ mô của ngành đó đang có lợi.
+      <span class="gain">Xanh</span> = vĩ mô đang thuận, <span class="loss">đỏ</span> = đang ngược. Bấm một ngành để xem chi tiết.</div>
+    <div class="sm-chips">${order.map((s) => `<button type="button" class="sm-chip ${T[s].tone}" data-s="${s}">
+      ${s} <b>${T[s].up}/${T[s].n}</b></button>`).join("")}</div>
     <div class="sm-sum"></div>
     <div class="sm-grid"></div>
     <div class="vb-note">Mỗi biểu đồ là một chỉ báo vĩ mô ảnh hưởng tới ngành, 3 năm gần nhất. ${NOTE}</div></div>`);
-  const sel = card.querySelector(".sm-sel");
+  const chips = [...card.querySelectorAll(".sm-chip")];
+  let current = null;
   const draw = (sec) => {
-    const t = tally(macro, sec);
-    card.querySelector(".sm-sum").innerHTML = t ? tallyText(t) : "";
+    current = sec;
+    chips.forEach((c) => c.classList.toggle("on", c.dataset.s === sec));
+    card.querySelector(".sm-sum").innerHTML = `<b>${sec}</b>: ${tallyText(T[sec])}`;
     drawTiles(card.querySelector(".sm-grid"), macro, sec, banks);
   };
-  sel.addEventListener("change", () => draw(sel.value));
+  chips.forEach((c) => c.addEventListener("click", () => { if (c.dataset.s !== current) draw(c.dataset.s); }));
   // Drawn once the card is in the page, so Plotly can measure its width.
-  card.drawFirst = () => draw(pendingSector && names.includes(pendingSector) ? (sel.value = pendingSector) : names[0]);
-  card.focus = (sec) => { if (names.includes(sec)) { sel.value = sec; draw(sec); } };
+  // Opens on the biggest sector (most tickers) unless the stock page asked for one.
+  card.drawFirst = () => draw(pendingSector && names.includes(pendingSector) ? pendingSector : names[0]);
+  card.focus = (sec) => { if (names.includes(sec)) draw(sec); };
   sectorCard = card;
   return card;
 }

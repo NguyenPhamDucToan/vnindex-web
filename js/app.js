@@ -1130,6 +1130,11 @@ async function renderSector() {
   root.innerHTML = "";
   root.appendChild(el(`<h2 class="view-title">Phân tích Ngành</h2>`));
 
+  // ── 0. Macro drivers per sector, at the top: which way the economy is
+  //       pushing each sector before the valuation views below.
+  const smc = await sectorMacroCard(Object.keys(bySec).sort((a, b) => bySec[b].length - bySec[a].length));
+  if (smc) { root.appendChild(smc); smc.drawFirst(); }
+
   // ── 1. Heatmap with the original's metric selector ────────────────
   const METRICS = {
     "Avg Estimate vs Thị trường": { key: "up", label: "Avg Est Upside %", pct: true, asc: false, lo: -0.8, hi: 1.5 },
@@ -1376,9 +1381,6 @@ async function renderSector() {
   }
   root.appendChild(tbl);
 
-  // ── 5. Macro drivers per sector, biggest sectors (most tickers) first ──
-  const smc = await sectorMacroCard(Object.keys(bySec).sort((a, b) => bySec[b].length - bySec[a].length));
-  if (smc) { root.appendChild(smc); smc.drawFirst(); }
 }
 
 // ── portfolio tracker (localStorage) ────────────────────────────────
