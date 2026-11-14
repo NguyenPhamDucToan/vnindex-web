@@ -1150,7 +1150,7 @@ table.bt-years td { text-align: center; }
 /* Market page: foreign & proprietary flow card */
 .flow-sum { margin: 10px 0; }
 table.screen.flow-sum td.num, table.screen.flow-sum th.num { text-align: right; }
-.flow-lead { display: grid; grid-template-columns: repeat(2, minmax(0, 520px)); gap: 16px 40px; margin-top: 10px; }
+.flow-lead { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 48px; margin-top: 10px; }
 .fl-h { font-weight: 600; margin-bottom: 6px; }
 .fl-empty { color: var(--muted); font-size: 13px; padding: 10px 0; }
 .fl-tab { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
