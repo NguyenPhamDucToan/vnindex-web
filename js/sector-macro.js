@@ -4,6 +4,7 @@
 // seafood exporters). The trend rule is the one the macro page's pulse card uses.
 import { loadMacro, loadBankRates } from "./data.js";
 import { pulseTrend, SERIES_INFO } from "./macro.js";
+import { NUM_LOCALE } from "./i18n.js";
 
 const el = (h) => { const t = document.createElement("template"); t.innerHTML = h.trim(); return t.content.firstElementChild; };
 
@@ -168,7 +169,7 @@ function drawTiles(grid, macro, sec, banks) {
     const per = info.how === "d63" ? String(last.period).slice(0, 10) : String(last.period).slice(0, 7);
     const box = el(`<div class="sm-tile ${cls}">
       <div class="sm-h">${info.label} <span class="sm-dir">${dir > 0 ? "tăng = tốt cho ngành" : "tăng = xấu cho ngành"}</span></div>
-      <div class="sm-v">${last.value.toLocaleString("vi-VN", { maximumFractionDigits: info.dp })}${info.unit}
+      <div class="sm-v">${last.value.toLocaleString(NUM_LOCALE, { maximumFractionDigits: info.dp })}${info.unit}
         <span class="sm-p">${per}</span></div>
       <div class="sm-t ${cls}">${word}</div>
       <div class="sm-c"></div>

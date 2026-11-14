@@ -13,7 +13,7 @@ import { renderCompare } from "./compare.js";
 import { renderMacro } from "./macro.js";
 import { sectorMacroCard, sectorMacroSection, focusSector } from "./sector-macro.js";
 import * as F from "./format.js";
-import { initI18n, trPlot, langToggle } from "./i18n.js";
+import { initI18n, trPlot, langToggle, NUM_LOCALE } from "./i18n.js";
 import { buildScreener, isScreenerHash } from "./screener.js";
 import { markers, actionsSection, KIND_COLOR } from "./corp-actions.js";
 import { insidersSection } from "./insiders.js";
@@ -407,7 +407,10 @@ function newsEventsSection(parent, ne) {
     for (const it of items) {
       const b = active === "news" ? newsBadge(it.title) : eventBadge(it);
       const border = recencyBorder(it.date, b.border);
-      const title = F.escapeHtml(it.title || it.name || "");
+      // A news headline is source text: kept as published in the English
+      // version too (data-notr); event descriptions are translated.
+      const title = active === "news"
+        ? `<span data-notr>${F.escapeHtml(it.title || it.name || "")}</span>` : F.escapeHtml(it.title || it.name || "");
       const body = it.link
         ? `<a href="${F.escapeHtml(it.link)}" target="_blank" rel="noopener">${title}</a>` : title;
       const badge = b.label
@@ -1725,7 +1728,7 @@ async function renderMarket() {
   const pr = market.prop || [];
   if (ff.length > 20 || pr.length > 20) {
     const bn = (v) => v / 1e9;
-    const sgn = (v) => `${v >= 0 ? "+" : "−"}${Math.abs(v).toLocaleString("vi-VN", { maximumFractionDigits: 0 })}`;
+    const sgn = (v) => `${v >= 0 ? "+" : "−"}${Math.abs(v).toLocaleString(NUM_LOCALE, { maximumFractionDigits: 0 })}`;
     const tcls = (v) => (v >= 0 ? "gain" : "loss");
     const sumLast = (rows, n) => rows.slice(-n).reduce((a, r) => a + bn(r.net_val || 0), 0);
     const W = [[5, "5 phiên"], [20, "1 tháng"], [60, "3 tháng"], [250, "1 năm"]];

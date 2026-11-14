@@ -12,7 +12,7 @@ const SECTORS = {
   "Thực phẩm - Đồ uống": "Food & beverage", "SX Hàng gia dụng": "Household goods", "SX Phụ trợ": "Industrial supplies",
   "Bán lẻ": "Retail", "Chăm sóc sức khỏe": "Healthcare", "Chế biến Thủy sản": "Seafood processing",
   "Khai khoáng": "Mining", "Công nghệ và thông tin": "Technology & IT", "Thiết bị điện": "Electrical equipment",
-  "Nông - Lâm - Ngư": "Agriculture, forestry & fishery", "Bảo hiểm": "Insurance",
+  "Nông - Lâm - Ngư": "Agriculture & fishery", "Bảo hiểm": "Insurance",
   "Dịch vụ lưu trú, ăn uống, giải trí": "Hospitality & leisure", "Sản phẩm cao su": "Rubber products",
   "SX Thiết bị, máy móc": "Machinery", "Tài chính khác": "Other financials", "Dịch vụ tư vấn, hỗ trợ": "Consulting & support",
 };
@@ -363,7 +363,7 @@ export const EXACT = {
     "Source: SJC (HCMC board, updated every working day); world price = gold futures (Yahoo, daily). Positive gap = domestic gold dearer than world.",
   "Tăng trưởng tín dụng (so đầu năm)": "Credit growth (year to date)", "Tăng trưởng tín dụng theo ngành (% so đầu năm)": "Credit growth by sector (% year to date)",
   "Tăng trưởng cung tiền M2 (World Bank)": "M2 money growth (World Bank)", "Tín dụng theo ngành (NHNN)": "Credit by sector (SBV)",
-  "Bán lẻ hàng hóa & dịch vụ": "Retail sales of goods & services", "Bán lẻ hàng hóa & dịch vụ theo tháng (so với cùng kỳ)": "Retail sales, monthly (year on year)",
+  "Bán lẻ hàng hóa & dịch vụ": "Retail sales", "Bán lẻ hàng hóa & dịch vụ theo tháng (so với cùng kỳ)": "Retail sales, monthly (year on year)",
   "Bán lẻ theo tháng (so với cùng kỳ năm trước)": "Retail sales, monthly (year on year)", "Tổng mức bán lẻ hàng hóa & dịch vụ (theo tháng)": "Total retail sales (monthly)",
   "Khách quốc tế": "International visitors", "Khách quốc tế đến Việt Nam (theo tháng)": "International arrivals (monthly)",
   "Tăng trưởng tiêu dùng (World Bank)": "Consumption growth (World Bank)", "Tiêu dùng / GDP (World Bank)": "Consumption / GDP (World Bank)",
@@ -551,3 +551,202 @@ RX.push(
 Object.assign(EXACT, { "Xanh": "Green", "Đỏ": "Red", "Chuyển sang tiếng Việt": "Chuyển sang tiếng Việt" });
 PHRASES.push(["12T (TB)", "12M (avg)"], ["(TB)", "(avg)"]);
 RX.push([/(?<![A-Za-zÀ-ỹ])TB (\d)/g, "Avg $1"]);
+
+// Fourth pass (thorough QA crawl, 18 tickers): chart series and hover labels,
+// commodities, job titles, Piotroski / DuPont wording, VCI event descriptions.
+Object.assign(EXACT, {
+  // chart series (financial statements)
+  "% Tổng tài sản": "% of total assets", "BÁO CÁO": "REPORTED", "CỔ TỨC": "DIVIDEND", "NHÀ NƯỚC": "STATE",
+  "Chi phí bán hàng": "Selling expenses", "Chi phí dự phòng": "Provision expense", "Chi phí hoạt động": "Operating expenses",
+  "Chi phí lãi": "Interest expense", "Chi phí quản lý doanh nghiệp": "G&A expenses", "Chi phí tài chính": "Finance costs",
+  "Chi phí tín dụng % (năm hóa)": "Credit cost % (annualised)", "Chi phí tín dụng (năm hóa)": "Credit cost (annualised)",
+  "Cho vay & phải thu": "Loans & receivables", "Chứng khoán & Khác": "Securities & other", "Cổ tức đã trả": "Dividends paid",
+  "Doanh thu (dự báo)": "Revenue (forecast)", "Doanh thu tài chính": "Financial income", "Dư nợ cho vay": "Loans outstanding",
+  "Dư nợ cho vay / Tổng tài sản %": "Loans / total assets %", "Dự phòng giảm giá": "Price-decline provision", "Dự phòng khó đòi": "Doubtful-debt provision",
+  "GTNN mua ròng (tỷ)": "Foreign net buying (bn)", "Giá đóng cửa": "Close", "Hàng tồn kho": "Inventory", "Khác": "Other", "Khấu hao": "Depreciation",
+  "LDR % (Vay/Huy động)": "LDR % (loans/deposits)", "Liên ngân hàng & NHNN": "Interbank & SBV", "Lãi hoạt động bảo hiểm": "Insurance operating profit",
+  "Lãi hoạt động tài chính": "Financial operating profit", "Lưu ký": "Custody", "Lợi nhuận hoạt động": "Operating profit", "Lợi nhuận khác": "Other profit",
+  "Lợi nhuận sau thuế (dự báo)": "Net profit (forecast)", "Lợi nhuận trước thuế": "Pre-tax profit", "Môi giới": "Brokerage", "NIM (quý)": "NIM (quarter)",
+  "Nợ khác": "Other liabilities", "Nợ phải trả khác": "Other payables", "Nợ vay": "Borrowings", "Phải thu": "Receivables", "Phải thu dài hạn": "Long-term receivables",
+  "Phải thu khách hàng": "Trade receivables", "Phải trả người bán": "Trade payables", "ROA (quý)": "ROA (quarter)", "ROE (quý)": "ROE (quarter)",
+  "Số dư DP giảm giá tồn kho": "Inventory provision balance", "Số dư DP phải thu khó đòi": "Doubtful-debt provision balance", "TRUNG LẬP": "NEUTRAL",
+  "Thu ngoài lãi": "Non-interest income", "Thu nhập lãi": "Interest income", "Thu nhập lãi thuần": "Net interest income",
+  "Tiền & tương đương": "Cash & equivalents", "Tiền gửi khách hàng": "Customer deposits", "Tiền mặt & NHNN": "Cash & SBV", "Tiền mặt/Huy động %": "Cash / funding %",
+  "Trong đó: lãi vay": "of which: interest", "Tài sản dài hạn": "Non-current assets", "Tài sản ngắn hạn khác": "Other current assets",
+  "Tài sản tài chính (FVTPL/AFS)": "Financial assets (FVTPL/AFS)", "Tăng trưởng QoQ": "QoQ growth", "Tăng trưởng YoY": "YoY growth", "Tư vấn": "Advisory",
+  "Tồn kho": "Inventory", "Tồn kho (gộp)": "Inventory (gross)", "Tự doanh (FVTPL)": "Proprietary (FVTPL)", "Tự doanh mua ròng (tỷ)": "Proprietary net buying (bn)",
+  "Tỷ trọng NII": "NII share", "Vay dài hạn": "Long-term borrowings", "Vay ngắn hạn": "Short-term borrowings", "Vốn chủ sở hữu": "Equity", "Đối thủ": "Peers",
+  "Cổ tức cổ phiếu": "Stock dividend",
+  // macro series (short names)
+  "Bán lẻ tháng": "Monthly retail", "Cao nhất": "Highest", "Thấp nhất": "Lowest", "Chi": "Spending", "Thu": "Revenue", "Cho vay": "Lending",
+  "Cán cân": "Balance", "Có việc làm": "Employed", "DN mới": "New businesses", "Giao thông": "Transport", "LLLĐ": "Labour force",
+  "Lãi suất thực": "Real interest rate", "Lương thực": "Food", "Quy mô GDP": "GDP size", "Tham gia LLLĐ": "Labour participation",
+  "Thiếu việc làm": "Underemployment", "Thu nhập": "Income", "Thương mại/GDP": "Trade/GDP", "Tiêu dùng/GDP": "Consumption/GDP", "Tiết kiệm": "Savings",
+  "Tăng trưởng GDP (World Bank)": "GDP growth (World Bank)", "Vãng lai": "Current account", "Vốn hình thành": "Capital formation", "Vốn đầu tư": "Investment",
+  "Đầu tư công": "Public investment", "GDP/người": "GDP per capita", "Tiền gửi 6-12T": "6–12M deposits", "Tổng tín dụng": "Total credit",
+  "Giá lương thực (so tháng trước)": "Food prices (month on month)", "CPI giao thông (so tháng trước)": "Transport CPI (month on month)",
+  "Tín dụng ngành xây dựng (so đầu năm)": "Construction credit (year to date)", "Giá sản xuất công nghiệp PPI": "Producer prices (PPI)",
+  "Lãi suất tiết kiệm 12T (TB)": "12M savings rate (avg)",
+  // commodities
+  "Bắp": "Corn", "Bắp/TĂCN": "Corn / feed", "Đậu nành": "Soybeans", "Đậu nành/TĂCN": "Soybeans / feed", "Cà phê": "Coffee", "Đường": "Sugar",
+  "Lúa mì": "Wheat", "Vàng": "Gold", "Bạc": "Silver", "Dầu thô": "Crude oil", "Dầu thô (đầu vào)": "Crude oil (input)", "Dầu Brent": "Brent crude",
+  "Khí tự nhiên": "Natural gas", "Khí tự nhiên (đầu vào)": "Natural gas (input)", "Thép (đầu ra)": "Steel (output)",
+  "Giá Thép & Vật liệu xây dựng": "Steel & building-material prices", "Giá hàng hóa Khai khoáng": "Mining commodity prices",
+  "Giá nguyên liệu - Cao su/Dầu mỏ": "Input prices - rubber / oil", "Giá nguyên liệu - Hóa chất/Nhựa": "Input prices - chemicals / plastics",
+  "Giá nguyên liệu - Năng lượng": "Input prices - energy", "Giá nguyên liệu - Thủy sản": "Input prices - seafood",
+  "Giá nguyên liệu - Thực phẩm & Đồ uống": "Input prices - food & beverage", "Giá nhiên liệu Vận tải": "Transport fuel prices",
+  // job titles (combined with "/" by bySlash)
+  "Phụ trách Công bố thông tin": "Disclosure officer", "Giám đốc Sản xuất": "Production director", "Phó Tổng Giám đốc Tài chính": "Deputy CEO, finance",
+  "Thành viên Ban Kiểm toán nội bộ": "Internal audit committee member", "Trưởng Ban Kiểm toán nội bộ": "Head of the internal audit committee",
+  "Giám đốc khối": "Division director", "Giám đốc Khối Nghiên cứu phát triển": "R&D director", "Giám đốc Điều hành Nhân sự - Hành chính": "HR & admin director",
+  "Giám đốc điều hành chuỗi cung ứng": "Supply-chain director", "Giám đốc điều hành sản xuất": "Production director",
+  "Giám đốc Khối Công nghệ thông tin": "IT director", "Giám đốc Khối Nguồn nhân lực": "HR director", "Giám đốc Vận hành nghiệp vụ": "Operations director",
+  // scorecard / misc
+  "Biên LN: Yếu": "Margin: weak", "Hiệu suất TS: Tốt": "Asset turnover: good", "ROE: Yếu": "ROE: weak", "Không vay nợ": "No debt", "Tiền ròng": "Net cash",
+  "TỔNG HỢP: MUA MẠNH": "OVERALL: STRONG BUY", "TỔNG HỢP: TRUNG LẬP": "OVERALL: NEUTRAL", "TỔNG HỢP: BÁN": "OVERALL: SELL", "MUA": "BUY",
+  "LNST so cùng kỳ": "Net profit YoY", "Thị giá": "Market price", "TB ước tính": "Avg estimate", "Giá": "Price", "Mua-Bán": "Net", "Mua": "Buy",
+  "Upside": "Upside", "Chất lượng": "Quality", "Hôm nay": "Today", "Hôm qua": "Yesterday",
+  "Không có tin tức gần đây.": "No recent news.", "Không có sự kiện gần đây.": "No recent events.",
+  "Khả năng trả nợ ngắn hạn bằng tài sản lưu động. Công ty chứng khoán tài trợ dư nợ margin bằng vay ngắn hạn nên tỷ lệ này nằm quanh 1x theo cấu trúc ngành, không phải dấu hiệu rủi ro thanh khoản":
+    "Ability to pay short-term debt from current assets. Brokers fund margin loans with short-term borrowing, so about 1x is structural for the sector, not a liquidity warning",
+});
+PHRASES.push(
+  // Piotroski
+  ["so với năm trước.", "vs the previous year."], ["Đạt:", "Pass:"], ["Trượt:", "Fail:"], ["dòng tiền HĐKD dương", "operating cash flow positive"],
+  ["ROA dương", "ROA positive"], ["ROA tăng", "ROA up"], ["dòng tiền > lợi nhuận", "cash flow > profit"], ["nợ/tài sản giảm", "debt/assets down"],
+  ["thanh toán hiện hành tăng", "current ratio up"], ["không phát hành thêm cổ phiếu", "no new shares issued"], ["biên gộp tăng", "gross margin up"],
+  ["vòng quay tài sản tăng", "asset turnover up"], ["Thưởng cổ phiếu cũng bị tính là phát hành thêm", "Bonus shares also count as new issues"],
+  // DuPont
+  ["ROE cao chủ yếu được thúc đẩy bởi:", "High ROE is driven mainly by:"], ["ROE thấp, chủ yếu do:", "Low ROE, mainly because of:"],
+  ["biên lợi nhuận tốt", "good margins"], ["biên lợi nhuận thấp", "low margins"], ["quay vòng tài sản hiệu quả", "efficient asset turnover"],
+  ["hiệu suất sử dụng tài sản thấp", "low asset turnover"], ["ít dùng vay nợ nên đòn bẩy không hỗ trợ thêm cho ROE", "little debt, so leverage adds nothing to ROE"],
+  ["sử dụng nhiều vay nợ (đòn bẩy tài chính)", "heavy borrowing (financial leverage)"],
+  ["✅ Đây là dạng ROE cao bền vững — đến từ hiệu quả kinh doanh thực sự, không phải vay nợ nhiều.", "✅ This kind of high ROE is durable — real business efficiency, not heavy borrowing."],
+  ["mỗi đồng vốn bỏ ra đang sinh lời ít hơn chi phí huy động, tức là bào mòn giá trị cổ đông nếu kéo dài.", "each dong invested earns less than it costs to raise, eroding shareholder value if it lasts."],
+  // VCI event descriptions
+  ["Thay đổi địa chỉ", "Change of address"], ["Giảm niêm yết", "Delisting of"], ["Phát hành riêng lẻ", "private placement"],
+  ["Cổ tức tiền mặt", "Cash dividend"], ["Dữ liệu đã cũ — báo cáo", "Data is old — latest report"],
+  ["Mọi tỷ số bên dưới tính trên số liệu đó, không phải số hiện tại.", "Every ratio below is computed on those figures, not current ones."],
+  ["tỷ USD", "bn USD"], ["%/năm", "%/yr"], ["triệu lượt", "million visits"], ["tr lượt", "m visits"], ["nghìn DN", "k businesses"],
+  ["triệu người", "million people"], ["nghìn tỷ ₫", "trillion VND"], ["nghìn ₫", "k VND"], ["% cổ phần", "% of shares"], ["vùng xám", "grey band"],
+);
+RX.unshift(
+  [/(?<![A-Za-zÀ-ỹ])Đợt (\d+)/g, "Round $1"], [/tỉ lệ (\d)/g, "ratio $1"], [/(\d) cổ phiếu(?![A-Za-zÀ-ỹ])/g, "$1 shares"],
+  [/(\d)đ\/cp/g, "$1 VND/share"], [/(\d)đ(?![A-Za-zÀ-ỹ\/])/g, "$1₫"], [/\} tỷ(?![A-Za-zÀ-ỹ])/g, "} bn"],
+  [/(ROIC|ROE) trung bình (\d+) (?:năm|years) cao hơn (WACC|chi phí vốn chủ|cost of equity) ([\d.,]+) (?:điểm %|pts)/g, "$1 averaged over $2 years is $4 pts above $3"],
+  [/(ROIC|ROE) trung bình (\d+) (?:năm|years) thấp hơn (WACC|chi phí vốn chủ|cost of equity) ([\d.,]+) (?:điểm %|pts)/g, "$1 averaged over $2 years is $4 pts below $3"],
+  [/(ROIC|ROE) trung bình (\d+) (?:năm|years)/g, "$1 averaged over $2 years"], [/vùng (\d+–\d+%)/g, "band $1"],
+  [/Lỗ (\d+) quý gần nhất liên tiếp\./g, "Losses in each of the last $1 quarters."],
+  [/Giá mô hình dựa trên lợi nhuận (\d+) quý và bội số lịch sử, nên chưa phản ánh hết việc kinh doanh xấu đi — có thể đang quá cao so với thực tế\./g,
+   "The model price uses $1 quarters of profit and historical multiples, so it doesn't yet reflect the deterioration — it may be too high."],
+  [/công ty liên tục tạo ra giá trị thực: sinh lời ([\d.,]+)%\/năm trên vốn đầu tư, cao hơn chi phí vốn phải trả\./g,
+   "the company keeps creating real value: earning $1%/yr on invested capital, above its cost of capital."],
+  [/mỗi đồng vốn cổ đông sinh lời ([\d.,]+)%\/năm, nhiều hơn mức ([\d.,]+)% mà cổ đông đòi hỏi cho rủi ro này, nên giá trị sổ sách xứng đáng được trả cao hơn 1 lần\./g,
+   "each dong of equity earns $1%/yr, more than the $2% shareholders require for this risk, so book value deserves more than 1x."],
+  [/Năm (\d{4}) so với năm trước\./g, "$1 vs the previous year."],
+  [/(\d+) phiên:/g, "$1 sessions:"],
+);
+RX.unshift([/\} nghìn tỷ(?![A-Za-zÀ-ỹ])/g, "} trillion"], [/\} triệu(?![A-Za-zÀ-ỹ])/g, "} million"], [/\} nghìn(?![A-Za-zÀ-ỹ])/g, "} k"]);
+
+// Fifth pass: event types, ordering fixes (full templates ahead of the number
+// rules), and the valuation-method / note sentences, written against the
+// source text in js/ (whitespace already collapsed by tr()).
+Object.assign(EXACT, {
+  "Giao dịch tổ chức": "Institution trade", "Giao dịch cá nhân": "Individual trade", "Giao dịch người liên quan": "Related-party trade",
+  "Cá nhân": "Individuals", "Nước ngoài": "Foreign", "Tổ chức trong nước": "Domestic institutions",
+});
+PHRASES.push([", trung bình", ", average"], ["; chỉ có khi lợi nhuận tăng.", "; only when profit is growing."]);
+const N = "([\\d.,]+)";
+RX.unshift(
+  [/(?<![A-Za-zÀ-ỹ])Cả năm (\d{4})(?!\d)/g, "Full year $1"],
+  [new RegExp(`(ROIC|ROE) trung bình ${N} năm cao hơn (WACC|chi phí vốn chủ) ${N} điểm %`, "g"), "$1 averaged over $2 years is $4 pts above $3"],
+  [new RegExp(`(ROIC|ROE) trung bình ${N} năm thấp hơn (WACC|chi phí vốn chủ) ${N} điểm %`, "g"), "$1 averaged over $2 years is $4 pts below $3"],
+  [new RegExp(`(ROIC|ROE) trung bình ${N} năm`, "g"), "$1 averaged over $2 years"],
+  [new RegExp(`${N} điểm % so với TB (\\d+) kỳ trước`, "g"), "$1 pts vs avg of previous $2"], [/so với TB (\d+) kỳ trước/g, "vs avg of previous $1"],
+  [new RegExp(`${N} điểm %`, "g"), "$1 pts"],
+  [/Xem thêm (\d+) kỳ cũ hơn/g, "Show $1 older periods"], [/Xem thêm (\d+) giao dịch cũ hơn/g, "Show $1 older trades"],
+  [/Xem thêm (\d+) sự kiện cũ hơn/g, "Show $1 older events"], [/(\d+) kỳ báo cáo/g, "$1 reporting periods"],
+  [/Biến động (\d+) phiên đầu/g, "Move over the first $1 sessions"], [/(\d+) phiên đầu, trung bình/g, "first $1 sessions, average"],
+  [/(\d+) phiên đầu/g, "first $1 sessions"], [/(\d+) phiên trước/g, "$1 sessions before"], [/(\d+) phiên sau/g, "$1 sessions after"],
+  [/(\d+) năm trước:/g, "$1y ago:"], [/(\d+) mã cổ phiếu/g, "$1 stocks"], [/(\d+) mã · cập nhật/g, "$1 tickers · updated"],
+  [/(\d+) mã có dữ liệu định giá/g, "$1 tickers with valuation data"], [/\} mã</g, "} tickers<"],
+  [/\} triệu lượt/g, "} million visits"], [/\} triệu người/g, "} million people"],
+  [/Lợi nhuận (\d+) quý \/ vốn chủ\./g, "Profit over $1 quarters / equity."],
+  [/EBIT (\d+) quý \/ Chi phí lãi vay (\d+) quý/g, "EBIT ($1Q) / interest expense ($2Q)"],
+  [/\(Nợ vay − Tiền\) \/ EBITDA (\d+) quý gần nhất/g, "(Debt − cash) / EBITDA, last $1 quarters"],
+  [/Kỳ hạn (\d+) tháng: trung bình/g, "$1-month tenor: average"], [new RegExp(`giá ${N} × tỷ giá`, "g"), "price $1 × FX rate"],
+  [/so với trung bình (\d+) quý là/g, "vs its $1-quarter average of"],
+  [/Cổ tức tiền mặt năm gần nhất \/ vốn hoá\./g, "Latest year's cash dividends / market cap."],
+  [new RegExp(`(Thị giá|TB ước tính|Trung bình) ${N}`, "g"), (m, a, b) => ({ "Thị giá": "Market price", "TB ước tính": "Avg estimate", "Trung bình": "Average" })[a] + " " + b],
+  [/Lỗ (\d+) quý gần nhất liên tiếp\./g, "Losses in each of the last $1 quarters."],
+  [/Giá mô hình dựa trên lợi nhuận (\d+) quý và bội số lịch sử, nên chưa phản ánh hết việc kinh doanh xấu đi — có thể đang quá cao so với thực tế\./g,
+   "The model price uses $1 quarters of profit and historical multiples, so it doesn't yet reflect the deterioration — it may be too high."],
+  [new RegExp(`Giá DCF khi đổi chi phí vốn \\(hàng\\) và tăng trưởng dòng tiền (\\d+) năm \\(cột\\)\\. Ô giữa là thẻ DCF ở trên(?: \\(${N} ₫\\))?; xanh là cao hơn thị giá, đỏ là thấp hơn\\. Lệch 1 điểm % WACC thường làm giá đổi 10–20%\\.`, "g"),
+   (m, y, v) => `DCF price as the cost of capital (rows) and ${y}-year cash-flow growth (columns) change. The middle cell is the DCF card above${v ? ` (${v} ₫)` : ""}; green = above the market price, red = below. 1 pt of WACC usually moves the price 10–20%.`],
+  [new RegExp(`BVPS \\+ phần ROE vượt trội, tắt dần về 0\\. Độ dài đo từ chính doanh nghiệp: tỷ lệ số năm ROE thực sự vượt chi phí vốn chủ, trải trên khoảng 5–20 năm\\. Giữ được lợi thế lâu thì được giả định lâu hơn`, "g"),
+   "BVPS + excess ROE fading to 0. The fade length comes from the company itself: the share of years its ROE actually beat the cost of equity, spread over 5–20 years. A lasting edge is assumed to last longer"],
+  [new RegExp(`\\. Vốn chủ tăng theo lợi nhuận giữ lại \\(clean surplus\\), tỷ lệ giữ lại đo được ${N}%`, "g"), ". Equity grows with retained profit (clean surplus), measured retention $1%"],
+  [new RegExp(`EPS \\(TTM\\) × P/E trung vị chính mã này từng được trả trong ${N} năm \\(mỗi phiên khớp với lợi nhuận đã công bố tại thời điểm đó\\)`, "g"),
+   "EPS (TTM) × the median P/E this ticker was paid over $1 years (each session matched to the profit published at the time)"],
+  [new RegExp(`EPS \\(TTM\\) × P/E trung vị mà ngành này thực sự được thị trường trả trong ${N} năm, thay cho mốc 15x bình quân toàn thị trường`, "g"),
+   "EPS (TTM) × the median P/E the market actually paid this sector over $1 years, instead of a flat 15x market average"],
+  [new RegExp(`Doanh thu/CP × P/S trung vị của ngành trong ${N} năm`, "g"), "Revenue per share × the sector's median P/S over $1 years"],
+  [new RegExp(`Dòng tiền hoạt động/CP × P/OCF trung vị của ngành trong ${N} năm\\. Mốc 10x đặt tay đã bỏ`, "g"),
+   "Operating cash flow per share × the sector's median P/OCF over $1 years. The hand-set 10x anchor was dropped"],
+  [new RegExp(`EBITDA × EV/EBITDA trung vị của ngành trong ${N} năm, trừ nợ ròng\\. Mốc 8x \\(và 15x cho bất động sản\\) đặt tay đã bỏ`, "g"),
+   "EBITDA × the sector's median EV/EBITDA over $1 years, less net debt. The hand-set 8x (15x for real estate) anchor was dropped"],
+  [/√\(P\/E ngành × P\/B ngành × EPS × BVPS\)\. Con số 22\.5 của Graham chính là 15 × 1\.5 — cùng hai mốc đã sai, nên nó nhận cùng một hiệu chỉnh/g,
+   "√(sector P/E × sector P/B × EPS × BVPS). Graham's 22.5 is 15 × 1.5 — the same two anchors that were wrong, so it gets the same correction"],
+  [/BVPS × \(ROE − g\) \/ \(Ke − g\): ngân hàng sinh lời trên vốn cao hơn mức cổ đông đòi hỏi thì đáng giá trên 1 lần sổ sách, thấp hơn thì dưới/g,
+   "BVPS × (ROE − g) / (Ke − g): a bank earning more on equity than shareholders require is worth more than 1x book, less if it earns less"],
+  [/BVPS × \(ROE − g\) \/ \(Ke − g\), như ngân hàng: thay cho mốc vốn chủ × 2\.0 đặt tay/g, "BVPS × (ROE − g) / (Ke − g), as for banks: instead of a hand-set equity × 2.0"],
+  [new RegExp(`BVPS × P/B trung vị của ngành trong ${N} năm, nhân với ROE của mã này so với ROE trung vị ngành — doanh nghiệp sinh lời trên vốn gấp đôi ngành thì đáng bội số sổ sách gấp đôi`, "g"),
+   "BVPS × the sector's median P/B over $1 years, scaled by this ticker's ROE against the sector median — earning twice the sector's return on equity is worth twice the book multiple"],
+  [new RegExp(`BVPS × P/B trung vị mã này từng được thị trường trả trong ${N} năm \\(mỗi phiên khớp với sổ sách đã công bố tại thời điểm đó\\)`, "g"),
+   "BVPS × the median P/B the market paid this ticker over $1 years (each session matched to the book value published at the time)"],
+  [new RegExp(`\\(P/E, P/B mã này từng được trả trong ${N} năm\\)\\. DCF, FCFE, P/OCF không dùng vì dòng tiền của ngân hàng là tiền gửi và cho vay, không phải dòng tiền tự do\\.`, "g"),
+   "(the P/E and P/B this ticker was paid over $1 years). DCF, FCFE and P/OCF are not used because a bank's cash flows are deposits and loans, not free cash flow."],
+  [/Chi phí vốn chủ là số ước lượng, và công thức chia cho \(Ke − g\) chỉ khoảng 0\.06–0\.10, nên lệch 1 điểm % ở Ke làm kết quả lệch 15–20%\. Riêng thẻ/g,
+   "The cost of equity is an estimate, and the formula divides by (Ke − g) of only about 0.06–0.10, so 1 pt off in Ke moves the result 15–20%. For this ticker the"],
+  [/của mã này dao động/g, "card ranges"], [/khi Ke ±1 điểm %\./g, "when Ke moves ±1 pt."],
+  [new RegExp(`dự phòng rủi ro cho vay của mã này đủ bù ${N} năm xoá nợ thực tế \\(trung vị ngành ${N} năm\\)\\.`, "g"),
+   "this bank's loan-loss reserves cover $1 years of actual write-offs (sector median $2 years)."],
+  [/Không thấp hơn ngành, nên sổ sách giữ nguyên\. Số nợ xấu nằm trong thuyết minh BCTC, nguồn dữ liệu không có, nên đây là thước đo thay thế\./g,
+   "Not below the sector, so book value is left as is. Bad-debt figures sit in the notes to the statements, which the data source lacks, so this is a stand-in."],
+  [/Ngân hàng, chứng khoán và bảo hiểm được so bằng ROE với chi phí vốn chủ \(CAPM: ([^)]*?), β co về 1 theo Blume\) thay vì ROIC với WACC — lãi phải trả cho người gửi tiền là chi phí đầu vào của nghề, đã nằm trong lợi nhuận, nên không tính thêm một lần nữa qua WACC\. Đây cũng chính là mốc dùng để định giá ngân hàng ở bảng bên\./g,
+   "Banks, brokers and insurers are compared by ROE against the cost of equity (CAPM: $1, β shrunk toward 1 per Blume) rather than ROIC against WACC — interest paid to depositors is a cost of the trade, already in profit, so it isn't counted again through WACC. It is also the anchor used to value banks in the next table."],
+  [/Mô hình định giá \(trung bình các phương pháp, kẹp ngoại lai, điều chỉnh theo ngành\) và điểm chất lượng nội bộ\. Mã này chưa có chuyên viên phân tích nào công bố giá mục tiêu\./g,
+   "Valuation model (average of the methods, outliers clipped, sector-adjusted) and the internal quality score. No analyst has published a target price for this ticker."],
+  [/Khả năng trả nợ ngắn hạn bằng tài sản lưu động\. Công ty chứng khoán tài trợ dư nợ margin bằng vay ngắn hạn nên tỷ lệ này nằm quanh (\S+) theo cấu trúc ngành, không phải dấu hiệu rủi ro thanh khoản/g,
+   "Ability to pay short-term debt from current assets. Brokers fund margin loans with short-term borrowing, so about $1 is structural for the sector, not a liquidity warning"],
+  [/Kiểm tra chất lượng dữ liệu ngày/g, "Data quality check of"], [/thiếu BCTC quý mới/g, "missing the new quarterly report"],
+  [/bước giá chưa điều chỉnh/g, "unadjusted price step"], [/giá chưa cập nhật/g, "stale price"],
+  [/6\.56 × VLĐ\/TS \+ 3\.26 × LN giữ lại\/TS \+ 6\.72 × EBIT\/TS \+ 1\.05 × Vốn chủ\/Nợ phải trả/g,
+   "6.56 × working capital/TA + 3.26 × retained earnings/TA + 6.72 × EBIT/TA + 1.05 × equity/liabilities"],
+  [/Lợi nhuận vượt thị trường = giá cổ phiếu thay đổi trừ VNINDEX thay đổi trong cùng các phiên\./g,
+   "Excess return = the stock's change minus VNINDEX's change over the same sessions."],
+);
+RX.unshift([/Phiên phản ứng là phiên đầu tiên giao dịch được sau khi báo cáo lên hệ thống \(báo cáo ra sau 15h tính từ phiên hôm sau\); ngày lấy theo thời điểm báo cáo xuất hiện trên VCI, có thể muộn hơn công bố trên sở vài giờ\. "5 phiên trước" cho thấy giá đã chạy trước tin hay chưa\. Quá khứ không bảo đảm phản ứng lần sau\./g,
+  "The reaction session is the first one tradable after the report reaches the system (a report after 15:00 counts from the next session); the date is when the report appeared on VCI, which can be a few hours after the exchange filing. \"5 sessions before\" shows whether the price moved ahead of the news. The past doesn't guarantee the next reaction."]);
+
+// Sixth pass: signed numbers, split sentences, plot labels.
+{
+  const S = "([+−-]?[\\d.,]+)";
+  RX.push(
+    [new RegExp(`(ROIC|ROE) trung bình ([\\d.,]+) năm (cao hơn|thấp hơn|xấp xỉ) (WACC|chi phí vốn chủ) ${S} điểm %`, "g"),
+     (m, k, n, d, b, g) => `${k} averaged over ${n} years is ${d === "xấp xỉ" ? "about" : g.replace(/^[+−-]/, "") + " pts " + (d === "cao hơn" ? "above" : "below")} ${b === "WACC" ? "WACC" : "the cost of equity"}`],
+    [/(ROIC|ROE) trung bình ([\d.,]+) năm xấp xỉ (WACC|chi phí vốn chủ) \(chênh ([+−-]?[\d.,]+) điểm %\)/g,
+     (m, k, n, b, g) => `${k} averaged over ${n} years is about ${b === "WACC" ? "WACC" : "the cost of equity"} (gap ${g} pts)`],
+    [/vừa đủ bù rủi ro cho cổ đông/g, "just covers shareholders' risk"], [/công ty hòa vốn về mặt tạo giá trị/g, "the company breaks even on value creation"],
+    [/(Cổ tức cổ phiếu|Quyền mua|Cổ phiếu thưởng) ([\d.,]+%)/g, (m, k, v) => ({ "Cổ tức cổ phiếu": "Stock dividend", "Quyền mua": "Rights issue", "Cổ phiếu thưởng": "Bonus shares" })[k] + " " + v],
+    [/ (mua|bán) ([\d.,]+(?: (?:tr|triệu|nghìn))?) cp \(/g, (m, d, q) => ` ${d === "mua" ? "buys" : "sells"} ${q} shares (`],
+    [/(\d+) phiên sau, theo lợi nhuận/g, "$1 sessions after, by profit"], [/giá (\S+) × tỷ giá/g, "price $1 × FX rate"],
+    [/Khả năng trả nợ ngắn hạn bằng tài sản lưu động\. Công ty chứng khoán tài trợ dư nợ margin bằng vay ngắn hạn nên tỷ lệ này nằm quanh (\S+) theo cấu trúc ngành, không phải dấu hiệu yếu/g,
+     "Ability to pay short-term debt from current assets. Brokers fund margin loans with short-term borrowing, so about $1 is structural for the sector, not a weakness"],
+  );
+}
+RX.push(
+  [/(\d+) kỳ báo cáo/g, "$1 reporting periods"], [/trung bình độ lớn, (\d+)/g, "average size, $1"],
+  [/(\d+) lượt(?![A-Za-zÀ-ỹ])/g, "$1 visits"], [/(\d)m lượt/g, "$1m visits"],
+  [/xoá nợ thực tế \(trung vị ngành ([\d.,]+) năm\)\./g, "of actual write-offs (sector median $1 years)."],
+);

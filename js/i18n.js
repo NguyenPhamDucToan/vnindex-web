@@ -13,6 +13,8 @@ import { EXACT, PHRASES, RX } from "./i18n-en.js";
 
 const KEY = "lang";
 export const lang = (() => { try { return localStorage.getItem(KEY) === "en" ? "en" : "vi"; } catch { return "vi"; } })();
+// Number locale: 1,234.5 in English, 1.234,5 in Vietnamese (dates keep dd/mm/yyyy either way).
+export const NUM_LOCALE = lang === "en" ? "en-US" : "vi-VN";
 
 const VI = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i;
 const norm = (s) => s.replace(/\s+/g, " ").trim();
@@ -20,8 +22,20 @@ const norm = (s) => s.replace(/\s+/g, " ").trim();
 // Phrases as one regex per entry, longest first so "so với cùng kỳ năm trước"
 // wins over "so với". Word-ish boundaries: not inside another Vietnamese word.
 const L = "A-Za-zÀ-ỹ";
+// The boundary checks apply only at a phrase's letter ends: "; chỉ có khi…"
+// follows a letter ("growth; …") and must still match.
+const esc = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const isL = (c) => new RegExp(`[${L}]`).test(c);
 const PH = PHRASES.filter(Array.isArray).sort((a, b) => b[0].length - a[0].length)
-  .map(([vi, en]) => [new RegExp(`(?<![${L}])${vi.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![${L}])`, "g"), en]);
+  .map(([vi, en]) => [new RegExp(`${isL(vi[0]) ? `(?<![${L}])` : ""}${esc(vi)}${isL(vi.at(-1)) ? `(?![${L}])` : ""}`, "g"), en]);
+// Most specific first: a whole-sentence template must run before the short
+// number rules ("1 điểm %" -> "1 pts") rewrite the text it was written against.
+// Specificity = how much literal text a pattern requires; boundary checks and
+// character classes don't count ("(\d) phiên(?![…])" is less specific than
+// "(\d+) phiên đầu" although its source is longer).
+const literal = (src) => src.replace(/\(\?<?[!=](?:[^()]|\([^()]*\))*\)/g, "").replace(/\[[^\]]*\]/g, "")
+  .replace(/\\./g, "x").replace(/[()?:+*|{}^$.\d]/g, "").length;
+const RXS = [...RX].sort((a, b) => literal(b[0].source) - literal(a[0].source));
 
 // Whole-string match, keeping the original's leading/trailing whitespace
 // (inline text nodes rely on it for spacing).
@@ -31,23 +45,57 @@ function exact(s) {
   return s.match(/^\s*/)[0] + EXACT[k] + s.match(/\s*$/)[0];
 }
 
+// Pieces between Plotly placeholders, HTML tags and separators: a hover
+// template "Giao thông %{x}: %{y} %" or "LNST so cùng kỳ: 12%<br>5 phiên: …"
+// is a few known labels glued together, so each piece gets an exact lookup.
+const SEP = /(%\{[^}]*\}|<[^>]*>|\s·\s|:\s|\s—\s|\s→\s)/;
+function bySegments(s) {
+  const parts = s.split(SEP);
+  if (parts.length < 2) return null;
+  let hit = false;
+  const out = parts.map((p, i) => {
+    if (i % 2 || !VI.test(p)) return p;
+    const e = exact(p);
+    if (e !== null) { hit = true; return e; }
+    return p;
+  });
+  return hit ? out.join("") : null;
+}
+
+// "Thành viên HĐQT/Tổng Giám đốc/Phụ trách CBTT": titles joined by "/" with
+// no spaces (ratio labels like "Nợ / Tổng tài sản" have spaces and are left).
+function bySlash(s) {
+  const k = norm(s);
+  if (!/\S\/\S/.test(k) || / \/ /.test(k)) return null;
+  const parts = k.split("/").map((p) => EXACT[p]);
+  return parts.every((p) => p !== undefined) ? parts.join(" / ") : null;
+}
+
 export function tr(s) {
   if (lang !== "en" || typeof s !== "string" || !VI.test(s)) return s;
-  const e = exact(s);
+  const e = exact(s) ?? bySlash(s);
   if (e !== null) return e;
-  let out = s;
+  // number-carrying sentence templates first (they are written against the
+  // Vietnamese text), then known labels piece by piece, then phrases, then
+  // the number patterns once more for what the phrases left.
+  // Whitespace collapsed (as the browser renders it anyway): source
+  // templates wrap long sentences across lines, which no pattern would match.
+  let out = s.replace(/\s+/g, " ");
+  for (const [re, en] of RXS) out = out.replace(re, en);
+  if (!VI.test(out)) return out;
+  out = bySegments(out) ?? out;
   for (const [re, en] of PH) {
     if (!VI.test(out)) break;
     out = out.replace(re, en);
   }
-  for (const [re, en] of RX) out = out.replace(re, en);
+  for (const [re, en] of RXS) out = out.replace(re, en);
   return out;
 }
 
 const skip = (node) => {
   const e = node.nodeType === 1 ? node : node.parentElement;
-  // company / holder / insider names and news headlines are source data
-  return !e || e.closest("[data-notr], .sh-name, .sx-nm, .ins-nm, .ne-list, svg, script, style, textarea, input[type=text]");
+  // company / holder / insider names are source data (news headlines carry data-notr)
+  return !e || e.closest("[data-notr], .sh-name, .sx-nm, .ins-nm, svg, script, style, textarea, input[type=text]");
 };
 
 function trText(n) {
@@ -80,11 +128,11 @@ function trTree(root) {
 // titles, annotations, category labels) before it is drawn.
 const PLOT_KEYS = new Set(["name", "hovertemplate", "text", "title", "ticktext", "texttemplate", "legendgrouptitle", "ticksuffix", "tickprefix", "suffix", "prefix"]);
 function deep(v, key) {
-  if (typeof v === "string") return PLOT_KEYS.has(key) || key === "x" || key === "y" || key === "labels" ? tr(v) : v;
+  if (typeof v === "string") return PLOT_KEYS.has(key) || key === "x" || key === "y" || key === "labels" || key === "customdata" ? tr(v) : v;
   if (Array.isArray(v)) {
     // category axes and pie/treemap labels are arrays of strings
-    return (key === "x" || key === "y" || key === "labels" || key === "text" || key === "ticktext" || key === "parents" || key === "ids")
-      ? v.map((x) => (typeof x === "string" ? tr(x) : x)) : v.map((x) => deep(x, key));
+    return (key === "x" || key === "y" || key === "labels" || key === "text" || key === "ticktext" || key === "parents" || key === "ids" || key === "customdata")
+      ? v.map((x) => (typeof x === "string" ? tr(x) : deep(x, key))) : v.map((x) => deep(x, key));
   }
   if (v && typeof v === "object" && !(v instanceof Date) && !ArrayBuffer.isView(v)) {
     const o = {};

@@ -3,6 +3,7 @@
 // grouping lives here so adding an indicator is a one-line change.
 import { loadMacro, loadBankRates, loadCommodities } from "./data.js";
 import * as F from "./format.js";
+import { NUM_LOCALE } from "./i18n.js";
 
 const el = (h) => { const t = document.createElement("template"); t.innerHTML = h.trim(); return t.content.firstElementChild; };
 const FONT = { family: "Fira Code, monospace", size: 9, color: "#0a121d" };
@@ -184,7 +185,7 @@ function macroPulse(macro, box, sum) {
       txt = `${t.d >= 0 ? "+" : ""}${t.d.toFixed(t.pct ? 1 : Math.max(dp, 1))}${t.pct ? "%" : unit.trim() === "%" ? " điểm %" : unit} so với ${t.ref}`;
     }
     const per = how === "d63" ? String(cur.period).slice(0, 10) : String(cur.period).slice(0, 7);
-    const val = cur.value.toLocaleString("vi-VN", { minimumFractionDigits: dp, maximumFractionDigits: dp });
+    const val = cur.value.toLocaleString(NUM_LOCALE, { minimumFractionDigits: dp, maximumFractionDigits: dp });
     box.appendChild(el(`<div class="mp-tile ${cls}">
       <div class="mp-k">${label}</div>
       <div class="mp-v">${val}${unit} <span class="mp-a ${cls}">${arrow}</span></div>
