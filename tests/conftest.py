@@ -14,3 +14,15 @@ SIBLING = ROOT.parent / "vnindex-valuation"
 for p in (str(ROOT), str(SIBLING)):
     if p not in sys.path:
         sys.path.insert(0, p)
+
+
+import pytest  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _no_committed_vci_multiples(monkeypatch):
+    """Tests build their own price/financial history; the committed
+    data/own_multiples.json (real tickers such as AAA) must not overlay it."""
+    import model_valuation as mv
+    monkeypatch.setattr(mv, "_load_vci_multiples", lambda: {})
+    monkeypatch.setattr(mv, "_HIST", None)
