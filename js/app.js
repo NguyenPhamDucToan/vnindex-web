@@ -1707,6 +1707,75 @@ async function renderMarket() {
     }, { displayModeBar: false, responsive: true });
   }
 
+  // ── 3b. Who is moving money: foreign investors and the brokers' own desks
+  //        (tự doanh), cumulative over the year against VNINDEX, period sums,
+  //        and the tickers each side bought / sold most.
+  const pr = market.prop || [];
+  if (ff.length > 20 || pr.length > 20) {
+    const bn = (v) => v / 1e9;
+    const sgn = (v) => `${v >= 0 ? "+" : "−"}${Math.abs(v).toLocaleString("vi-VN", { maximumFractionDigits: 0 })}`;
+    const tcls = (v) => (v >= 0 ? "gain" : "loss");
+    const sumLast = (rows, n) => rows.slice(-n).reduce((a, r) => a + bn(r.net_val || 0), 0);
+    const W = [[5, "5 phiên"], [20, "1 tháng"], [60, "3 tháng"], [250, "1 năm"]];
+    const row = (name, rows) => `<tr><td><b>${name}</b></td>${W.map(([n]) => {
+      const v = sumLast(rows, n); return `<td class="num ${tcls(v)}">${rows.length ? sgn(v) : "—"}</td>`; }).join("")}</tr>`;
+    const c = el(`<div class="card">
+      <h2 class="sec-h">Dòng tiền khối ngoại & tự doanh</h2>
+      <div class="chart-sub">Mua-bán ròng cộng dồn (tỷ VND) so với VN-Index</div>
+      <div id="flow-cum"></div>
+      <table class="screen flow-sum"><thead><tr><th>Mua-bán ròng (tỷ)</th>${W.map(([, l]) => `<th class="num">${l}</th>`).join("")}</tr></thead>
+        <tbody>${row("Khối ngoại", ff)}${row("Tự doanh CTCK", pr)}</tbody></table>
+      <div class="range-row flow-win"><button class="range-btn active" data-n="5">5 phiên</button><button class="range-btn" data-n="20">20 phiên</button></div>
+      <div class="flow-lead"></div>
+      <div class="vb-note">Tự doanh = công ty chứng khoán mua bán bằng tiền của chính mình. Số tự doanh công bố
+        trễ một phiên so với giá. Bấm mã để xem chi tiết. Nguồn: VNDirect.</div></div>`);
+    root.appendChild(c);
+    const cum = (rows) => { let a = 0; return rows.map((r) => (a += bn(r.net_val || 0))); };
+    const start = [ff[0]?.date, pr[0]?.date].filter(Boolean).sort().pop();
+    const vni = (market.vnindex || []).filter((p) => p.date >= start);
+    window.Plotly.react($("#flow-cum", c), [
+      { x: ff.map((r) => r.date), y: cum(ff), name: "Khối ngoại", type: "scatter", mode: "lines", line: { color: "#2563eb", width: 2 },
+        hovertemplate: "Khối ngoại: %{y:,.0f} tỷ<extra></extra>" },
+      { x: pr.map((r) => r.date), y: cum(pr), name: "Tự doanh", type: "scatter", mode: "lines", line: { color: "#ea580c", width: 2 },
+        hovertemplate: "Tự doanh: %{y:,.0f} tỷ<extra></extra>" },
+      { x: vni.map((p) => p.date), y: vni.map((p) => p.close), name: "VN-Index", yaxis: "y2", type: "scatter", mode: "lines",
+        line: { color: "#94a3b8", width: 1.5, dash: "dot" }, hovertemplate: "VN-Index: %{y:,.0f}<extra></extra>" },
+    ], {
+      height: 320, dragmode: false, margin: { l: 60, r: 50, t: 8, b: 30 }, hovermode: "x unified",
+      legend: { orientation: "h", y: 1.12 },
+      paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+      font: { family: "Fira Code, monospace", size: 10, color: "#0a121d" },
+      xaxis: { showgrid: false, tickfont: { size: 9 } },
+      yaxis: { gridcolor: "rgba(148,163,184,0.22)", tickfont: { size: 9 }, zerolinecolor: "#cbd5e1",
+               title: { text: "Cộng dồn (tỷ VND)", font: { size: 10 } } },
+      yaxis2: { overlaying: "y", side: "right", showgrid: false, tickfont: { size: 9 } },
+    }, { displayModeBar: false, responsive: true });
+
+    const lead = market.leaders || {};
+    const list = (items) => items && items.length
+      ? items.map((x) => `<li><a href="?ticker=${x.ticker}" data-t="${x.ticker}">${x.ticker}</a>
+          <span class="${tcls(x.net_val)}">${sgn(bn(x.net_val))}</span></li>`).join("")
+      : `<li class="muted">—</li>`;
+    const drawLead = (n) => {
+      const box = $(".flow-lead", c);
+      const blk = (kind, label) => {
+        const L = lead[`${kind}_${n}`];
+        if (!L) return "";
+        return `<div class="fl-col"><div class="fl-h">${label} <span class="muted">${L.from.slice(5).split("-").reverse().join("/")}–${L.to.slice(5).split("-").reverse().join("/")}</span></div>
+          <div class="fl-two"><div><div class="fl-s gain">Mua ròng nhiều nhất</div><ol>${list(L.buy)}</ol></div>
+          <div><div class="fl-s loss">Bán ròng nhiều nhất</div><ol>${list(L.sell)}</ol></div></div></div>`;
+      };
+      box.innerHTML = blk("foreign", "Khối ngoại") + blk("prop", "Tự doanh");
+      box.querySelectorAll("a[data-t]").forEach((a) => a.addEventListener("click", (e) => {
+        e.preventDefault(); selectTicker(a.dataset.t); }));
+    };
+    c.querySelectorAll(".flow-win .range-btn").forEach((b) => b.addEventListener("click", () => {
+      c.querySelectorAll(".flow-win .range-btn").forEach((x) => x.classList.toggle("active", x === b));
+      drawLead(Number(b.dataset.n));
+    }));
+    if (Object.keys(lead).length) drawLead(5); else $(".flow-win", c).remove();
+  }
+
   // ── 4. Movers. "Thanh khoản tốt" = drawn from the 20 most-traded names, as
   //       in the original, so a 7% jump on a barely-traded ticker can't top it.
   const liquid = [...withChg].filter((r) => F.isNum(r.vol)).sort((a, b) => b.vol - a.vol).slice(0, 20);

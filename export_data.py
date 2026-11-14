@@ -138,7 +138,7 @@ def fetch_prop(code: str, sessions: int = 30) -> "list[dict] | None":
     try:
         start = (date.today() - timedelta(days=sessions * 3 + 20)).strftime("%Y-%m-%d")
         r = requests.get("https://api-finfo.vndirect.com.vn/v4/proprietary_trading"
-                         f"?q=code:{code}~date:gte:{start}&size=200&sort=date:asc",
+                         f"?q=code:{code}~date:gte:{start}&size={sessions + 10}&sort=date:desc",
                          timeout=12, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json",
                                               "Referer": "https://dstock.vndirect.com.vn/"})
         if r.status_code != 200:
@@ -154,9 +154,9 @@ def fetch_prop(code: str, sessions: int = 30) -> "list[dict] | None":
             # share of the session's matched value, as fractions
             "buy_pct": _clean(float(d.get("buyingValPct") or 0)),
             "sell_pct": _clean(float(d.get("sellingValPct") or 0)),
-        } for d in r.json().get("data", [])]
+        } for d in reversed(r.json().get("data", [])[:sessions])]
         _prop_fails = 0
-        return rows[-sessions:]
+        return rows
     except Exception as e:
         _prop_fails += 1
         if _prop_fails == _FOREIGN_MAX_FAILS:
@@ -200,14 +200,15 @@ def fetch_foreign(code: str, sessions: int = 30) -> "list[dict] | None":
     try:
         start = (date.today() - timedelta(days=sessions * 3 + 20)).strftime("%Y-%m-%d")
         url = ("https://api-finfo.vndirect.com.vn/v4/foreigns"
-               f"?q=code:{code}~tradingDate:gte:{start}&size=200&sort=tradingDate:asc")
+               f"?q=code:{code}~tradingDate:gte:{start}&size={sessions + 10}&sort=tradingDate:desc")
         r = requests.get(url, timeout=12, headers={
             "User-Agent": "Mozilla/5.0", "Accept": "application/json",
             "Referer": "https://dstock.vndirect.com.vn/"})
         if r.status_code != 200:
             raise RuntimeError(f"HTTP {r.status_code}")
         rows = []
-        for d in r.json().get("data", [])[-sessions:]:
+        # Fetched newest first so a long window still reaches today; flip to oldest first.
+        for d in reversed(r.json().get("data", [])[:sessions]):
             rows.append({
                 "date": str(d.get("tradingDate")),
                 "net_val": _clean(float(d.get("netVal") or 0)),
@@ -226,6 +227,44 @@ def fetch_foreign(code: str, sessions: int = 30) -> "list[dict] | None":
                   f"(last: {e}); keeping committed foreign data for the rest of the run",
                   flush=True)
         return None
+
+
+def _read_json(path: Path):
+    """Parsed file, or None when it is missing or unreadable."""
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def flow_leaders(ticker_dir: Path, market: dict, top: int = 10) -> dict:
+    """Tickers the foreign investors / proprietary desks bought and sold most
+    (net, VND) over the last 5 and 20 sessions, summed from the per-ticker
+    `foreign` / `prop` blocks already written. Windows are the market's own
+    last session dates, so a ticker that didn't trade simply adds nothing."""
+    out = {}
+    blocks = {}
+    for f in ticker_dir.glob("*.json"):
+        d = _read_json(f) or {}
+        blocks[f.stem] = {"foreign": d.get("foreign") or [], "prop": d.get("prop") or []}
+    for kind in ("foreign", "prop"):
+        dates = [r["date"] for r in market.get(kind) or []]
+        for n in (5, 20):
+            win = set(dates[-n:])
+            if not win:
+                continue
+            net = {}
+            for t, b in blocks.items():
+                v = sum(r.get("net_val") or 0 for r in b[kind] if r.get("date") in win)
+                if abs(v) >= 5e8:          # under half a billion VND is noise for a top-10
+                    net[t] = v
+            ranked = sorted(net.items(), key=lambda kv: kv[1])
+            out[f"{kind}_{n}"] = {
+                "from": min(win), "to": max(win),
+                "buy": [{"ticker": t, "net_val": _clean(v)} for t, v in ranked[::-1][:top] if v > 0],
+                "sell": [{"ticker": t, "net_val": _clean(v)} for t, v in ranked[:top] if v < 0],
+            }
+    return out
 
 
 def load_vnindex() -> "pd.Series | None":
@@ -673,7 +712,13 @@ def main() -> None:
     # The VNINDEX series is already in hand from the beta calculation; the
     # market view needs it as a chart, and "VNINDEX" is also a valid code for
     # the VNDirect foreign endpoint (whole-HOSE net flow).
-    market = {"vnindex": [], "foreign": fetch_foreign("VNINDEX", sessions=30) or []}
+    # A year of sessions for the cumulative lines; the bar chart shows the last 15.
+    # A failed call keeps the committed file's series rather than shipping none.
+    _old_market = _read_json(OUT / "market.json") or {}
+    market = {"vnindex": [],
+              "foreign": fetch_foreign("VNINDEX", sessions=250) or _old_market.get("foreign") or [],
+              "prop": fetch_prop("VNINDEX", sessions=250) or _old_market.get("prop") or []}
+    market["leaders"] = flow_leaders(OUT / "ticker", market)
     if vni is not None:
         market["vnindex"] = [{"date": str(d), "close": _clean(float(v))}
                              for d, v in vni.items() if v == v]
