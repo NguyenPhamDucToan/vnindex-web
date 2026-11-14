@@ -117,7 +117,9 @@ function tally(macro, sec) {
   const rs = (DRIVERS[sec] || []).map(([k, dir]) => readDriver(macro, k, dir)).filter(Boolean);
   if (!rs.length) return null;
   const up = rs.filter((r) => r.cls === "gain").length, down = rs.filter((r) => r.cls === "loss").length;
-  return { n: rs.length, up, down, tone: up > down ? "gain" : down > up ? "loss" : "flat" };
+  return { n: rs.length, up, down, tone: up > down ? "gain" : down > up ? "loss" : "flat",
+           // helping first, then flat, then hurting: the dot row reads left to right
+           dots: [...rs.map((r) => r.cls)].sort((a, b) => ["gain", "flat", "loss"].indexOf(a) - ["gain", "flat", "loss"].indexOf(b)) };
 }
 
 function tallyText(t) {
@@ -217,16 +219,32 @@ export async function sectorMacroCard(sectors) {
   const banks = ((await loadBankRates().catch(() => null)) || {}).banks || null;
   const names = sectors.filter((s) => DRIVERS[s] && tally(macro, s));
   if (!names.length) return null;
-  // One chip per sector: how many of its drivers currently help it. Best
-  // first, so the row itself reads as "where the macro wind is behind you".
+  // Sectors in three labelled groups by how the macro drivers lean, each a
+  // grid of equal tiles: name + one dot per driver (filled green = helping,
+  // filled red = hurting, hollow = flat), so the count reads without colour.
   const T = Object.fromEntries(names.map((s) => [s, tally(macro, s)]));
-  const order = [...names].sort((a, b) => (T[b].up - T[b].down) / T[b].n - (T[a].up - T[a].down) / T[a].n);
+  const GROUPS = [
+    ["Vĩ mô thuận hoàn toàn", (t) => t.up === t.n],
+    ["Thuận một phần", (t) => t.up > t.down && t.up < t.n],
+    ["Lẫn lộn hoặc bất lợi", (t) => t.up <= t.down],
+  ];
+  const DOT = { gain: "●", loss: "●", flat: "○" };
+  const LBL = { gain: "có lợi", loss: "bất lợi", flat: "đi ngang" };
+  const tile = (s) => `<button type="button" class="sm-chip" data-s="${s}" title="${s}"
+      aria-label="${s}: ${T[s].dots.map((c) => LBL[c]).join(", ")}">
+      <span class="sm-cn">${s}</span>
+      <span class="sm-dots" aria-hidden="true">${T[s].dots.map((c) => `<i class="${c}">${DOT[c]}</i>`).join("")}</span></button>`;
+  const groupsHtml = GROUPS.map(([label, test]) => {
+    const list = names.filter((s) => test(T[s]));
+    return list.length ? `<div class="sm-grp"><div class="sm-gh">${label} <span>${list.length}</span></div>
+      <div class="sm-chips">${list.map(tile).join("")}</div></div>` : "";
+  }).join("");
   const card = el(`<div class="card" id="sector-macro">
     <h2 class="sec-h">Vĩ mô tác động tới ngành</h2>
-    <div class="vb-note">Số trên mỗi ngành = bao nhiêu chỉ báo vĩ mô của ngành đó đang có lợi.
-      <span class="gain">Xanh</span> = vĩ mô đang thuận, <span class="loss">đỏ</span> = đang ngược. Bấm một ngành để xem chi tiết.</div>
-    <div class="sm-chips">${order.map((s) => `<button type="button" class="sm-chip ${T[s].tone}" data-s="${s}">
-      ${s} <b>${T[s].up}/${T[s].n}</b></button>`).join("")}</div>
+    <div class="vb-note">Mỗi chấm là một chỉ báo vĩ mô của ngành:
+      <span class="gain">●</span> có lợi, <span class="loss">●</span> bất lợi, <span class="sm-fk">○</span> đi ngang.
+      Bấm một ngành để xem chi tiết.</div>
+    ${groupsHtml}
     <div class="sm-sum"></div>
     <div class="sm-grid"></div>
     <div class="vb-note">Mỗi biểu đồ là một chỉ báo vĩ mô ảnh hưởng tới ngành, 3 năm gần nhất. ${NOTE}</div></div>`);
