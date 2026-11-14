@@ -16,3 +16,6 @@ backfill.log
 server.log
 
 chain.log
+
+# private model scorecard (model_track.py eval) -- never commit, the repo is public
+data/model_eval.json
