@@ -91,66 +91,136 @@ const DRIVERS = {
     ["exchange_rate", -1, "Nguyên liệu thuốc phần lớn nhập khẩu."]],
 };
 
+// One driver's reading: the latest value and whether its recent trend helps
+// (+1) or hurts (-1) the sector; cls "flat" when it is flat or too new to say.
+function readDriver(macro, key, dir) {
+  const info = SERIES_INFO[key];
+  const pts = (macro[key] || []).filter((p) => p.value !== null && Number.isFinite(p.value));
+  if (!info || !pts.length) return null;
+  const t = pulseTrend(pts, info.how);
+  const last = pts[pts.length - 1];
+  let cls = "flat", word = "đi ngang / chưa đủ dữ liệu";
+  if (t) {
+    const eps = t.pct ? 0.3 : Math.max(0.05, Math.abs(last.value) * 0.01);
+    if (Math.abs(t.d) >= eps) {
+      const good = (t.d > 0) === (dir > 0);
+      cls = good ? "gain" : "loss";
+      word = `${t.d > 0 ? "▲ tăng" : "▼ giảm"} (${t.d >= 0 ? "+" : ""}${t.d.toFixed(1)}${t.pct ? "%" : ""} so với ${t.ref})
+        → ${good ? "có lợi" : "bất lợi"} cho ngành`;
+    }
+  }
+  return { info, pts, last, cls, word };
+}
+
+// "2/3 chỉ báo có lợi, 1 bất lợi" for a sector, or null if it has no drivers.
+function tally(macro, sec) {
+  const rs = (DRIVERS[sec] || []).map(([k, dir]) => readDriver(macro, k, dir)).filter(Boolean);
+  if (!rs.length) return null;
+  const up = rs.filter((r) => r.cls === "gain").length, down = rs.filter((r) => r.cls === "loss").length;
+  return { n: rs.length, up, down, tone: up > down ? "gain" : down > up ? "loss" : "flat" };
+}
+
+function tallyText(t) {
+  return `<b class="${t.tone}">${t.up}/${t.n}</b> chỉ báo vĩ mô đang có lợi cho ngành`
+    + (t.down ? `, <b class="loss">${t.down}</b> bất lợi` : "");
+}
+
+function drawTiles(grid, macro, sec) {
+  grid.innerHTML = "";
+  for (const [key, dir, why] of DRIVERS[sec] || []) {
+    const r = readDriver(macro, key, dir);
+    if (!r) continue;
+    const { info, pts, last, cls, word } = r;
+    const per = info.how === "d63" ? String(last.period).slice(0, 10) : String(last.period).slice(0, 7);
+    const box = el(`<div class="sm-tile ${cls}">
+      <div class="sm-h">${info.label} <span class="sm-dir">${dir > 0 ? "tăng = tốt cho ngành" : "tăng = xấu cho ngành"}</span></div>
+      <div class="sm-v">${last.value.toLocaleString("vi-VN", { maximumFractionDigits: info.dp })}${info.unit}
+        <span class="sm-p">${per}</span></div>
+      <div class="sm-t ${cls}">${word}</div>
+      <div class="sm-c"></div>
+      <div class="sm-w">${why}</div></div>`);
+    grid.appendChild(box);
+    if (pts.length < 2) { box.querySelector(".sm-c").remove(); continue; }   // one reading: no chart yet
+    const cut = new Date(last.period); cut.setFullYear(cut.getFullYear() - 3);
+    const pp = pts.filter((p) => new Date(p.period) >= cut);
+    const bar = info.how !== "d63" && pp.length < 60;
+    window.Plotly.react(box.querySelector(".sm-c"), [{
+      x: pp.map((p) => p.period), y: pp.map((p) => p.value), type: bar ? "bar" : "scatter",
+      mode: bar ? undefined : "lines", marker: { color: "#2563eb" }, line: { color: "#2563eb", width: 1.5 },
+      hovertemplate: `%{x|%m/%Y}: %{y:,.2f}${info.unit}<extra></extra>`,
+    }], {
+      height: 150, margin: { l: 40, r: 6, t: 4, b: 22 }, dragmode: false, showlegend: false,
+      paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+      font: { family: "Fira Code, monospace", size: 9, color: "#0a121d" },
+      xaxis: { showgrid: false, tickfont: { size: 8 } },
+      yaxis: { gridcolor: "rgba(148,163,184,0.22)", tickfont: { size: 8 }, zerolinecolor: "#cbd5e1" },
+    }, { displayModeBar: false, responsive: true });
+  }
+}
+
+const NOTE = `<span class="gain">Xanh</span> = xu hướng gần đây có lợi cho ngành, <span class="loss">đỏ</span> = bất lợi
+  (đã tính chiều: ví dụ USD tăng giá có lợi cho thủy sản nhưng bất lợi cho bán buôn hàng nhập).
+  Cách tính xu hướng như thẻ "Bức tranh vĩ mô" ở trang Vĩ mô.`;
+
+// The sector page's card, kept so the stock page can open it on one sector.
+let sectorCard = null;
+
 export async function sectorMacroCard(sectors) {
   const macro = await loadMacro();
   const names = sectors.filter((s) => DRIVERS[s]);
   if (!names.length) return null;
-  const card = el(`<div class="card">
+  const card = el(`<div class="card" id="sector-macro">
     <h2 class="sec-h">Vĩ mô tác động tới ngành</h2>
     <div class="sel-lab">Chọn ngành:</div>
     <select class="sm-sel">${names.map((s) => `<option>${s}</option>`).join("")}</select>
+    <div class="sm-sum"></div>
     <div class="sm-grid"></div>
-    <div class="vb-note">Mỗi biểu đồ là một chỉ báo vĩ mô ảnh hưởng tới ngành, 3 năm gần nhất.
-      <span class="gain">Xanh</span> = xu hướng gần đây có lợi cho ngành, <span class="loss">đỏ</span> = bất lợi
-      (đã tính chiều: ví dụ USD tăng giá có lợi cho thủy sản nhưng bất lợi cho bán buôn hàng nhập).
-      Cách tính xu hướng như thẻ "Bức tranh vĩ mô" ở trang Vĩ mô.</div></div>`);
-  const grid = card.querySelector(".sm-grid");
+    <div class="vb-note">Mỗi biểu đồ là một chỉ báo vĩ mô ảnh hưởng tới ngành, 3 năm gần nhất. ${NOTE}</div></div>`);
+  const sel = card.querySelector(".sm-sel");
   const draw = (sec) => {
-    grid.innerHTML = "";
-    for (const [key, dir, why] of DRIVERS[sec]) {
-      const info = SERIES_INFO[key];
-      const pts = (macro[key] || []).filter((p) => p.value !== null && Number.isFinite(p.value));
-      if (!info || !pts.length) continue;
-      const t = pulseTrend(pts, info.how);
-      const last = pts[pts.length - 1];
-      let cls = "flat", word = "đi ngang / chưa đủ dữ liệu";
-      if (t) {
-        const eps = t.pct ? 0.3 : Math.max(0.05, Math.abs(last.value) * 0.01);
-        if (Math.abs(t.d) >= eps) {
-          const good = (t.d > 0) === (dir > 0);
-          cls = good ? "gain" : "loss";
-          word = `${t.d > 0 ? "▲ tăng" : "▼ giảm"} (${t.d >= 0 ? "+" : ""}${t.d.toFixed(1)}${t.pct ? "%" : ""} so với ${t.ref})
-            → ${good ? "có lợi" : "bất lợi"} cho ngành`;
-        }
-      }
-      const per = info.how === "d63" ? String(last.period).slice(0, 10) : String(last.period).slice(0, 7);
-      const box = el(`<div class="sm-tile ${cls}">
-        <div class="sm-h">${info.label} <span class="sm-dir">${dir > 0 ? "tăng = tốt cho ngành" : "tăng = xấu cho ngành"}</span></div>
-        <div class="sm-v">${last.value.toLocaleString("vi-VN", { maximumFractionDigits: info.dp })}${info.unit}
-          <span class="sm-p">${per}</span></div>
-        <div class="sm-t ${cls}">${word}</div>
-        <div class="sm-c"></div>
-        <div class="sm-w">${why}</div></div>`);
-      grid.appendChild(box);
-      if (pts.length < 2) { box.querySelector(".sm-c").remove(); continue; }   // one reading: no chart yet
-      const cut = new Date(last.period); cut.setFullYear(cut.getFullYear() - 3);
-      const pp = pts.filter((p) => new Date(p.period) >= cut);
-      const bar = info.how !== "d63" && pp.length < 60;
-      window.Plotly.react(box.querySelector(".sm-c"), [{
-        x: pp.map((p) => p.period), y: pp.map((p) => p.value), type: bar ? "bar" : "scatter",
-        mode: bar ? undefined : "lines", marker: { color: "#2563eb" }, line: { color: "#2563eb", width: 1.5 },
-        hovertemplate: `%{x|%m/%Y}: %{y:,.2f}${info.unit}<extra></extra>`,
-      }], {
-        height: 150, margin: { l: 40, r: 6, t: 4, b: 22 }, dragmode: false, showlegend: false,
-        paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
-        font: { family: "Fira Code, monospace", size: 9, color: "#0a121d" },
-        xaxis: { showgrid: false, tickfont: { size: 8 } },
-        yaxis: { gridcolor: "rgba(148,163,184,0.22)", tickfont: { size: 8 }, zerolinecolor: "#cbd5e1" },
-      }, { displayModeBar: false, responsive: true });
-    }
+    const t = tally(macro, sec);
+    card.querySelector(".sm-sum").innerHTML = t ? tallyText(t) : "";
+    drawTiles(card.querySelector(".sm-grid"), macro, sec);
   };
-  card.querySelector(".sm-sel").addEventListener("change", (e) => draw(e.target.value));
+  sel.addEventListener("change", () => draw(sel.value));
   // Drawn once the card is in the page, so Plotly can measure its width.
-  card.drawFirst = () => draw(names[0]);
+  card.drawFirst = () => draw(pendingSector && names.includes(pendingSector) ? (sel.value = pendingSector) : names[0]);
+  card.focus = (sec) => { if (names.includes(sec)) { sel.value = sec; draw(sec); } };
+  sectorCard = card;
   return card;
+}
+
+// Called from the stock page's link: select the sector once the sector page
+// exists (or as soon as it is built) and scroll to the card.
+let pendingSector = null;
+export function focusSector(sec) {
+  pendingSector = sec;
+  if (sectorCard) { sectorCard.focus(sec); sectorCard.scrollIntoView({ behavior: "smooth" }); return; }
+  const wait = setInterval(() => {
+    if (!sectorCard) return;
+    clearInterval(wait);
+    sectorCard.scrollIntoView({ behavior: "smooth" });
+  }, 200);
+  setTimeout(() => clearInterval(wait), 15000);
+}
+
+// Stock page: a <details> section for the tabbed card ("Vĩ mô ngành"), drawn
+// on toggle like the other sections. `onOpenSector` jumps to the sector page.
+export async function sectorMacroSection(sector, onOpenSector) {
+  if (!DRIVERS[sector]) return null;
+  const macro = await loadMacro().catch(() => null);
+  if (!macro) return null;
+  const t = tally(macro, sector);
+  if (!t) return null;
+  const d = el(`<details class="card sm-sec">
+    <summary class="sec-h">🌐 Vĩ mô tác động tới ngành ${sector}</summary>
+    <div class="sm-sum">${tallyText(t)}. <a href="#" class="sm-link">Xem mọi ngành →</a></div>
+    <div class="sm-grid"></div>
+    <div class="vb-note">${NOTE}</div></details>`);
+  let drawn = false;
+  d.addEventListener("toggle", () => {
+    if (d.open && !drawn) { drawn = true; drawTiles(d.querySelector(".sm-grid"), macro, sector); }
+  });
+  d.querySelector(".sm-link").addEventListener("click", (e) => { e.preventDefault(); onOpenSector(sector); });
+  return d;
 }

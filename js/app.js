@@ -11,7 +11,7 @@ import { dupontSection, roicSection, peerSection, valuationBandSection,
          holdersSection } from "./sections.js";
 import { renderCompare } from "./compare.js";
 import { renderMacro } from "./macro.js";
-import { sectorMacroCard } from "./sector-macro.js";
+import { sectorMacroCard, sectorMacroSection, focusSector } from "./sector-macro.js";
 import * as F from "./format.js";
 import { buildScreener, isScreenerHash } from "./screener.js";
 import { markers, actionsSection, KIND_COLOR } from "./corp-actions.js";
@@ -261,6 +261,7 @@ async function renderStock(t) {
     [actionsSection(d.actions, prices), "Quyền & cổ tức"],
     [insidersSection(d.insiders, d.financials), "Giao dịch nội bộ"],
     [earningsSection(d.earnings), "Phản ứng báo cáo quý"],
+    [await sectorMacroSection(co.sector, (sec) => { showView("sector"); focusSector(sec); }), "Vĩ mô ngành"],
   ]);
 
   // Two-column split matching the original: price chart on the left, the

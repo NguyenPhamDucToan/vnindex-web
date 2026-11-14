@@ -1180,3 +1180,7 @@ table.screen.flow-sum td.num, table.screen.flow-sum th.num { text-align: right; 
 .sm-c { min-height: 150px; }
 .sm-w { font-size: 12px; color: var(--muted); margin-top: 2px; }
 @media (max-width: 900px) { .sm-grid { grid-template-columns: 1fr; } }
+.sm-sum { font-size: 14px; margin: 4px 0 10px; }
+.sm-sum b.gain { color: var(--gain); } .sm-sum b.loss { color: var(--loss); } .sm-sum b.flat { color: var(--muted); }
+.sm-link { font-size: 13px; }
+.sm-sec .sm-grid { margin-top: 4px; }
