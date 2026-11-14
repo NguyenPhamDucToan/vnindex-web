@@ -1,7 +1,7 @@
 // Macro sub-tab of the market view, matching the original's nine indicator
 // groups. Everything comes from the flat data/macro.json the export writes; the
 // grouping lives here so adding an indicator is a one-line change.
-import { loadMacro, loadBankRates } from "./data.js";
+import { loadMacro, loadBankRates, loadCommodities } from "./data.js";
 import * as F from "./format.js";
 
 const el = (h) => { const t = document.createElement("template"); t.innerHTML = h.trim(); return t.content.firstElementChild; };
@@ -62,6 +62,8 @@ const GROUPS = {
   ],
   "Tiền tệ & Tỷ giá": [
     { title: "Tỷ giá USD/VND", kind: "line", unit: "₫", series: [["USD/VND", "exchange_rate", BLUE]] },
+    { title: "Giá vàng miếng SJC (triệu đồng/lượng)", kind: "line", unit: "tr", series: [
+      ["Bán ra", "sjc_gold_sell", ORANGE], ["Mua vào", "sjc_gold_buy", BLUE]] },
     { title: "Tăng trưởng tín dụng theo ngành (% so đầu năm)", kind: "line", unit: "%", series: [
       ["Tổng tín dụng", "credit_growth_total", BLUE],
       ["Công nghiệp", "credit_growth_industry", ORANGE],
@@ -245,12 +247,16 @@ export async function renderMacro(root) {
     // above, so testing the grid before placement always reported empty.
     if (!drawn.length && active !== "Lãi suất") grid.innerHTML = `<div class="loading">Chưa có dữ liệu cho nhóm này.</div>`;
     pending.forEach((fn) => fn());
+    if (active === "Tiền tệ & Tỷ giá") {
+      commodities = commodities || loadCommodities();
+      commodities.then((c) => { if (active === "Tiền tệ & Tỷ giá") { const g = goldGap(macro, c); if (g) grid.prepend(g); } });
+    }
     if (active === "Lãi suất") {
       bankRates = bankRates || loadBankRates();
       bankRates.then((br) => { if (active === "Lãi suất") { const t = bankRateTable(br); if (t) grid.prepend(t); } });
     }
   };
-  let bankRates = null;
+  let bankRates = null, commodities = null;
 
   for (const n of names) {
     const b = el(`<button class="range-btn ${n === active ? "active" : ""}">${n}</button>`);
@@ -302,4 +308,35 @@ function bankRateTable(br) {
       ở mỗi kỳ hạn. Nguồn: CafeF, cập nhật mỗi ngày làm việc.</div>
   </div>`);
   return box;
+}
+
+// Domestic SJC bar price against the world price converted at the USD/VND
+// rate: a lượng is 37.5 g = 1.20565 troy ounces. The gap is how far the
+// domestic market trades above the world (import quotas keep it positive).
+const OZ_PER_LUONG = 1.20565;
+function goldGap(macro, comm) {
+  const last = (k) => (macro[k] || []).filter((p) => F.isNum(p.value)).at(-1);
+  const sell = last("sjc_gold_sell"), buy = last("sjc_gold_buy"), fx = last("exchange_rate");
+  if (!sell || !buy) return null;
+  // commodities.json's series are rebased to 100; `last` holds the real close.
+  const gc = comm && comm.last && comm.last["GC=F"];
+  let world = null, worldDate = null;
+  if (gc && F.isNum(gc.close) && fx) {
+    world = gc.close * fx.value * OZ_PER_LUONG / 1e6;
+    worldDate = gc.date;
+  }
+  const gap = world ? sell.value - world : null;
+  return el(`<div class="gold">
+    <div class="qtitle">Giá vàng miếng SJC · ${F.dateVN(String(sell.period).slice(0, 10))}</div>
+    <div class="gold-row">
+      <div><div class="gk">Mua vào</div><div class="gv">${buy.value.toFixed(2)}</div><div class="gs">triệu đồng/lượng</div></div>
+      <div><div class="gk">Bán ra</div><div class="gv">${sell.value.toFixed(2)}</div><div class="gs">triệu đồng/lượng</div></div>
+      ${world ? `<div><div class="gk">Thế giới quy đổi</div><div class="gv">${world.toFixed(2)}</div>
+        <div class="gs">giá ${F.dateVN(worldDate)} × tỷ giá ${Math.round(fx.value).toLocaleString("en-US")}</div></div>
+      <div><div class="gk">SJC cao hơn thế giới</div><div class="gv ${gap > 0 ? "loss" : "gain"}">${gap >= 0 ? "+" : "−"}${Math.abs(gap).toFixed(2)}</div>
+        <div class="gs">triệu/lượng (${(gap / world * 100).toFixed(1)}%)</div></div>` : ""}
+    </div>
+    <div class="vb-note">Nguồn: SJC (bảng giá TP.HCM, cập nhật mỗi ngày làm việc); giá thế giới là hợp đồng vàng tương lai (Yahoo, cập nhật mỗi ngày).
+      Chênh lệch dương = vàng trong nước đắt hơn thế giới.</div>
+  </div>`);
 }

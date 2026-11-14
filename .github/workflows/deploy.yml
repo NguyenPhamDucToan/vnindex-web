@@ -174,6 +174,15 @@ jobs:
         working-directory: vnindex-web
         run: python add_mcap.py
 
+      # Yahoo futures, ~30 s. Daily so the macro page compares the SJC gold
+      # board with a world price of the same day; refresh-slow commits the
+      # weekly copy. A failure keeps the committed file.
+      - name: Commodity prices
+        working-directory: vnindex-web
+        continue-on-error: true
+        timeout-minutes: 10
+        run: python export_commodities.py
+
       - name: Sanity-check the export
         working-directory: vnindex-web
         # A deploy that publishes an empty or half-written data set is worse

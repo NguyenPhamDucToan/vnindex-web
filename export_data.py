@@ -711,6 +711,8 @@ def main() -> None:
         # ~28 banks' counter savings rates (CafeF), daily from 2026-11-14
         "deposit_12m_avg", "deposit_12m_max", "deposit_12m_min",
         "deposit_6m_avg", "deposit_6m_max", "deposit_6m_min",
+        # SJC gold bar board (million VND / lượng), daily from 2026-11-14
+        "sjc_gold_buy", "sjc_gold_sell",
     ]
     with engine.connect() as conn:
         macro = pd.read_sql(text(

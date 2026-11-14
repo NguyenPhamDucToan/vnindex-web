@@ -105,6 +105,7 @@ def fetch(symbols: list[str], period: str) -> dict:
     import yfinance as yf
 
     frames: dict[str, "pd.Series"] = {}
+    last: dict[str, dict] = {}            # unrebased last close (gold vs SJC on the macro page)
     for sym in symbols:
         try:
             with warnings.catch_warnings():
@@ -120,12 +121,13 @@ def fetch(symbols: list[str], period: str) -> dict:
                 print(f"  {sym}: no base")
                 continue
             frames[sym] = (close / base * 100).round(2)
+            last[sym] = {"date": pd.Timestamp(close.index[-1]).strftime("%Y-%m-%d"), "close": round(float(close.iloc[-1]), 4)}
             print(f"  {sym}: {len(close)} points")
         except Exception as exc:                        # one dud symbol is not fatal
             print(f"  {sym}: {type(exc).__name__}: {exc}")
 
     if not frames:
-        return {"dates": [], "series": {}}
+        return {"dates": [], "series": {}, "last": {}}
 
     # Futures trade on different calendars, so align on the union of dates and
     # leave holes as null -- exactly what the original's DataFrame join does.
@@ -135,7 +137,7 @@ def fetch(symbols: list[str], period: str) -> dict:
         sym: [None if pd.isna(v) else float(v) for v in wide[sym].tolist()]
         for sym in wide.columns
     }
-    return {"dates": dates, "series": series}
+    return {"dates": dates, "series": series, "last": last}
 
 
 def main() -> None:
