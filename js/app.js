@@ -13,6 +13,7 @@ import { renderCompare } from "./compare.js";
 import { renderMacro } from "./macro.js";
 import { sectorMacroCard, sectorMacroSection, focusSector } from "./sector-macro.js";
 import * as F from "./format.js";
+import { initI18n, trPlot, langToggle } from "./i18n.js";
 import { buildScreener, isScreenerHash } from "./screener.js";
 import { markers, actionsSection, KIND_COLOR } from "./corp-actions.js";
 import { insidersSection } from "./insiders.js";
@@ -39,6 +40,7 @@ if (window.Plotly && !window.Plotly.__namelengthPatched) {
     // hover font on narrow screens keeps the names whole and the box on-screen;
     // truncating them back would undo the fix it was written for.
     const narrow = window.innerWidth < 560;
+    [data, layout] = trPlot(data, layout);           // English labels when EN is selected (js/i18n.js)
     return react(node, data, {
       ...layout,
       hoverlabel: {
@@ -149,6 +151,8 @@ function buildNav() {
     a.onclick = () => showView(id);
     nav.appendChild(a);
   }
+  nav.appendChild(langToggle());
+  initI18n();
   showView("stock");
 }
 

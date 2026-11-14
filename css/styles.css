@@ -1214,3 +1214,9 @@ table.screen.flow-sum td.num, table.screen.flow-sum th.num { text-align: right; 
 @media (max-width: 900px) { .sm-chips { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .sm-fk { color: #94a3b8; }
 #sector-macro .sm-sum { margin-top: 14px; }
+
+/* Language switch in the nav */
+.lang-tog { margin-left: auto; display: inline-flex; border: 1px solid var(--border, #cbd5e1); border-radius: 6px; overflow: hidden;
+  background: #fff; padding: 0; cursor: pointer; font: inherit; font-size: 12px; }
+.lang-tog span { padding: 4px 8px; color: var(--muted); }
+.lang-tog span.on { background: #0f2a5c; color: #fff; font-weight: 600; }

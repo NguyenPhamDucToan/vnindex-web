@@ -1,0 +1,553 @@
+// English for js/i18n.js. EXACT: a whole on-screen string (whitespace
+// collapsed) -> English. PHRASES: pieces of templated text ("… so với cùng kỳ
+// năm trước", "Đăng kí Mua …"), matched as whole words, longest first.
+// Keep PHRASES to multi-word UI wording: a short word ("Ngân hàng") would also
+// rewrite company names, which are source data and stay Vietnamese.
+// Missing strings stay Vietnamese; the audit script lists them.
+
+const SECTORS = {
+  "Bất động sản": "Real estate", "Vận tải - kho bãi": "Transport & logistics", "Tiện ích": "Utilities",
+  "Xây dựng": "Construction", "SX Nhựa - Hóa chất": "Plastics & chemicals", "Bán buôn": "Wholesale",
+  "Ngân hàng": "Banks", "Chứng khoán": "Securities", "Vật liệu xây dựng": "Building materials",
+  "Thực phẩm - Đồ uống": "Food & beverage", "SX Hàng gia dụng": "Household goods", "SX Phụ trợ": "Industrial supplies",
+  "Bán lẻ": "Retail", "Chăm sóc sức khỏe": "Healthcare", "Chế biến Thủy sản": "Seafood processing",
+  "Khai khoáng": "Mining", "Công nghệ và thông tin": "Technology & IT", "Thiết bị điện": "Electrical equipment",
+  "Nông - Lâm - Ngư": "Agriculture, forestry & fishery", "Bảo hiểm": "Insurance",
+  "Dịch vụ lưu trú, ăn uống, giải trí": "Hospitality & leisure", "Sản phẩm cao su": "Rubber products",
+  "SX Thiết bị, máy móc": "Machinery", "Tài chính khác": "Other financials", "Dịch vụ tư vấn, hỗ trợ": "Consulting & support",
+};
+
+const LEAN = { "có lợi": "helping", "bất lợi": "hurting", "đi ngang": "flat" };
+
+export const EXACT = {
+  ...SECTORS,
+  // ── navigation, views, common words
+  "Phân tích cổ phiếu": "Stock analysis", "Sàng lọc": "Screener", "So sánh cổ phiếu": "Compare stocks",
+  "Phân tích ngành": "Sector analysis", "Phân tích Ngành": "Sector analysis", "Tổng quan thị trường": "Market overview",
+  "Tổng quan Thị trường": "Market overview", "Sàng lọc cổ phiếu": "Stock screener", "So sánh Cổ phiếu": "Compare stocks",
+  "📊 Thị trường": "📊 Market", "📈 Vĩ mô": "📈 Macro", "Kinh tế vĩ mô": "Macroeconomy",
+  "Tìm mã / tên…": "Search ticker / name…", "Tìm mã hoặc tên công ty…": "Search ticker or company…",
+  "Mã": "Ticker", "Tên": "Name", "Ngành": "Sector", "Giá": "Price", "Giá (VND)": "Price (VND)", "Khối lượng": "Volume",
+  "Thay đổi": "Change", "Vốn hoá": "Market cap", "Ngày": "Date", "Quý": "Quarter", "Loại": "Type", "Nhóm": "Group",
+  "Trạng thái": "Status", "Nguồn": "Source", "Giá trị": "Value", "Lệnh": "Side", "Hiện tại": "Current", "Tất cả": "All",
+  "Tăng": "Up", "Giảm": "Down", "Đứng": "Flat", "Tăng / Giảm": "Up / Down", "Tỷ lệ Tăng/Giảm": "Advance/decline ratio",
+  "Chênh lệch": "Difference", "Trung bình": "Average", "Tốt": "Good", "Cảnh báo": "Warning", "Nguy hiểm": "Danger",
+  "Trung lập": "Neutral", "Theo dõi": "Watch", "Mua mạnh": "Strong buy", "Bán mạnh": "Strong sell", "Bán": "Sell",
+  "MUA MẠNH": "STRONG BUY", "BÁN MẠNH": "STRONG SELL", "BÁN": "SELL", "TỔNG HỢP: MUA": "OVERALL: BUY",
+  "TỔNG HỢP: BÁN MẠNH": "OVERALL: STRONG SELL", "Quá mua": "Overbought", "Quá bán": "Oversold",
+  "Tỷ đồng": "VND bn", "tỷ": "bn", "tỷ/phiên": "bn/session", "triệu đồng/lượng": "million VND/tael", "cũ": "old",
+  "Đã hiểu": "Got it", "Xoá lọc": "Clear filters", "Bộ lọc ▾": "Filters ▾", "⬇ Xuất CSV": "⬇ Export CSV",
+  "🔗 Sao chép liên kết": "🔗 Copy link", "Sao chép đường dẫn kèm bộ lọc hiện tại": "Copy a link with the current filters",
+  "Tải bảng đang lọc về máy": "Download the filtered table", "Chưa chọn mã nào": "No ticker selected",
+  "★ Đã gắn sao": "★ Starred", "Chỉ các mã bạn đã gắn sao ☆ trong bảng": "Only tickers you starred ☆ in the table",
+  "Xem mọi ngành →": "See all sectors →", "Tất cả ngành": "All sectors", "Toàn ngành": "Whole sector",
+  "Số mã": "Tickers", "Hạng ngành": "Sector rank", "Tín hiệu": "Signal", "Tín hiệu:": "Signal:", "Chức vụ": "Position",
+  "Họ tên": "Name", "Người / tổ chức": "Person / institution", "Sở hữu (%)": "Ownership (%)", "% cổ phần": "% of shares",
+  "Dòng đậm": "Bold line", "Dòng nhạt": "Faint line", "Đường trung bình": "Moving average", "đỏ": "red",
+  "Thông tin chỉ để tham khảo — không phải khuyến nghị mua, bán hay nắm giữ cổ phiếu.":
+    "For information only — not a recommendation to buy, sell or hold any stock.",
+  "Thông tin trên trang chỉ để tham khảo,": "Everything on this site is for information only,",
+  "không phải khuyến nghị mua, bán hay nắm giữ": "not a recommendation to buy, sell or hold",
+  "bất kỳ cổ phiếu nào. Giá mô hình tính tự động từ báo cáo tài chính và giá thị trường, có thể sai hoặc chậm cập nhật; giá mục tiêu của chuyên viên phân tích là của tổ chức nguồn (VCI), không phải của trang này. Bạn tự chịu trách nhiệm với quyết định đầu tư của mình.":
+    "any stock. Model prices are computed automatically from financial statements and market prices and may be wrong or out of date; analyst target prices belong to their source (VCI), not to this site. You are responsible for your own investment decisions.",
+  "Giá mô hình tính tự động, có thể sai hoặc chậm cập nhật; giá mục tiêu là của chuyên viên phân tích (VCI), không phải của trang này. Bạn tự chịu trách nhiệm với quyết định đầu tư của mình.":
+    "Model prices are computed automatically and may be wrong or out of date; target prices are the analysts' (VCI), not this site's. You are responsible for your own investment decisions.",
+
+  // ── stock page
+  "Giá mô hình": "Model price", "Giá mô hình so với thị giá": "Model price vs market price", "Giá thị trường": "Market price",
+  "Giá thị trường hiện tại:": "Current market price:", "Giá trị hợp lý (mô hình, hiện tại)": "Fair value (model, current)",
+  "Giá so với giá trị nội tại": "Price vs intrinsic value", "Các phương pháp định giá so với thị giá": "Valuation methods vs market price",
+  "Mô hình định giá": "Valuation model", "Ước tính Định giá": "Valuation estimates", "Định giá": "Valuation",
+  "Định giá (P/E & P/B)": "Valuation (P/E & P/B)", "Chuyên viên phân tích": "Analysts", "Điểm chất lượng": "Quality score",
+  "Chất lượng": "Quality", "Chất lượng & nội bộ": "Quality & insiders", "Đánh giá tổng hợp": "Overall assessment",
+  "ĐIỂM TỔNG HỢP": "OVERALL SCORE", "KỊCH BẢN": "SCENARIOS", "Lạc quan": "Bull", "Cơ sở": "Base", "Bi quan": "Bear",
+  "ĐỘ NHẠY DCF": "DCF SENSITIVITY", "Tăng trưởng giá hợp lý": "Fair value growth", "Phân tích kỹ thuật": "Technical analysis",
+  "Chỉ số kỹ thuật": "Technical indicators", "Điểm Pivot": "Pivot points",
+  "S = Hỗ trợ (xanh) · R = Kháng cự (đỏ) · Points = Điểm xoay (vàng)": "S = support (green) · R = resistance (red) · Points = pivot (yellow)",
+  "Ba góc nhìn độc lập: mô hình từ báo cáo tài chính, khuyến nghị của chuyên viên phân tích bên ngoài, và điểm chất lượng nội bộ. Khi chúng":
+    "Three independent views: the model from the financial statements, outside analysts' recommendations, and the internal quality score. When they",
+  "mâu thuẫn nhau": "disagree", "là lúc đáng xem kỹ lại giả định.": "it is time to look at the assumptions again.",
+  "Khoảng cách giữa hai đầu là mức các cách định giá đang bất đồng — càng rộng thì giá mô hình càng ít chắc chắn.":
+    "The gap between the two ends is how much the valuation methods disagree — the wider, the less certain the model price.",
+  "Trung bình ba nhóm phương pháp, đã điều chỉnh theo ngành — cùng số với trang cổ phiếu":
+    "Average of three method families, sector-adjusted — the same number as on the stock page",
+  "trung bình các nhóm": "average of the families", "chỉ tin bội số ngành": "sector multiples only",
+  "chỉ tin lịch sử chính mã": "own history only", "chỉ tin mô hình dòng tiền / thu nhập": "cash-flow / earnings model only",
+  "lịch sử chính mã": "own history", "so ngành": "vs sector", "So với lịch sử chính nó": "Against its own history",
+  "Graham (bội số ngành)": "Graham (sector multiples)", "DCF dựa trên NOPAT, chiết khấu ở WACC": "DCF on NOPAT, discounted at WACC",
+  "OCF−CapEx chiết khấu ở chi phí vốn chủ": "OCF − CapEx discounted at the cost of equity", "FCFE / Dòng tiền vốn chủ": "FCFE / equity cash flow",
+  "Ngân hàng được định giá theo ba nhóm, mỗi nhóm một phiếu:": "Banks are valued by three families, one vote each:",
+  "(P/B trung vị ngành theo ROE), và": "(sector median P/B for its ROE), and",
+  "(P/B hợp lý — ROE hiện tại kéo dài mãi, và RIM — phần vượt trội tắt dần về chi phí vốn chủ),":
+    "(justified P/B — today's ROE forever, and RIM — the excess fading to the cost of equity),",
+  "mô hình thu nhập thặng dư": "residual income model", "P/B hợp lý": "Justified P/B",
+  "P/B hợp lý (ROE vs chi phí vốn chủ)": "Justified P/B (ROE vs cost of equity)", "ROE vs Chi phí vốn chủ": "ROE vs cost of equity",
+  "BVPS × P/B trung vị của ngành — mã này đang đắt hay rẻ so với các ngân hàng khác": "BVPS × sector median P/B — is it dear or cheap against other banks",
+  "dự phòng rủi ro cho vay của mã này đủ bù": "this bank's loan-loss provisions cover",
+  "bảo hiểm nhân thọ": "life insurance", "Mã này chủ yếu là": "This company is mainly",
+  "(lợi nhuận tương lai của các hợp đồng đang hiệu lực cộng giá trị tài sản ròng điều chỉnh), nhưng BCTC công bố không có số này. Sổ sách không chứa giá trị các hợp đồng đang hiệu lực, nên giá mô hình chỉ dựa trên":
+    "(future profit of in-force policies plus adjusted net asset value), but published statements don't report it. The books don't hold the value of in-force policies, so the model price relies only on",
+  "(mức thị trường đã trả cho nó, vốn đã tính phần giá trị đó) — không dùng bội số của các công ty bảo hiểm phi nhân thọ hay mô hình dựa trên sổ sách. Đây là ước lượng thay thế.":
+    "(what the market has paid for it, which already prices that value) — not non-life insurers' multiples or book-based models. It is a stand-in estimate.",
+  ". Chuẩn định giá của ngành là": ". The sector's valuation standard is", "— nằm ở": "— sits at", "của mã này dao động": "for this ticker ranges",
+  "P/E lịch sử": "Historical P/E", "P/B lịch sử": "Historical P/B", "P/E và P/B lịch sử của chính mã": "The ticker's own historical P/E and P/B",
+  "P/E (lần)": "P/E (x)", "P/B (lần)": "P/B (x)", "PB (lần)": "P/B (x)", "P/B ngành": "Sector P/B",
+  "So sánh cùng ngành": "Peers", "· so mã đầu tiên với tất cả công ty cùng ngành": "· the first ticker against every company in its sector",
+  "Báo cáo tài chính": "Financial statements", "Kết quả KD": "Income statement", "Cân đối KT": "Balance sheet",
+  "Dòng tiền": "Cash flow", "Dòng tiền & Tỷ số": "Cash flow & ratios", "Chỉ số tài chính chủ chốt (TTM)": "Key financial ratios (TTM)",
+  "Dự báo kinh doanh": "Business forecast", "Lợi nhuận sau thuế": "Net profit", "LNST so cùng kỳ": "Net profit YoY",
+  "Biên lợi nhuận thuần %": "Net margin %", "Biên lợi nhuận thuần % (dự báo)": "Net margin % (forecast)",
+  "HĐ Kinh doanh": "Operating", "HĐ Đầu tư": "Investing", "HĐ Tài chính": "Financing",
+  "Dòng tiền tự do": "Free cash flow", "Tiền trên mỗi cổ phiếu": "Cash per share", "Tiền mặt trả lãi vay": "Cash interest cover",
+  "Số kỳ giá vượt VNINDEX": "Periods beating VNINDEX", "Phiên phản ứng": "Reaction sessions",
+  "Tin tức & Sự kiện": "News & events", "📰 Tin tức": "📰 News", "📅 Sự kiện công ty": "📅 Company events", "Sự kiện": "Events",
+  // tabbed card
+  "Sở hữu, cổ tức, sự kiện & vĩ mô": "Ownership, dividends, events & macro", "Cổ đông lớn": "Major holders",
+  "Quyền & cổ tức": "Rights & dividends", "Giao dịch nội bộ": "Insider trading", "Phản ứng báo cáo quý": "Earnings reaction",
+  "Vĩ mô ngành": "Sector macro", "Cổ đông lớn · Quyền & cổ tức · Giao dịch nội bộ · Phản ứng báo cáo quý · Vĩ mô ngành":
+    "Major holders · Rights & dividends · Insider trading · Earnings reaction · Sector macro",
+  "🏛 Cổ đông lớn & Ban lãnh đạo": "🏛 Major holders & management", "Cơ cấu theo nhóm": "By holder type",
+  "Ban lãnh đạo có cổ phần": "Management holding shares", "Nhà nước": "State", "Nước ngoài": "Foreign", "Tổ chức": "Institutions",
+  "Tổ chức trong nước": "Domestic institutions", "Cá nhân": "Individuals", "Cá nhân nội bộ": "Insiders", "Khác (nhỏ lẻ)": "Other (retail)",
+  "📅 Quyền & cổ tức": "📅 Rights & dividends", "Ngày GDKHQ": "Ex-date", "Ngày trả": "Pay date", "Tỷ lệ / tiền": "Ratio / cash",
+  "Cổ tức": "Dividend", "Cổ tức tiền": "Cash dividend", "Cổ tức cổ phiếu": "Stock dividend", "Cổ phiếu thưởng": "Bonus shares",
+  "Quyền mua": "Rights issue", "Phát hành": "Issue", "Phát hành ESOP": "ESOP issue", "Phát hành riêng lẻ": "Private placement",
+  "Phát hành sáp nhập": "Merger issue", "Niêm yết": "Listing", "Họp ĐHCĐ": "AGM",
+  "Nguồn không ghi ngày giao dịch không hưởng quyền; đây là ngày công bố": "The source gives no ex-date; this is the announcement date",
+  "thưởng / cổ tức bằng cổ phiếu": "bonus / stock dividend", "số cổ phiếu tăng qua mọi đợt phát hành": "share count growth across all issues",
+  "Nguồn: lịch sự kiện quyền của sở giao dịch (qua VCI). Biểu đồ giá là giá đã điều chỉnh cho cổ tức và phát hành — tam giác ▲ đánh dấu ngày giao dịch không hưởng quyền. Tỷ lệ là số cổ phiếu mới trên mỗi cổ phiếu cũ.":
+    "Source: the exchange's corporate-action calendar (via VCI). The price chart is adjusted for dividends and issues — ▲ marks ex-dates. Ratio = new shares per existing share.",
+  "👥 Giao dịch nội bộ & cổ đông lớn": "👥 Insider & major-holder trading", "Mua bán cân bằng": "Balanced buying and selling",
+  "Nội bộ mua ròng": "Insiders net buying", "Nội bộ đang mua ròng": "Insiders net buying", "Nội bộ đang bán ròng": "Insiders net selling",
+  "⚠ Nội bộ đang đăng ký bán": "⚠ Insiders registered to sell", "Đang đăng ký": "Registered", "Đang đăng ký:": "Registered:",
+  "Đã thực hiện": "Executed", "Đăng ký, chưa báo cáo": "Registered, no result yet", "đăng ký": "registered", "Người liên quan": "Related party",
+  "(Bán)": "(Sell)", "Mua vào": "Buy", "Bán ra": "Sell",
+  ": đã thực hiện (có báo cáo kết quả) ·": ": executed (result reported) ·",
+  ": mới đăng ký, chưa có kết quả — không tính vào số ròng": ": registered only, no result yet — not counted in the net figure",
+  "Nguồn: công bố giao dịch của người nội bộ, người liên quan và cổ đông lớn (qua VCI). Số ròng chỉ tính giao dịch đã có báo cáo kết quả. Khối lượng trên công bố là khối lượng":
+    "Source: filings by insiders, related parties and major holders (via VCI). Net figures count only deals with a reported result. The filed quantity is the",
+  ", và người chưa bán/mua hết thường đăng ký lại phần còn lại, nên mỗi người chỉ được tính một lần theo lần đăng ký lớn nhất — đây là mức tối đa, không phải khối lượng khớp thật. Chuyển nhượng trong cùng gia đình hiện thành một lệnh bán và một lệnh mua. % cổ phần tính trên số cổ phiếu lưu hành hiện tại.":
+    ", and people who didn't complete usually re-register the rest, so each person counts once at their largest registration — a ceiling, not the matched volume. Transfers within a family show as one sell and one buy. % of shares is on today's shares outstanding.",
+  "📅 Giá phản ứng khi ra báo cáo quý": "📅 Price reaction to quarterly results", "lãi tăng": "profit up", "lãi giảm": "profit down",
+  "không có giao dịch": "no trading", "không so được": "not comparable",
+  // ownership titles
+  "Chủ tịch Hội đồng Quản trị": "Chairman of the Board", "Phó Chủ tịch Hội đồng Quản trị": "Vice Chairman of the Board",
+  "Thành viên Hội đồng Quản trị": "Board member", "Thành viên Hội đồng Quản trị độc lập": "Independent board member",
+  "Thành viên Hội đồng Quản trị/Tổng Giám đốc": "Board member / CEO", "Tổng Giám đốc": "CEO", "Phó Tổng Giám đốc": "Deputy CEO",
+  "Giám đốc Tài chính": "CFO", "Kế toán trưởng": "Chief accountant", "Giám đốc Kiểm toán nội bộ": "Head of internal audit",
+  "Trưởng Ban kiểm soát": "Head of the supervisory board", "Thành viên Ban kiểm soát": "Supervisory board member",
+  "Người phụ trách quản trị công ty": "Corporate governance officer",
+  "Phó Tổng Giám đốc/Người phụ trách quản trị công ty": "Deputy CEO / corporate governance officer",
+  "Phó Tổng Giám đốc/Phụ trách Công bố thông tin": "Deputy CEO / disclosure officer",
+  "Phụ trách Công bố thông tin/Người phụ trách quản trị công ty": "Disclosure officer / corporate governance officer",
+
+  // ── scorecard / ratios
+  "SINH LỜI": "PROFITABILITY", "CHẤT LƯỢNG DÒNG TIỀN": "CASH-FLOW QUALITY", "THANH KHOẢN": "LIQUIDITY",
+  "THANH KHOẢN & CƠ CẤU TÀI SẢN": "LIQUIDITY & ASSET MIX", "ĐÒN BẨY & DÒNG TIỀN": "LEVERAGE & CASH FLOW",
+  "ĐÒN BẨY & AN TOÀN VỐN": "LEVERAGE & CAPITAL SAFETY", "VÒNG QUAY VỐN & AN TOÀN NỢ": "WORKING CAPITAL & DEBT SAFETY",
+  "HIỆU QUẢ & AN TOÀN NGÂN HÀNG": "BANK EFFICIENCY & SAFETY", "HIỆU QUẢ BẢO HIỂM": "INSURANCE EFFICIENCY",
+  "QUY MÔ ĐẦU TƯ & DỰ PHÒNG": "INVESTMENTS & RESERVES", "CƠ CẤU VỐN & NGUỒN VỐN": "CAPITAL & FUNDING",
+  "Biên LN gộp": "Gross margin", "Biên LN ròng": "Net margin", "Biên lợi nhuận ròng": "Net margin", "Biên hoạt động": "Operating margin",
+  "Biên FCF": "FCF margin", "Biên lãi thuần (NIM)": "Net interest margin (NIM)", "Biên trước dự phòng": "Pre-provision margin",
+  "Biên LN: Tốt": "Margin: good", "Biên LN: Trung bình": "Margin: average", "ROE: Tốt": "ROE: good", "ROE: Trung bình": "ROE: average",
+  "Hiệu suất TS: Trung bình": "Asset turnover: average", "Hiệu suất TS: Yếu": "Asset turnover: weak", "Hiệu suất tài sản": "Asset turnover",
+  "Đòn bẩy: Cao — rủi ro": "Leverage: high — risky", "Đòn bẩy: Thấp — an toàn": "Leverage: low — safe", "Đòn bẩy: Trung bình": "Leverage: average",
+  "Đòn bẩy tài chính": "Financial leverage", "Đòn bẩy (Tài sản / Vốn chủ sở hữu)": "Leverage (assets / equity)",
+  "Chất lượng lợi nhuận": "Earnings quality", "Chất lượng tài sản:": "Asset quality:", "An toàn tài chính": "Financial safety",
+  "Thanh khoản": "Liquidity", "Cổ tức & an toàn": "Dividends & safety", "Sức khoẻ tài chính & cổ tức": "Financial health & dividends",
+  "Quy mô & thanh khoản": "Size & liquidity", "Tỷ suất cổ tức tiền mặt": "Cash dividend yield", "Cổ tức (hàng năm)": "Dividend (annual)",
+  "Nợ / Vốn chủ (D/E)": "Debt / equity (D/E)", "Nợ / Tổng tài sản": "Debt / total assets", "Nợ phải trả / Vốn chủ": "Liabilities / equity",
+  "Nợ ròng / EBITDA": "Net debt / EBITDA", "Nợ ròng/ EBITDA": "Net debt / EBITDA", "Nợ ròng/EBITDA": "Net debt / EBITDA",
+  "EBIT / Lãi vay": "EBIT / interest", "OCF / Nợ ngắn hạn": "OCF / current liabilities", "Ngày thu tiền (DSO)": "Days sales outstanding (DSO)",
+  "Ngày tồn kho (DIO)": "Days inventory (DIO)", "Chu kỳ tiền mặt (CCC)": "Cash conversion cycle (CCC)",
+  "Doanh thu / Tổng TS": "Revenue / total assets", "LN ròng / Doanh thu": "Net profit / revenue", "LN ròng / Vốn CSH": "Net profit / equity",
+  "Tổng TS / Vốn CSH": "Total assets / equity", "Tiền / CAPEX": "Cash / CAPEX", "Tiền / Doanh thu": "Cash / revenue",
+  "Tiền / Lợi nhuận hoạt động": "Cash / operating profit", "Tiền / Tổng nợ vay": "Cash / total borrowings",
+  "Chi phí / Thu nhập (CIR)": "Cost / income (CIR)", "Chi phí tín dụng": "Credit cost", "Cho vay / Tiền gửi": "Loans / deposits",
+  "Thu nhập lãi / Tổng TN": "Interest income / total income", "Tiền gửi KH / Tổng TS": "Customer deposits / total assets",
+  "Vay liên NH / Vốn chủ": "Interbank borrowing / equity", "Vốn chủ / Tổng tài sản": "Equity / total assets",
+  "Dư nợ cho vay / Vốn chủ": "Loans / equity", "Tài sản tài chính / Tổng TS": "Financial assets / total assets",
+  "Lãi đầu tư / LN trước thuế": "Investment income / pre-tax profit", "Đầu tư / Tổng tài sản": "Investments / total assets",
+  "Tỷ lệ bồi thường": "Loss ratio", "Tỷ lệ giữ lại": "Retention ratio", "Tỷ lệ kết hợp": "Combined ratio",
+  "Lợi nhuận gộp / Doanh thu": "Gross profit / revenue", "Lợi nhuận sau thuế / Doanh thu": "Net profit / revenue",
+  "Lợi nhuận ròng / Tổng tài sản": "Net profit / total assets", "Lợi nhuận ròng / Vốn chủ sở hữu": "Net profit / equity",
+  "Tổng tài sản / Vốn chủ sở hữu": "Total assets / equity", "Tổng nợ phải trả / Vốn chủ sở hữu": "Total liabilities / equity",
+  "Tổng nợ vay / Tổng tài sản": "Total borrowings / total assets", "Tổng nợ vay / Vốn chủ sở hữu": "Total borrowings / equity",
+  "Tài sản ngắn hạn / Nợ ngắn hạn": "Current assets / current liabilities", "(Tài sản ngắn hạn − Hàng tồn kho) / Nợ ngắn hạn": "(Current assets − inventory) / current liabilities",
+  "Dòng tiền tự do (FCF) / Doanh thu": "Free cash flow (FCF) / revenue", "Dòng tiền hoạt động / Doanh thu": "Operating cash flow / revenue",
+  "Dòng tiền hoạt động / Lợi nhuận ròng": "Operating cash flow / net profit", "Dòng tiền hoạt động / Lợi nhuận hoạt động (EBIT)": "Operating cash flow / operating profit (EBIT)",
+  "Dòng tiền hoạt động / Chi phí lãi vay": "Operating cash flow / interest expense", "Dòng tiền hoạt động / Chi đầu tư tài sản cố định": "Operating cash flow / capital expenditure",
+  "Dòng tiền hoạt động / Nợ ngắn hạn": "Operating cash flow / current liabilities", "Dòng tiền hoạt động / Số cổ phiếu lưu hành": "Operating cash flow / shares outstanding",
+  "Dòng tiền hoạt động / Tổng nợ vay": "Operating cash flow / total borrowings", "Cổ tức tiền mặt đã chi trong năm / Vốn hoá hiện tại": "Cash dividends paid in the year / current market cap",
+  "Chi phí hoạt động / Tổng thu nhập hoạt động": "Operating expenses / total operating income", "Chi phí dự phòng rủi ro / Dư nợ cho vay": "Provision expense / loans",
+  "Dư nợ cho vay khách hàng / Tiền gửi khách hàng": "Customer loans / customer deposits", "Tiền gửi khách hàng / Tổng tài sản": "Customer deposits / total assets",
+  "Thu nhập lãi thuần / Tổng thu nhập hoạt động": "Net interest income / total operating income", "Thu nhập lãi thuần / Tổng tài sản": "Net interest income / total assets",
+  "Lợi nhuận trước dự phòng (PPOP) / Tổng thu nhập hoạt động": "Pre-provision profit (PPOP) / total operating income",
+  "Vay liên ngân hàng & NHNN / Vốn chủ sở hữu": "Interbank & SBV borrowing / equity", "Vốn chủ sở hữu / Tổng tài sản": "Equity / total assets",
+  "Dư nợ cho vay (margin & ứng trước) / Vốn chủ sở hữu": "Lending (margin & advances) / equity", "Lợi nhuận hoạt động tài chính / Lợi nhuận trước thuế": "Financial income / pre-tax profit",
+  "Tài sản tài chính FVTPL & AFS / Tổng tài sản": "FVTPL & AFS financial assets / total assets", "(Đầu tư ngắn hạn + dài hạn) / Tổng tài sản": "(Short + long-term investments) / total assets",
+  "Phí bảo hiểm thuần / Phí bảo hiểm gốc": "Net premiums / gross premiums", "Bồi thường thuộc trách nhiệm giữ lại / Phí bảo hiểm thuần": "Retained claims / net premiums",
+  "(Bồi thường thuộc trách nhiệm giữ lại + hoa hồng) / Phí bảo hiểm thuần": "(Retained claims + commissions) / net premiums",
+  "Số ngày thu tiền + tồn kho − số ngày trả người bán": "Days receivable + days inventory − days payable",
+  "Tổng tài sản / Vốn chủ sở hữu ": "Total assets / equity",
+  "Đo mức sinh lời trên đồng vốn cổ đông bỏ ra": "Return on the shareholders' money", "Đo hiệu quả sử dụng toàn bộ tài sản": "How well all assets are used",
+  "Đo hiệu quả sản xuất cốt lõi trước chi phí vận hành": "Core production efficiency before operating costs",
+  "Mỗi đồng vốn chủ đang gánh bao nhiêu đồng tài sản": "How many dong of assets each dong of equity carries",
+  "Mức độ đòn bẩy tài chính": "Degree of financial leverage", "Tỷ trọng nợ trong cơ cấu vốn": "Share of debt in the capital structure",
+  "Khả năng trả nợ ngắn hạn bằng tài sản lưu động": "Ability to pay short-term debt from current assets",
+  "Loại trừ hàng tồn kho để đo thanh khoản thực tế hơn": "Excludes inventory for a stricter liquidity measure",
+  "Khả năng trả nợ từ tiền kinh doanh tạo ra": "Ability to pay debt from operating cash", "Khả năng tạo tiền thực sau đầu tư CAPEX": "Real cash generation after CAPEX",
+  "Tỷ suất sinh lời thực tế cuối cùng giữ lại cho cổ đông": "What is finally left for shareholders",
+  "Lợi nhuận sau chi phí bán hàng & quản lý, trước lãi vay và thuế": "Profit after selling & admin costs, before interest and tax",
+  "Lãi còn lại sau chi phí vận hành nhưng trước khi trích lập dự phòng nợ xấu": "Profit left after operating costs, before bad-debt provisions",
+  "Bán xong bao lâu mới thu được tiền. Tăng dần qua các quý = khách hàng trả chậm hơn": "How long after a sale the cash arrives. Rising quarter after quarter = customers paying slower",
+  "Hàng nằm kho bao lâu mới bán được. Phình lên = hàng khó tiêu thụ": "How long stock sits before it sells. Swelling = goods hard to sell",
+  "Tiền bị kẹt trong vòng quay kinh doanh bao lâu trước khi quay về. Càng ngắn càng tốt": "How long cash is tied up in the business cycle before it comes back. Shorter is better",
+  "Cần bao nhiêu năm lợi nhuận trước lãi vay, thuế, khấu hao để trả hết nợ ròng. Âm nghĩa là tiền mặt nhiều hơn nợ vay. Để trống khi EBITDA âm":
+    "Years of EBITDA needed to repay net debt. Negative = more cash than debt. Blank when EBITDA is negative",
+  "Lợi nhuận hoạt động gấp bao nhiêu lần tiền lãi phải trả. Doanh nghiệp vốn hoá lãi vay vào dự án (bất động sản) có thể hiện số cao hơn thực tế":
+    "Operating profit as a multiple of interest due. Companies that capitalise interest into projects (real estate) can show more than the reality",
+  "Lấy từ dòng tiền trả cổ tức của báo cáo lưu chuyển tiền tệ năm gần nhất đã kết thúc. Cổ tức bằng cổ phiếu không tính":
+    "From dividends paid in the latest full year's cash-flow statement. Stock dividends are not counted",
+  "Tiền kinh doanh tạo ra trên mỗi cổ phiếu, cùng đơn vị nghìn đồng như giá. Không có ngưỡng chung — hãy so với EPS và với thị giá":
+    "Operating cash per share, in thousand dong like the price. No common threshold — compare with EPS and the price",
+  "Phiên bản Z'' cho doanh nghiệp không phải sản xuất và thị trường mới nổi, dùng vốn chủ sổ sách. Đo nguy cơ kiệt quệ tài chính, không đo mức rẻ đắt":
+    "The Z'' version for non-manufacturers and emerging markets, on book equity. Measures distress risk, not cheapness",
+  "Chênh lệch lãi cho vay và lãi huy động, tính trên toàn bộ tài sản. Đây là nguồn sống chính của ngân hàng": "Lending minus funding rates, over all assets. A bank's main source of income",
+  "Bao nhiêu phần thu nhập đến từ cho vay. Thấp hơn nghĩa là nguồn thu đa dạng hơn (phí, ngoại hối, đầu tư)": "How much income comes from lending. Lower = more diversified (fees, FX, investments)",
+  "Mỗi năm phải trích lập dự phòng bao nhiêu phần trăm dư nợ. Tăng lên là dấu hiệu chất lượng tài sản đi xuống": "Yearly provisions as % of loans. Rising = asset quality deteriorating",
+  "Cho vay ra bao nhiêu so với tiền huy động được. Lưu ý: đây không phải LDR theo quy định của NHNN": "Loans against deposits raised. Note: not the SBV's regulatory LDR",
+  "Bao nhiêu phần nguồn vốn đến từ tiền gửi. Cao thì nguồn vốn ổn định và rẻ": "Share of funding from deposits. High = stable, cheap funding",
+  "Mức phụ thuộc nguồn vốn bán buôn ngoài tiền gửi. Nguồn này rút nhanh hơn tiền gửi": "Reliance on wholesale funding beyond deposits, which leaves faster than deposits",
+  "Đòn bẩy thật của ngân hàng. Đây mới là con số phản ánh rủi ro, không phải D/E": "A bank's real leverage. This is the risk number, not D/E",
+  "Đệm vốn tự có chống đỡ rủi ro. Mỏng thì chịu lỗ kém hơn khi nợ xấu tăng": "Equity buffer against losses. Thin = less able to absorb rising bad debt",
+  "Phần tài sản đặt vào danh mục tự doanh. Càng lớn thì lợi nhuận càng đi theo thị trường chứ không theo phí môi giới": "Assets in the proprietary book. The larger, the more profit follows the market rather than brokerage fees",
+  "Bao nhiêu phần phí thu được phải trả ra để bồi thường. Tăng lên là dấu hiệu định phí quá thấp hoặc chọn rủi ro kém": "Share of premiums paid out in claims. Rising = underpriced or poorly selected risk",
+  "Phần rủi ro công ty tự giữ thay vì nhượng cho tái bảo hiểm. Giữ lại nhiều thì ăn trọn lãi nhưng cũng gánh trọn lỗ": "Risk kept rather than reinsured. Keeping more means full gains but full losses",
+  "Bảo hiểm sống bằng danh mục đầu tư chứ không phải tài sản cố định; tỷ lệ cao là cấu trúc bình thường của ngành": "Insurers live on their investment portfolio, not fixed assets; a high share is normal",
+  "Phần lớn nợ phải trả của bảo hiểm là dự phòng nghiệp vụ — nghĩa vụ với người mua bảo hiểm. Càng cao thì đệm vốn càng mỏng so với nghĩa vụ":
+    "Most insurer liabilities are technical reserves owed to policyholders. Higher = thinner capital against them",
+  "ROE cao chủ yếu được thúc đẩy bởi: biên lợi nhuận tốt, sử dụng nhiều vay nợ (đòn bẩy tài chính).": "High ROE is driven mainly by: good margins, heavy borrowing (financial leverage).",
+  "ROE cao chủ yếu được thúc đẩy bởi: biên lợi nhuận tốt. ✅ Đây là dạng ROE cao bền vững — đến từ hiệu quả kinh doanh thực sự, không phải vay nợ nhiều.":
+    "High ROE is driven mainly by: good margins. ✅ This kind of high ROE is durable — real business efficiency, not heavy borrowing.",
+  "ROE ở mức trung bình, không có yếu tố nào nổi bật rõ theo hướng tốt hay xấu.": "ROE is average, with no factor clearly standing out either way.",
+  "Không xếp hạng — chỉ số này không có chiều tốt/xấu cho ngành, xem giải thích ở trên": "Not ranked — this metric has no good/bad direction for the sector, see above",
+  "Nhỉnh trên trung bình": "Slightly above average", "Quanh/dưới trung bình": "Around / below average", "Cảnh báo: —": "Warning: —",
+  "Tốt: Dương": "Good: positive", "Nguy hiểm: Âm": "Danger: negative", "chưa đủ": "not enough",
+
+  // ── screener
+  "Chọn một bộ lọc mẫu hoặc tự đặt ngưỡng. Mọi giá trị đều cùng số với trang cổ phiếu.": "Pick a preset or set your own thresholds. Every value matches the stock page.",
+  "Ô để trống là không lọc. Đặt một ngưỡng thì mã không có số liệu cho chỉ số đó bị loại (riêng nợ ròng/EBITDA: ngành tài chính luôn đạt).":
+    "Blank = no filter. With a threshold set, tickers without that metric drop out (except net debt/EBITDA: financials always pass).",
+  "Không có mã nào thoả mọi điều kiện. Thử nới một ngưỡng hoặc chọn \"Tất cả\".": "No ticker meets every condition. Loosen a threshold or pick \"All\".",
+  "Chỉ bỏ mã quá ít giao dịch": "Only drops thinly traded tickers", "Rẻ so với mô hình, chất lượng không tệ, P/E thấp": "Cheap vs the model, decent quality, low P/E",
+  "Sinh lời cao và cải thiện qua năm": "High and improving returns", "Tỷ suất cổ tức cao, nợ vừa phải": "High dividend yield, moderate debt",
+  "Xa vùng kiệt quệ, nợ thấp": "Far from distress, low debt", "Kết hợp upside và điểm chất lượng": "Upside combined with quality score",
+  "Upside so với giá mô hình (%)": "Upside to model price (%)", "Chất lượng và upside của các mã đang lọc": "Quality and upside of the filtered tickers",
+  "Thứ hạng trong cùng ngành, trung bình phân vị upside và chất lượng": "Rank within the sector, average percentile of upside and quality",
+  "Xếp hạng trong ngành theo upside và chất lượng": "Sector rank by upside and quality", "Tính theo giá ngày": "Priced as of",
+
+  // ── sector page
+  "Bản đồ nhiệt theo Ngành": "Sector heat map", "Màu / Sắp xếp theo:": "Colour / sort by:",
+  "Avg Estimate vs Thị trường": "Avg estimate vs market", "P/E (thấp hơn = rẻ hơn)": "P/E (lower = cheaper)",
+  "P/B (thấp hơn = rẻ hơn)": "P/B (lower = cheaper)", "ROE (cao hơn = tốt hơn)": "ROE (higher = better)",
+  "Hệ số Định giá theo Ngành": "Valuation multiples by sector", "P/E trung vị theo Ngành": "Median P/E by sector",
+  "P/B trung vị theo Ngành": "Median P/B by sector", "ROE trung vị theo Ngành": "Median ROE by sector",
+  "Biên LN ròng trung vị theo Ngành": "Median net margin by sector", "Hiệu suất theo Ngành": "Performance by sector",
+  "Bảng tổng hợp theo Ngành": "Sector summary", "Cơ hội theo ngành (toàn thị trường)": "Opportunities by sector (whole market)",
+  "Upside trung vị %": "Median upside %", "Thay đổi TB %": "Avg change %",
+  "Mỗi bong bóng là một ngành; kích thước theo số mã, màu theo ROE trung vị.": "Each bubble is a sector; size = number of tickers, colour = median ROE.",
+  "Cột là số mã Mua mạnh / Mua trong ngành (trục trái). Đường là upside trung vị của ngành (trục phải); ngành xếp theo upside giảm dần.":
+    "Bars = Strong buy / Buy tickers in the sector (left axis). Line = the sector's median upside (right axis); sorted by upside, descending.",
+  "Vĩ mô tác động tới ngành": "Macro drivers by sector", "Mỗi chấm là một chỉ báo vĩ mô của ngành:": "Each dot is one of the sector's macro indicators:",
+  "Vĩ mô thuận hoàn toàn": "Macro fully favourable", "Thuận một phần": "Partly favourable", "Lẫn lộn hoặc bất lợi": "Mixed or adverse",
+  "có lợi,": "helping,", "bất lợi,": "hurting,", "bất lợi": "hurting", "bất lợi.": "hurting.",
+  "đi ngang. Bấm một ngành để xem chi tiết.": "flat. Click a sector for details.", "đi ngang / chưa đủ dữ liệu": "flat / not enough data",
+  "chỉ báo vĩ mô đang có lợi cho ngành": "of the macro indicators are helping the sector",
+  "chỉ báo vĩ mô đang có lợi cho ngành,": "of the macro indicators are helping the sector,",
+  "chỉ báo vĩ mô đang có lợi cho ngành.": "of the macro indicators are helping the sector.",
+  "tăng = tốt cho ngành": "up = good for the sector", "tăng = xấu cho ngành": "up = bad for the sector",
+  "= xu hướng gần đây có lợi cho ngành,": "= recent trend helps the sector,",
+  "= bất lợi (đã tính chiều: ví dụ USD tăng giá có lợi cho thủy sản nhưng bất lợi cho bán buôn hàng nhập). Cách tính xu hướng như thẻ \"Bức tranh vĩ mô\" ở trang Vĩ mô.":
+    "= hurts it (direction included: a stronger USD helps seafood exporters but hurts importers). Trends are computed as in \"Macro picture\" on the Macro page.",
+  // driver explanations
+  "Tín dụng tăng nhanh = cho vay nhiều hơn, thu nhập lãi tăng.": "Faster credit growth = more lending, higher interest income.",
+  "Lãi huy động tăng = chi phí vốn tăng, biên lãi (NIM) dễ co lại.": "Higher deposit rates = dearer funding, NIM tends to shrink.",
+  "Kinh tế tốt = nợ xấu thấp, nhu cầu vay cao.": "Strong economy = low bad debt, high loan demand.",
+  "Lãi tiết kiệm thấp đẩy tiền sang chứng khoán; tăng thì ngược lại.": "Low deposit rates push money into stocks; rising rates do the opposite.",
+  "Tín dụng nới = thanh khoản thị trường và cho vay margin tăng.": "Looser credit = more market liquidity and margin lending.",
+  "Tỷ giá căng thường đi kèm khối ngoại bán ròng.": "FX pressure usually comes with foreign net selling.",
+  "Lãi suất tăng = vay mua nhà đắt hơn, chủ đầu tư trả lãi nhiều hơn.": "Higher rates = dearer mortgages, developers pay more interest.",
+  "Tín dụng nới = người mua và chủ đầu tư dễ vay.": "Looser credit = buyers and developers borrow more easily.",
+  "Hạ tầng (đường, cầu) làm tăng giá trị quỹ đất.": "Infrastructure (roads, bridges) lifts land values.",
+  "Giải ngân đầu tư công = đơn hàng trực tiếp của nhà thầu.": "Public investment disbursed = contractors' direct orders.",
+  "Tín dụng cho ngành xây dựng.": "Credit to the construction sector.", "Lãi suất tăng = chi phí vay vốn lưu động tăng.": "Higher rates = dearer working-capital loans.",
+  "Đầu tư công kéo nhu cầu thép, xi măng, đá.": "Public investment drives demand for steel, cement, stone.",
+  "Sản xuất công nghiệp chung.": "Industrial production overall.", "Thép, xi măng xuất khẩu một phần đáng kể.": "A good part of steel and cement is exported.",
+  "Sức mua của người dân, trực tiếp là doanh thu ngành.": "Household spending, the sector's revenue directly.", "Lạm phát cao bào mòn sức mua.": "High inflation erodes purchasing power.",
+  "Khách quốc tế tăng chi tiêu bán lẻ.": "Foreign visitors add retail spending.", "Sức mua tiêu dùng.": "Consumer spending.",
+  "Giá lương thực tăng = giá nguyên liệu đầu vào tăng.": "Higher food prices = dearer raw materials.", "Khách quốc tế tăng tiêu dùng đồ uống, ăn uống.": "Foreign visitors add food & drink spending.",
+  "Sức mua trong nước.": "Domestic spending.", "Đồ gỗ, dệt may, gia dụng xuất khẩu.": "Exported furniture, textiles, household goods.",
+  "USD tăng giá = doanh thu xuất khẩu quy ra VND cao hơn.": "Stronger USD = higher export revenue in VND.",
+  "Hàng xuất nhập khẩu qua cảng, logistics.": "Import/export cargo through ports and logistics.", "Hàng không, vận tải hành khách.": "Airlines, passenger transport.",
+  "Giá xăng dầu (nhóm giao thông) là chi phí chính.": "Fuel prices (transport CPI) are the main cost.", "Khách quốc tế = khách sạn, nhà hàng, giải trí.": "Foreign visitors = hotels, restaurants, leisure.",
+  "Chi tiêu dịch vụ của người dân.": "Household spending on services.", "Doanh thu chủ yếu từ xuất khẩu.": "Revenue mostly from exports.",
+  "USD tăng giá = lợi cho nhà xuất khẩu.": "Stronger USD = good for exporters.", "Nhu cầu từ sản xuất công nghiệp.": "Demand from industrial production.",
+  "Phân bón, hóa chất, nhựa xuất khẩu.": "Exported fertiliser, chemicals, plastics.", "Giá bán đầu ra công nghiệp.": "Industrial output prices.",
+  "Đơn hàng theo chu kỳ sản xuất công nghiệp.": "Orders follow the industrial cycle.", "Linh kiện, bao bì đi theo hàng xuất khẩu.": "Components and packaging follow exports.",
+  "Nhu cầu điện và thiết bị theo sản xuất công nghiệp.": "Power and equipment demand follows industry.", "Lưới điện, hạ tầng.": "Grid and infrastructure.",
+  "Sản xuất công nghiệp kéo tiêu thụ điện, nước, khí.": "Industry drives power, water and gas use.", "Tăng trưởng chung.": "Overall growth.",
+  "Sản xuất công nghiệp (bao gồm khai khoáng).": "Industrial production (including mining).", "Giá đầu ra công nghiệp.": "Industrial output prices.",
+  "Đá, cát cho công trình hạ tầng.": "Stone and sand for infrastructure.", "Tiêu dùng cuối cùng.": "Final consumption.",
+  "Hàng nhập khẩu phân phối lại.": "Imported goods redistributed.", "USD tăng giá = hàng nhập đắt hơn.": "Stronger USD = dearer imports.",
+  "Phần mềm, dịch vụ CNTT xuất khẩu.": "Exported software and IT services.", "Doanh thu bằng USD/JPY quy đổi.": "Revenue in USD/JPY, converted.",
+  "Chi tiêu chuyển đổi số trong nước.": "Domestic digital-transformation spending.",
+  "Lãi suất cao = thu nhập đầu tư (tiền gửi, trái phiếu) tăng.": "Higher rates = more investment income (deposits, bonds).",
+  "Thu nhập tăng = mua bảo hiểm nhiều hơn.": "Higher incomes = more insurance bought.", "Tăng trưởng khu vực nông, lâm, thủy sản.": "Growth of agriculture, forestry & fishery.",
+  "Nông sản xuất khẩu.": "Agricultural exports.", "Giá lương thực tăng = giá bán cao hơn.": "Higher food prices = higher selling prices.",
+  "Cao su, săm lốp xuất khẩu.": "Exported rubber and tyres.", "USD tăng giá lợi cho xuất khẩu.": "A stronger USD helps exports.",
+  "Chi tiêu của người dân (thuốc OTC, dịch vụ).": "Household spending (OTC drugs, services).", "Nguyên liệu thuốc phần lớn nhập khẩu.": "Drug ingredients are mostly imported.",
+
+  // ── market page
+  "Bản đồ nhiệt Thị trường Hôm nay": "Today's market heat map",
+  "Màu theo quy ước bảng giá Việt Nam: tím = giá trần · xanh = tăng · vàng = tham chiếu · đỏ = giảm · xanh lơ = giá sàn. Kích thước ô = khối lượng giao dịch.":
+    "Colours follow Vietnamese price boards: purple = ceiling · green = up · yellow = reference · red = down · cyan = floor. Box size = trading volume.",
+  "Định giá Thị trường (P/E & P/B) so với Lịch sử": "Market valuation (P/E & P/B) vs history", "P/E thị trường hiện": "Market P/E now",
+  "Giá trị Giao dịch ròng Nước ngoài": "Foreign net trading value", "Giá trị ròng (tỷ VND)": "Net value (VND bn)",
+  ". Nguồn: VNDirect (NN = nhà đầu tư nước ngoài).": ". Source: VNDirect.",
+  "Dòng tiền khối ngoại & tự doanh": "Foreign & proprietary flows", "Mua-bán ròng cộng dồn (tỷ VND) so với VN-Index": "Cumulative net buying (VND bn) vs VN-Index",
+  "Mua-bán ròng (tỷ)": "Net buying (bn)", "Khối ngoại": "Foreign", "Tự doanh": "Proprietary", "Tự doanh CTCK": "Brokers' proprietary",
+  "Cộng dồn (tỷ VND)": "Cumulative (VND bn)", "Mua ròng nhiều nhất": "Top net buyers", "Bán ròng nhiều nhất": "Top net sellers",
+  "Tự doanh = công ty chứng khoán mua bán bằng tiền của chính mình. Số tự doanh công bố trễ một phiên so với giá. Bấm mã để xem chi tiết. Nguồn: VNDirect.":
+    "Proprietary = brokers trading their own money. Proprietary data lags prices by one session. Click a ticker for details. Source: VNDirect.",
+  "Giao dịch Nước ngoài & Tự doanh": "Foreign & proprietary trading", "Giao dịch NB": "Insider trades",
+  "Dữ liệu giao dịch tự doanh chưa có sẵn từ nguồn dữ liệu hiện tại.": "Proprietary trading data is not available from the current source.",
+  "so với thị trường": "vs the market",
+
+  // ── macro page
+  "Bức tranh vĩ mô hiện nay": "Macro picture today", "Nhìn chung": "Overall", "đang tốt lên": "improving",
+  "chỉ báo tốt lên,": "indicators improving,", "xấu đi, còn lại đi ngang hoặc chưa đủ dữ liệu.": "worsening, the rest flat or without enough data.",
+  "= đang tốt lên cho nền kinh tế / thị trường,": "= improving for the economy / market,", "= xấu đi.": "= worsening.",
+  "chưa đủ dữ liệu để xem xu hướng": "not enough data for a trend",
+  "Nguồn: Tổng cục Thống kê (nso.gov.vn)": "Source: General Statistics Office (nso.gov.vn)",
+  "Nguồn: Tổng cục Thống kê (nso.gov.vn), Ngân hàng Nhà nước, World Bank.": "Sources: General Statistics Office (nso.gov.vn), State Bank of Vietnam, World Bank.",
+  "Tổng quan kinh tế": "Overview", "Tăng trưởng kinh tế": "Growth", "Giá cả & Lạm phát": "Prices & inflation",
+  "Đầu tư & Tiết kiệm": "Investment & savings", "Sản xuất & Doanh nghiệp": "Production & business", "Ngân sách & Đầu tư công": "Budget & public investment",
+  "Xuất nhập khẩu": "Trade", "Lao động & Việc làm": "Labour", "Tiền tệ & Tỷ giá": "Money & FX", "Tiêu dùng": "Consumption", "Lãi suất": "Interest rates",
+  "Tăng trưởng GDP": "GDP growth", "Tăng trưởng GDP (so với cùng kỳ năm trước)": "GDP growth (year on year)",
+  "Tăng trưởng GDP theo khu vực (so với cùng kỳ)": "GDP growth by sector (year on year)", "Quy mô GDP (World Bank, theo năm)": "GDP size (World Bank, annual)",
+  "GDP bình quân đầu người (World Bank, theo năm)": "GDP per capita (World Bank, annual)", "Nông, lâm, thủy sản": "Agriculture, forestry & fishery",
+  "Công nghiệp & Xây dựng": "Industry & construction", "Dịch vụ": "Services", "Công nghiệp": "Industry", "Thương mại": "Commerce",
+  "Vận tải & Viễn thông": "Transport & telecoms", "Tổng tín dụng": "Total credit",
+  "Lạm phát (CPI)": "Inflation (CPI)", "Lạm phát (so với cùng kỳ năm trước)": "Inflation (year on year)", "Lạm phát (so với tháng trước)": "Inflation (month on month)",
+  "Tỷ lệ lạm phát (so với tháng trước)": "Inflation rate (month on month)", "Lạm phát cơ bản": "Core inflation",
+  "Lạm phát lương thực (so với tháng trước)": "Food inflation (month on month)", "CPI nhóm giao thông (so với tháng trước)": "Transport CPI (month on month)",
+  "Chỉ số giá sản xuất công nghiệp (so với cùng kỳ)": "Industrial producer prices (year on year)",
+  "Tăng trưởng vốn đầu tư toàn xã hội": "Total investment growth", "Tăng trưởng vốn đầu tư toàn xã hội (so với cùng kỳ)": "Total investment growth (year on year)",
+  "Vốn đầu tư nước ngoài (FDI đăng ký)": "Foreign direct investment (registered)", "Vốn đầu tư nước ngoài (FDI đăng ký, theo quý)": "Foreign direct investment (registered, quarterly)",
+  "FDI theo quý": "FDI by quarter", "FDI lũy kế": "FDI year to date",
+  "Tổng vốn hình thành gộp (% GDP, World Bank)": "Gross capital formation (% of GDP, World Bank)", "Tổng tiết kiệm (% GDP, World Bank)": "Gross savings (% of GDP, World Bank)",
+  "Chỉ số sản xuất công nghiệp IIP (theo tháng, so với cùng kỳ)": "Industrial production IIP (monthly, year on year)", "Sản xuất công nghiệp (IIP)": "Industrial production (IIP)",
+  "Doanh nghiệp thành lập mới (theo tháng)": "New businesses registered (monthly)", "Doanh nghiệp mới": "New businesses",
+  "Thu & chi ngân sách nhà nước (theo tháng)": "State budget revenue & spending (monthly)", "Giải ngân vốn đầu tư từ ngân sách (theo tháng)": "Public investment disbursed (monthly)",
+  "Giải ngân đầu tư công": "Public investment disbursed", "Xuất khẩu": "Exports", "Nhập khẩu": "Imports",
+  "Xuất khẩu & Nhập khẩu (theo tháng)": "Exports & imports (monthly)", "Cán cân thương mại": "Trade balance", "Cán cân thương mại (theo tháng)": "Trade balance (monthly)",
+  "Cán cân vãng lai (% GDP, World Bank)": "Current account (% of GDP, World Bank)", "Độ mở thương mại (% GDP, World Bank)": "Trade openness (% of GDP, World Bank)",
+  "Tỷ lệ thất nghiệp": "Unemployment rate", "Thất nghiệp": "Unemployment", "Tỷ lệ thiếu việc làm": "Underemployment rate",
+  "Thu nhập bình quân người lao động (theo quý)": "Average worker income (quarterly)", "Lực lượng lao động": "Labour force",
+  "Tỷ lệ tham gia LLLĐ (World Bank)": "Labour participation (World Bank)", "Tỷ lệ có việc làm / dân số (World Bank)": "Employment / population (World Bank)",
+  "Tỷ giá USD/VND": "USD/VND rate", "Tỷ giá USD/VND (VNDirect)": "USD/VND rate (VNDirect)", "Tỷ giá đóng cửa": "Closing rate",
+  "Giá vàng SJC": "SJC gold price", "Mua vào / bán ra vàng miếng": "Gold bar buy / sell", "SJC cao hơn thế giới": "SJC above world price",
+  "Thế giới quy đổi": "World price converted",
+  "Nguồn: SJC (bảng giá TP.HCM, cập nhật mỗi ngày làm việc); giá thế giới là hợp đồng vàng tương lai (Yahoo, cập nhật mỗi ngày). Chênh lệch dương = vàng trong nước đắt hơn thế giới.":
+    "Source: SJC (HCMC board, updated every working day); world price = gold futures (Yahoo, daily). Positive gap = domestic gold dearer than world.",
+  "Tăng trưởng tín dụng (so đầu năm)": "Credit growth (year to date)", "Tăng trưởng tín dụng theo ngành (% so đầu năm)": "Credit growth by sector (% year to date)",
+  "Tăng trưởng cung tiền M2 (World Bank)": "M2 money growth (World Bank)", "Tín dụng theo ngành (NHNN)": "Credit by sector (SBV)",
+  "Bán lẻ hàng hóa & dịch vụ": "Retail sales of goods & services", "Bán lẻ hàng hóa & dịch vụ theo tháng (so với cùng kỳ)": "Retail sales, monthly (year on year)",
+  "Bán lẻ theo tháng (so với cùng kỳ năm trước)": "Retail sales, monthly (year on year)", "Tổng mức bán lẻ hàng hóa & dịch vụ (theo tháng)": "Total retail sales (monthly)",
+  "Khách quốc tế": "International visitors", "Khách quốc tế đến Việt Nam (theo tháng)": "International arrivals (monthly)",
+  "Tăng trưởng tiêu dùng (World Bank)": "Consumption growth (World Bank)", "Tiêu dùng / GDP (World Bank)": "Consumption / GDP (World Bank)",
+  "Lãi suất cho vay & tiền gửi (SBV)": "Lending & deposit rates (SBV)", "Lãi suất thực (World Bank)": "Real interest rate (World Bank)",
+  "Lãi suất tiết kiệm (CafeF)": "Savings rates (CafeF)", "(VPBank) · thấp nhất": "(VPBank) · lowest", "· cao nhất": "· highest",
+  "%/năm, gửi tại quầy, lĩnh lãi cuối kỳ, chưa gồm ưu đãi hay gửi trực tuyến. Xanh = cao nhất, đỏ = thấp nhất ở mỗi kỳ hạn. Nguồn: CafeF, cập nhật mỗi ngày làm việc.":
+    "%/year, at the counter, interest at maturity, excluding promotions and online rates. Green = highest, red = lowest per tenor. Source: CafeF, every working day.",
+  "Năng lượng (đầu vào)": "Energy (input)", "Quặng sắt (đầu vào)": "Iron ore (input)", "ETF Thép (đầu ra)": "Steel ETF (output)",
+  "Giá Vật liệu xây dựng": "Building-material prices",
+  // calendar
+  "🗓 Lịch cập nhật số liệu": "🗓 Data release calendar", "Số mới nhất": "Latest", "Lần tới": "Next",
+  "Báo cáo tháng của NSO": "NSO monthly report", "Báo cáo quý của NSO": "NSO quarterly report",
+  "CPI, lạm phát cơ bản, IIP, bán lẻ, xuất nhập khẩu, ngân sách, đầu tư công, doanh nghiệp mới, khách quốc tế":
+    "CPI, core inflation, IIP, retail, trade, budget, public investment, new businesses, international visitors",
+  "GDP theo khu vực, thất nghiệp, lực lượng lao động, thu nhập, PPI": "GDP by sector, unemployment, labour force, income, PPI",
+  "Bảng 28 ngân hàng, trung bình / cao nhất / thấp nhất": "28-bank table, average / highest / lowest",
+  "Không theo lịch cố định, NHNN công bố khi họp báo": "No fixed schedule, the SBV publishes at press conferences",
+  "Mỗi ngày làm việc": "Every working day", "Hằng năm": "Annual", "Không định kỳ": "Irregular",
+};
+
+// aria-labels of the sector tiles: "Ngân hàng: có lợi, có lợi, đi ngang"
+for (const [vi, en] of Object.entries(SECTORS)) {
+  EXACT[`🌐 Vĩ mô tác động tới ngành ${vi}`] = `🌐 Macro drivers: ${en}`;
+  EXACT[`· ${vi}`] = `· ${en}`;
+}
+
+export const PHRASES = [
+  ...Object.entries(LEAN),
+  // time comparisons
+  ["so với cùng kỳ năm trước", "vs. same period last year"], ["so với cùng kỳ", "year on year"], ["so với tháng trước", "vs. previous month"],
+  ["so với kỳ trước", "vs. previous period"], ["so với TB 3 kỳ trước", "vs. avg of previous 3"], ["so với thị giá", "vs. market price"],
+  ["vs trung vị", "vs median"], ["Trung vị", "Median"], ["theo quý", "quarterly"], ["theo tháng", "monthly"],
+  ["điểm %", "pts"], ["chưa đủ dữ liệu để xem xu hướng", "not enough data for a trend"],
+  ["có lợi cho ngành", "helps the sector"], ["bất lợi cho ngành", "hurts the sector"], ["· khoảng", "· about"], ["đang trễ", "late"], ["số cuối đã cũ", "latest value is old"],
+  ["số NSO tiếp theo khoảng", "next NSO figures about"],
+  ["Biểu đồ đang được dựng", "Chart in progress"], ["Số liệu thu thập hằng ngày từ", "Collected daily since"],
+  ["biểu đồ hiện khi có từ 2 ngày trở lên", "the chart appears once there are 2+ days"],
+  ["Số mới nhất:", "Latest:"], ["chưa có số mới hơn", "no newer figure yet"],
+  // stock/insider/actions
+  ["Đăng kí Mua", "registered to buy"], ["Đăng kí Bán", "registered to sell"], ["Đăng ký mua", "registered to buy"], ["Đăng ký bán", "registered to sell"],
+  ["Trả cổ tức bằng tiền mặt", "Cash dividend"], ["Phát hành cổ phiếu", "Share issue"], ["Trả Cổ tức bằng Cổ phiếu", "stock dividend"],
+  ["Niêm yết bổ sung", "Additional listing"], ["Cả năm", "Full year"],
+  ["Khuyến nghị ngày", "Recommendation dated"], ["Khuyến nghị", "Recommendation"], ["Nguồn: VCI ·", "Source: VCI ·"],
+  ["mã · cập nhật", "tickers · updated"], ["cập nhật ngày", "updated"], ["dữ liệu cũ", "old data"], ["Tính đến", "As of"],
+  ["đang bật", "active"], ["Mua ròng", "Net buying"], ["Bán ròng", "Net selling"], ["mua ròng", "net buying"], ["bán ròng", "net selling"],
+  ["phiên gần nhất", "latest sessions"], ["Lũy kế", "Cumulative"],
+  ["TRUNG BÌNH", "AVERAGE"], ["PHƯƠNG PHÁP", "METHODS"], ["Cảnh báo:", "Warning:"], ["Nguy hiểm:", "Danger:"], ["Tốt:", "Good:"],
+  ["chưa trả trong", "not paid in"], ["chi phí vốn chủ", "cost of equity"],
+  ["Ngân hàng, chứng khoán và bảo hiểm được so bằng ROE với chi phí vốn chủ", "Banks, brokers and insurers are compared by ROE against the cost of equity"],
+];
+
+// Patterns with a number attached (safer than the bare word, which also sits
+// inside news headlines): "Tháng 11 · khoảng 06/12" -> "Month 11 · about 06/12".
+export const RX = [
+  [/(?<![A-Za-zÀ-ỹ])Tháng (\d{1,2})(?!\d)/g, "Month $1"], [/(?<![A-Za-zÀ-ỹ])Quý (\d)(?!\d)/g, "Q$1"],
+  [/(?<![A-Za-zÀ-ỹ])quý (I{1,3}|IV)\/(\d{4})/g, "Q$1/$2"],
+];
+
+// Second pass from the EN audit (templated strings by frequency).
+PHRASES.push(
+  ["Giao dịch nội bộ: Giao dịch cá nhân", "Insider trade: individual"], ["Giao dịch nội bộ: Giao dịch tổ chức", "Insider trade: institution"],
+  ["Giao dịch nội bộ: Giao dịch người liên quan", "Insider trade: related party"], ["Tổ chức ĐHĐCĐ thường niên", "Annual general meeting"],
+  ["Tổ chức ĐHĐCĐ bất thường", "Extraordinary general meeting"], ["Đại hội Đồng Cổ đông", "General meeting"],
+  ["Đại hội Cổ đông Bất thường", "Extraordinary general meeting"], ["Niêm yết thêm", "Additional listing"], ["Sự kiện khác", "Other event"],
+  ["Cổ phiếu thưởng", "bonus shares"], ["Phát hành cho CBCNV", "ESOP issue"],
+  ["nhóm cuối ngành", "bottom of the sector"], ["giữa ngành", "middle of the sector"], ["nhóm đầu ngành", "top of the sector"],
+  ["vùng nguy hiểm", "danger zone"], ["vùng an toàn", "safe zone"],
+  ["phép thử đạt/trượt từ hai báo cáo năm liền nhau", "pass/fail tests from two consecutive annual reports"],
+  ["phép thử sức khoẻ tài chính", "financial-health tests"], ["phép thử đạt", "tests passed"],
+  ["P/E lịch sử của chính mã", "Own historical P/E"], ["P/B lịch sử của chính mã", "Own historical P/B"],
+  ["người mua", "buyers"], ["người bán", "sellers"], ["Xem thêm", "Show"], ["giao dịch cũ hơn", "older trades"],
+  ["sự kiện cũ hơn", "older events"], ["kỳ cũ hơn", "older periods"], ["lợi suất", "yield"], ["theo giá hiện tại", "at the current price"],
+  ["phân vị", "percentile"], ["Chi phí vốn chủ", "Cost of equity"], ["Ròng", "Net"],
+  ["trung bình độ lớn", "average size"], ["kỳ báo cáo", "reporting periods"], ["▲ tăng", "▲ up"], ["▼ giảm", "▼ down"],
+  ["Giá gần nhất", "Latest price"], ["Báo cáo gần nhất", "Latest report"], ["Báo cáo kỳ tới", "Next report"],
+  ["Ngưỡng rẻ", "Cheap threshold"], ["Ngưỡng đắt", "Dear threshold"], ["mất giá = xấu", "weakening = bad"],
+  ["lãi tăng = tiền đắt hơn", "rates up = dearer money"], ["Kỳ hạn", "Tenor"], ["Lãi suất tiết kiệm", "Savings rate"],
+  ["của chính mã này (trung vị", "for this ticker (median"], ["Đang rẻ so với lịch sử của chính nó.", "Cheap against its own history."],
+  ["Đang đắt so với lịch sử của chính nó.", "Dear against its own history."],
+  ["Đang ở vùng định giá quen thuộc của chính nó.", "Within its usual valuation range."],
+  ["Thị trường ở vùng định giá quen thuộc.", "The market is in its usual valuation range."],
+  ["Thị trường đang rẻ hơn mặt bằng lịch sử.", "The market is cheaper than its history."],
+  ["Thị trường đang đắt hơn mặt bằng lịch sử.", "The market is dearer than its history."],
+  ["Dải nhạt là vùng trung bình ±", "The shaded band is the mean ±"], ["độ lệch chuẩn", "standard deviation"],
+  ["Giá vàng miếng", "Gold bar price"], ["Ví dụ:", "Example:"], ["Bỏ qua mã lỗ (P/E âm).", "Loss-makers (negative P/E) are skipped."],
+  ["Giá × số cổ phiếu lưu hành.", "Price × shares outstanding."], ["Giá trị khớp lệnh bình quân", "Average matched value"],
+  ["đã điều chỉnh theo ngành", "sector-adjusted"], ["Giá mô hình", "Model price"], ["cảnh báo dữ liệu", "data warnings"],
+  ["Kiểm tra chất lượng dữ liệu ngày", "Data quality check of"], ["Chia cổ phiếu", "Stock splits"], ["Cổ tức tiền", "Cash dividends"],
+  ["Lãnh đạo, người liên quan và tổ chức mua trừ bán đã thực hiện trong", "Executed buys minus sells by management, related parties and institutions over"],
+  ["% cổ phần", "% of shares"], ["Chỉ số (gốc=", "Index (base="], ["so VNINDEX (%)", "vs VNINDEX (%)"], ["sau, theo lợi nhuận", "after, by profit"],
+  ["phiên đầu", "first sessions"], ["Biến động", "Move"], ["phiên trước", "sessions before"], ["giảm dần trong", "falling over"],
+  ["lãi tăng", "profit up"], ["lãi giảm", "profit down"], ["Góc trên-trái = rẻ & sinh lời tốt (P/E thấp, ROE cao)", "Top-left = cheap & profitable (low P/E, high ROE)"],
+  ["Chỉ số là trung vị giữa các mã", "Values are medians across tickers"], ["mã có dữ liệu định giá", "tickers with valuation data"],
+  ["Ô lớn = nhiều mã; xanh = tốt hơn theo", "Bigger box = more tickers; green = better by"],
+  ["chưa bù được rủi ro cổ đông gánh", "doesn't cover the risk shareholders carry"], ["lợi nhuận trên vốn cổ đông", "return on equity"],
+  ["nên về lý thuyết cổ phiếu không đáng giá bằng vốn sổ sách.", "so in theory the stock is worth less than book value."],
+);
+RX.push(
+  [/(\d) tỷ(?![A-Za-zÀ-ỹ])/g, "$1 bn"], [/(\d) nghìn tỷ(?![A-Za-zÀ-ỹ])/g, "$1 trillion"], [/(\d) nghìn(?![A-Za-zÀ-ỹ])/g, "$1k"],
+  [/(\d) tr lượt/g, "$1m visits"], [/(\d) tr(?![A-Za-zÀ-ỹ])/g, "$1m"], [/(\d) cp(?![A-Za-zÀ-ỹ])/g, "$1 shares"],
+  [/(\d) ngày(?![A-Za-zÀ-ỹ])/g, "$1 days"], [/(\d) tháng(?![A-Za-zÀ-ỹ])/g, "$1 months"], [/(\d) năm(?![A-Za-zÀ-ỹ])/g, "$1 years"],
+  [/(\d) phiên(?![A-Za-zÀ-ỹ])/g, "$1 sessions"], [/(\d) kỳ(?![A-Za-zÀ-ỹ])/g, "$1 periods"], [/(\d) mã(?![A-Za-zÀ-ỹ])/g, "$1 tickers"],
+  [/(\d) quý(?![A-Za-zÀ-ỹ])/g, "$1 quarters"], [/(\d) ngành(?![A-Za-zÀ-ỹ])/g, "$1 sectors"], [/(\d) điểm(?![A-Za-zÀ-ỹ])/g, "$1 pts"],
+  [/(?<![A-Za-zÀ-ỹ])năm (\d{4})/g, "year $1"], [/top (\d+)% thị trường/g, "top $1% of the market"],
+  [/thường (\d+) days sau khi hết quý/g, "usually $1 days after quarter end"], [/(?<![A-Za-zÀ-ỹ])thường (\d+) ngày sau khi hết quý/g, "usually $1 days after quarter end"],
+  [/(P\/E|P\/B|P\/S|P\/OCF|P\/CF|EV\/EBITDA) ngành/g, "Sector $1"],
+);
+// the sector tiles' aria-labels: "Ngân hàng: helping, flat"
+const escRe = (t) => t.replace(/[.*+?^$(){}|[\]\\]/g, "\\$&");
+for (const [vi, en] of Object.entries(SECTORS)) RX.push([new RegExp("^" + escRe(vi) + ":"), en + ":"]);
+
+// Third pass: whole sentences (tooltips, notes) and number-carrying templates.
+Object.assign(EXACT, {
+  "Top 10 Tăng giá (thanh khoản tốt)": "Top 10 gainers (liquid)", "Top 10 Giảm giá (thanh khoản tốt)": "Top 10 losers (liquid)",
+  "Top 10 Khối lượng": "Top 10 by volume", "Top 5 mỗi Ngành — theo Avg Est Upside": "Top 5 per sector — by avg est. upside",
+  "Top 12 cổ đông lớn nhất · màu theo nhóm sở hữu": "Top 12 holders · coloured by holder type",
+  "Tăng trưởng GDP dài hạn (World Bank, 1985–nay)": "Long-run GDP growth (World Bank, 1985–now)",
+  "Giao dịch NB": "Insider trades", "Nội bộ 12T": "Insiders 12M", "Điểm 0–100": "Score 0–100", "Tiền gửi 6-12T": "6–12M deposits",
+  "Thêm mã… (tối đa 6)": "Add ticker… (up to 6)", "Họp ĐHCĐ": "AGM", "Niêm yết": "Listing", "Phát hành": "Issue", "Sự kiện": "Events",
+  "Cổ tức": "Dividend", "không so được": "not comparable", "tiền ròng": "net cash", "Nhỉnh trên trung bình": "Slightly above average",
+  "Quanh/dưới trung bình": "Around / below average", "PEG ≤ 1: trả ít hơn tốc độ tăng lợi nhuận": "PEG ≤ 1: paying less than the profit growth",
+  "Phải thu × 365 / Doanh thu": "Receivables × 365 / revenue", "Hàng tồn kho × 365 / Giá vốn": "Inventory × 365 / cost of goods",
+  "NOPAT ÷ WACC, tăng trưởng 0": "NOPAT ÷ WACC, zero growth", "Vốn chủ × 1.8 (quỹ đất)": "Equity × 1.8 (land bank)",
+  "> 1x: lợi nhuận được bảo chứng bằng tiền mặt thực": "> 1x: profit backed by real cash",
+  "Mỗi biểu đồ là một chỉ báo vĩ mô ảnh hưởng tới ngành, 3 năm gần nhất.": "Each chart is a macro indicator that moves the sector, last 3 years.",
+  "💡 TỔNG HỢP = tổng hợp tất cả tín hiệu Mua/Bán từ 7 chỉ số kỹ thuật và các đường trung bình (Simple & Exponential) bên dưới.":
+    "💡 OVERALL = all Buy/Sell signals from the 7 technical indicators and the moving averages (simple & exponential) below.",
+  "📊 Điểm gauge chạy từ -1 (Bán mạnh) đến +1 (Mua mạnh) = (Số tín hiệu Mua − Số tín hiệu Bán) / Tổng số tín hiệu. 0 = cân bằng giữa Mua và Bán.":
+    "📊 The gauge runs from -1 (strong sell) to +1 (strong buy) = (buy signals − sell signals) / all signals. 0 = balanced.",
+  "Góc trên bên phải là chất lượng cao mà còn rẻ so với mô hình. Vạch chia tại upside 0% và chất lượng 50. Bấm vào một điểm để mở mã đó.":
+    "Top right = high quality and still cheap against the model. Dividers at 0% upside and quality 50. Click a dot to open that ticker.",
+  "Gõ mã vào ô phía trên để thêm (tối đa 6 mã). Chọn nhiều mã cùng ngành sẽ hiện thêm bộ chỉ số riêng của ngành đó. Lựa chọn của bạn được nhớ cho lần sau.":
+    "Type a ticker above to add it (up to 6). Picking several in one sector adds that sector's own metrics. Your choice is remembered.",
+  "Mỗi ô: số mới nhất, kỳ của số đó, và xu hướng gần đây. Số theo tháng so trung bình 3 kỳ gần nhất với 3 kỳ trước đó (bớt nhiễu), riêng số có tính mùa vụ (xuất khẩu, cán cân, đầu tư công, doanh nghiệp mới, khách quốc tế) so 3 tháng gần nhất với cùng kỳ năm trước; số theo quý so với quý trước; tỷ giá so với 3 tháng trước.":
+    "Each tile: latest figure, its period, and the recent trend. Monthly figures compare the mean of the last 3 with the 3 before (less noise); seasonal ones (exports, trade balance, public investment, new businesses, visitors) compare the last 3 months with a year earlier; quarterly ones the previous quarter; the FX rate 3 months earlier.",
+  "Ngày dự kiến theo lịch họp báo của NSO (ngày 6 tháng sau). Dữ liệu được lấy tự động mỗi ngày làm việc, thường có trên trang trong ngày công bố hoặc ngày kế tiếp.":
+    "Expected dates follow NSO's press calendar (the 6th of the following month). Data is collected automatically every working day and usually appears on release day or the next.",
+  "Số năm (GDP USD, tiết kiệm, M2…), thường cập nhật khoảng tháng 7": "Annual figures (GDP in USD, savings, M2…), usually updated around July",
+  "Tốn bao nhiêu đồng chi phí để tạo ra 100 đồng thu nhập. Càng thấp càng vận hành hiệu quả": "Cost spent per 100 of income. Lower = more efficient",
+  "Tiền thật kiếm được gấp bao nhiêu lần tiền lãi phải trả. Trên 100x nghĩa là gần như không vay": "Real cash earned as a multiple of interest due. Above 100x = barely borrows",
+  "Tự nuôi được việc mở rộng hay phải đi vay. Dưới 1.5x là chưa tự tài trợ nổi mức đầu tư đang làm": "Can it fund its own expansion or must it borrow? Below 1.5x = not self-funding its current investment",
+  "Mỗi năm tiền kinh doanh trả được bao nhiêu phần dư nợ. 0.5x nghĩa là khoảng 2 năm là sạch nợ": "Share of debt operating cash repays each year. 0.5x = debt-free in about 2 years",
+  "Dưới 100% nghĩa là riêng hoạt động bảo hiểm đã có lãi, chưa cần đến lãi đầu tư. Đây là thước đo cốt lõi của một công ty bảo hiểm":
+    "Below 100% = underwriting alone is profitable, before investment income. The core measure of an insurer",
+  "Trên 1x nghĩa là lợi nhuận đến từ danh mục đầu tư nhiều hơn từ nghiệp vụ bảo hiểm — tức phụ thuộc thị trường tài chính":
+    "Above 1x = more profit from the investment book than from insurance — i.e. dependent on financial markets",
+  "Quy mô cho vay margin so với vốn tự có. Trần quy định là 2 lần vốn chủ sở hữu, nên càng gần 2x thì càng ít chỗ để mở rộng và càng nhạy với một đợt giảm giá":
+    "Margin lending against own capital. The legal cap is 2x equity, so the closer to 2x, the less room to grow and the more exposed to a sell-off",
+  "Đệm vốn tự có so với toàn bộ tài sản. 25% tương đương tài sản gấp 4 lần vốn chủ — mỏng với một công ty cho vay margin, vì giá giảm là phải gọi thêm tiền ngay":
+    "Equity buffer against all assets. 25% = assets 4x equity — thin for a margin lender, since a price drop means calling more cash at once",
+  "Mỗi 100 đồng doanh thu đọng lại bao nhiêu đồng tiền thật. Mức hợp lý phụ thuộc ngành rất mạnh — tiện ích quanh 28%, bán lẻ quanh 2% — nên đọc kèm bảng so sánh cùng ngành":
+    "Real cash kept per 100 of revenue. What's normal depends heavily on the sector — utilities around 28%, retail around 2% — so read it with the peer table",
+  "Lợi nhuận hoạt động có được thu bằng tiền hay không. Dưới 1x kéo dài là dấu hiệu lợi nhuận nằm ở phải thu và tồn kho. Để trống khi EBIT âm — lỗ ở khâu vận hành thì tỷ số này vô nghĩa":
+    "Is operating profit collected in cash? Below 1x for long = profit stuck in receivables and inventory. Blank when EBIT is negative",
+  "Kẹp ngoại lai (median ± 1.5×MAD) trong từng nhóm — lịch sử chính mã, bội số ngành, mô hình dòng tiền — rồi lấy trung bình ba nhóm, để nhóm nào có nhiều phương pháp hơn không lấn phiếu":
+    "Outliers clipped (median ± 1.5×MAD) within each family — own history, sector multiples, cash-flow models — then the three families averaged, so a family with more methods doesn't get more votes",
+});
+PHRASES.push(
+  ["Top 10", "Top 10"], ["Mua-bán ròng nước ngoài", "Foreign net buying"], ["Mua-net selling nước ngoài", "Foreign net buying"],
+  ["= xanh", "= green"], ["= đỏ", "= red"], ["tỷ VND", "VND bn"], ["triệu/lượng", "million/tael"], ["ngân hàng ·", "banks ·"],
+  ["P/E hiện tại", "Current P/E"], ["P/B hiện tại", "Current P/B"], ["so TB", "vs avg"], ["Tỷ suất cổ tức", "Dividend yield"],
+  ["Tỷ đồng/phiên, bình quân", "VND bn/session, average of"], ["Pha loãng", "Dilution"], ["Tham chiếu", "Reference"],
+  ["▲ Trần:", "▲ Ceiling:"], ["▲ Tăng:", "▲ Up:"], ["▼ Giảm:", "▼ Down:"], ["▼ Sàn:", "▼ Floor:"], ["band xám", "grey band"],
+  ["Không tính cho ngân hàng, chứng khoán, bảo hiểm.", "Not computed for banks, brokers, insurers."], ["Không tính cho ngành tài chính.", "Not computed for financials."],
+  ["Âm = tiền mặt nhiều hơn nợ. Ngành tài chính luôn đạt.", "Negative = more cash than debt. Financials always pass."],
+  ["Điểm chất lượng nội bộ: ROE, biên lãi, dòng tiền, thanh khoản, nợ.", "Internal quality score: ROE, margins, cash flow, liquidity, debt."],
+  ["/ vốn chủ.", "/ equity."], ["là safe zone.", "is the safe zone."], ["Savings rate tại quầy", "Counter savings rates"],
+  ["gần nhất", "latest"], ["năm trước:", "year before:"], ["so với average", "vs the average of"], ["(đáy", "(floor"],
+  ["công ty liên tục tạo ra giá trị thực: sinh lời", "the company keeps creating real value: earning"],
+  ["trên vốn đầu tư, above chi phí vốn phải trả.", "on invested capital, above its cost of capital."],
+  ["trên vốn đầu tư, cao hơn chi phí vốn phải trả.", "on invested capital, above its cost of capital."],
+  ["mỗi đồng vốn cổ đông sinh lời", "each dong of equity earns"], ["nhiều hơn mức", "more than the"],
+  ["mà cổ đông đòi hỏi cho rủi ro này, nên giá trị sổ sách xứng đáng được trả", "shareholders require for this risk, so book value deserves to be paid"],
+  ["cao hơn 1 lần.", "more than 1x."], ["above 1 lần.", "more than 1x."], ["× tỷ giá", "× FX rate"],
+  ["Mua trừ bán đã thực hiện (có báo cáo kết quả) của lãnh đạo, người liên quan và tổ chức trong", "Executed buys minus sells (result reported) by management, related parties and institutions over"],
+
+);
+RX.push(
+  [/là (\d[\d.,]*–\d[\d.,]*x)/g, "is $1"], [/so với (\d{4}-\d{2}-\d{2})/g, "vs. $1"], [/· tháng$/g, "· monthly"],
+  [/(\d) years gần nhất/g, "last $1 years"], [/(\d) quarters gần nhất/g, "last $1 quarters"], [/(\d) months gần nhất/g, "last $1 months"],
+  [/P\/E đã tính đến tốc độ tăng trưởng: dưới 1 là trả ít hơn mức tăng trưởng\. Tăng trưởng lợi nhuận (\d+) (?:năm|years): ([\d.,]+)%\/năm\. Dùng lợi nhuận ròng thay EPS vì EPS bị thưởng cổ phiếu làm méo\. Để trống khi lợi nhuận giảm/g,
+   "Growth-adjusted P/E: below 1 = paying less than the growth. $1-year profit growth: $2%/year. Uses net profit, not EPS, since bonus shares distort EPS. Blank when profit is falling"],
+  [/P\/E ÷ tăng trưởng lợi nhuận (\d+) (?:năm|years)/g, "P/E ÷ $1-year profit growth"], [/P\/E \/ Tăng trưởng lợi nhuận ròng (\d+) (?:năm|years) \(%\)/g, "P/E / $1-year net profit growth (%)"],
+);
+Object.assign(EXACT, { "Xanh": "Green", "Đỏ": "Red", "Chuyển sang tiếng Việt": "Chuyển sang tiếng Việt" });
+PHRASES.push(["12T (TB)", "12M (avg)"], ["(TB)", "(avg)"]);
+RX.push([/(?<![A-Za-zÀ-ỹ])TB (\d)/g, "Avg $1"]);
