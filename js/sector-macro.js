@@ -197,12 +197,14 @@ function drawTiles(grid, macro, sec, banks) {
     window.Plotly.react(box.querySelector(".sm-c"), [{
       x: pp.map((p) => p.period), y: pp.map((p) => p.value), type: bar ? "bar" : "scatter",
       mode: bar ? undefined : "lines", marker: { color: "#2563eb" }, line: { color: "#2563eb", width: 1.5 },
-      hovertemplate: `%{x|%m/%Y}: %{y:,.2f}${info.unit}<extra></extra>`,
+      hovertemplate: `%{y:,.2f}${info.unit}<extra></extra>`,   // the date sits on the axis label (hovermode x)
     }], {
-      height: 150, margin: { l: 40, r: 6, t: 4, b: 22 }, dragmode: false, showlegend: false,
+      // "x": the value shows anywhere above a date, not only on the bar itself
+      // (with "closest" a short bar was a tiny target and hovering looked dead)
+      height: 150, margin: { l: 40, r: 6, t: 4, b: 22 }, dragmode: false, showlegend: false, hovermode: "x",
       paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
       font: { family: "Fira Code, monospace", size: 9, color: "#0a121d" },
-      xaxis: { showgrid: false, tickfont: { size: 8 } },
+      xaxis: { showgrid: false, tickfont: { size: 8 }, hoverformat: info.how === "d63" ? "%d/%m/%Y" : "%m/%Y" },
       yaxis: { gridcolor: "rgba(148,163,184,0.22)", tickfont: { size: 8 }, zerolinecolor: "#cbd5e1" },
     }, { displayModeBar: false, responsive: true });
   }

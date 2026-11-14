@@ -37,6 +37,15 @@ const literal = (src) => src.replace(/\(\?<?[!=](?:[^()]|\([^()]*\))*\)/g, "").r
   .replace(/\\./g, "x").replace(/[()?:+*|{}^$.\d]/g, "").length;
 const RXS = [...RX].sort((a, b) => literal(b[0].source) - literal(a[0].source));
 
+// Vietnamese without a single diacritic ("Mua", "Chi", "Cho vay") has nothing
+// for VI to catch, so the dictionary's own diacritic-free entries are matched
+// as whole words too. hasVi() is the gate everywhere; testing VI alone left
+// "Mua" untranslated next to "Sell".
+const BARE = [...Object.keys(EXACT), ...PHRASES.filter(Array.isArray).map((p) => p[0])]
+  .filter((k) => !VI.test(k) && /[A-Za-z]/.test(k) && EXACT[k] !== k).sort((a, b) => b.length - a.length);
+const BARE_RE = BARE.length ? new RegExp(`(?<![${L}])(?:${BARE.map(esc).join("|")})(?![${L}])`) : null;
+const hasVi = (s) => VI.test(s) || (BARE_RE !== null && BARE_RE.test(s));
+
 // Whole-string match, keeping the original's leading/trailing whitespace
 // (inline text nodes rely on it for spacing).
 function exact(s) {
@@ -54,7 +63,7 @@ function bySegments(s) {
   if (parts.length < 2) return null;
   let hit = false;
   const out = parts.map((p, i) => {
-    if (i % 2 || !VI.test(p)) return p;
+    if (i % 2 || !hasVi(p)) return p;
     const e = exact(p);
     if (e !== null) { hit = true; return e; }
     return p;
@@ -72,7 +81,7 @@ function bySlash(s) {
 }
 
 export function tr(s) {
-  if (lang !== "en" || typeof s !== "string" || !VI.test(s)) return s;
+  if (lang !== "en" || typeof s !== "string" || !hasVi(s)) return s;
   const e = exact(s) ?? bySlash(s);
   if (e !== null) return e;
   // number-carrying sentence templates first (they are written against the
@@ -82,10 +91,10 @@ export function tr(s) {
   // templates wrap long sentences across lines, which no pattern would match.
   let out = s.replace(/\s+/g, " ");
   for (const [re, en] of RXS) out = out.replace(re, en);
-  if (!VI.test(out)) return out;
+  if (!hasVi(out)) return out;
   out = bySegments(out) ?? out;
   for (const [re, en] of PH) {
-    if (!VI.test(out)) break;
+    if (!hasVi(out)) break;
     out = out.replace(re, en);
   }
   for (const [re, en] of RXS) out = out.replace(re, en);
@@ -101,7 +110,7 @@ const skip = (node) => {
 function trText(n) {
   if (skip(n)) return;
   const v = n.nodeValue;
-  if (!v || !VI.test(v)) return;
+  if (!v || !hasVi(v)) return;
   const t = tr(v);
   if (t !== v) n.nodeValue = t;
 }
@@ -111,7 +120,7 @@ function trAttrs(e) {
   if (skip(e)) return;
   for (const a of ATTRS) {
     const v = e.getAttribute(a);
-    if (v && VI.test(v)) { const t = tr(v); if (t !== v) e.setAttribute(a, t); }
+    if (v && hasVi(v)) { const t = tr(v); if (t !== v) e.setAttribute(a, t); }
   }
 }
 

@@ -347,6 +347,8 @@ export function peerSection(co, v, screenerRows, modelUpside) {
     ["Upside", modelUpside, med("model_upside"), (x) => F.pctSigned(x * 100), true],
   ];
 
+  // pctSigned already writes the sign; the others don't ("++0.0%" otherwise)
+  const signed = (t) => (/^[+\-−]/.test(t) ? t : `+${t}`);
   const cards = rows.map(([label, mine, m, fmt, higherBetter]) => {
     if (!F.isNum(mine) || !F.isNum(m)) {
       return `<div class="pr-card"><div class="pr-k">${label}</div><div class="pr-v">—</div></div>`;
@@ -357,7 +359,7 @@ export function peerSection(co, v, screenerRows, modelUpside) {
     return `<div class="pr-card">
       <div class="pr-k">${label}</div>
       <div class="pr-v">${fmt(mine)}</div>
-      <div class="pr-d ${good ? "gain" : "loss"}">${d >= 0 ? "+" : ""}${fmt(d)} vs trung vị</div></div>`;
+      <div class="pr-d ${good ? "gain" : "loss"}">${signed(fmt(d))} vs trung vị</div></div>`;
   }).join("");
 
   const card = el(`<div class="card">

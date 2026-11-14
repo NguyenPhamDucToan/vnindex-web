@@ -15,6 +15,14 @@ const SECTORS = {
   "Nông - Lâm - Ngư": "Agriculture & fishery", "Bảo hiểm": "Insurance",
   "Dịch vụ lưu trú, ăn uống, giải trí": "Hospitality & leisure", "Sản phẩm cao su": "Rubber products",
   "SX Thiết bị, máy móc": "Machinery", "Tài chính khác": "Other financials", "Dịch vụ tư vấn, hỗ trợ": "Consulting & support",
+  // ICB names VCI gives some tickers instead of the house list above
+  "Hàng cá nhân & Gia dụng": "Personal & household goods", "Tài nguyên Cơ bản": "Basic resources",
+  "Truyền thông": "Media", "Hóa chất": "Chemicals", "Xây dựng và Vật liệu": "Construction & materials",
+  "Dịch vụ tài chính": "Financial services", "Dầu khí": "Oil & gas", "Ô tô và phụ tùng": "Automobiles & parts",
+  "Thực phẩm và đồ uống": "Food & beverage", "Hàng & Dịch vụ Công nghiệp": "Industrial goods & services",
+  "Y tế": "Healthcare", "Du lịch và Giải trí": "Travel & leisure", "Viễn thông": "Telecommunications",
+  "Điện, nước & xăng dầu khí đốt": "Utilities", "Công nghệ Thông tin": "Information technology",
+  "Bảo hiểm nhân thọ": "Life insurance", "Bảo hiểm phi nhân thọ": "Non-life insurance",
 };
 
 const LEAN = { "có lợi": "helping", "bất lợi": "hurting", "đi ngang": "flat" };
@@ -133,6 +141,10 @@ export const EXACT = {
   // ownership titles
   "Chủ tịch Hội đồng Quản trị": "Chairman of the Board", "Phó Chủ tịch Hội đồng Quản trị": "Vice Chairman of the Board",
   "Thành viên Hội đồng Quản trị": "Board member", "Thành viên Hội đồng Quản trị độc lập": "Independent board member",
+  "Mua trừ bán đã thực hiện (có báo cáo kết quả) của lãnh đạo, người liên quan và tổ chức trong 12 tháng, theo % cổ phần":
+    "Executed buys minus sells (result reported) by management, related parties and institutions over 12 months, as % of shares",
+  "TB": "Avg", "(Mua)": "(Buy)", "(Bán)": "(Sell)", "Doanh thu": "Revenue", "EBIT / Doanh thu": "EBIT / Revenue",
+  "GDKHQ": "Ex-date", "BCTC": "Financials", "Giám đốc Marketing": "Marketing Director",
   "Thành viên Hội đồng Quản trị/Tổng Giám đốc": "Board member / CEO", "Tổng Giám đốc": "CEO", "Phó Tổng Giám đốc": "Deputy CEO",
   "Giám đốc Tài chính": "CFO", "Kế toán trưởng": "Chief accountant", "Giám đốc Kiểm toán nội bộ": "Head of internal audit",
   "Trưởng Ban kiểm soát": "Head of the supervisory board", "Thành viên Ban kiểm soát": "Supervisory board member",
@@ -453,7 +465,7 @@ PHRASES.push(
   ["đã điều chỉnh theo ngành", "sector-adjusted"], ["Giá mô hình", "Model price"], ["cảnh báo dữ liệu", "data warnings"],
   ["Kiểm tra chất lượng dữ liệu ngày", "Data quality check of"], ["Chia cổ phiếu", "Stock splits"], ["Cổ tức tiền", "Cash dividends"],
   ["Lãnh đạo, người liên quan và tổ chức mua trừ bán đã thực hiện trong", "Executed buys minus sells by management, related parties and institutions over"],
-  ["% cổ phần", "% of shares"], ["Chỉ số (gốc=", "Index (base="], ["so VNINDEX (%)", "vs VNINDEX (%)"], ["sau, theo lợi nhuận", "after, by profit"],
+  ["theo % cổ phần", "as % of shares"], ["% cổ phần", "% of shares"], ["Chỉ số (gốc=", "Index (base="], ["so VNINDEX (%)", "vs VNINDEX (%)"], ["sau, theo lợi nhuận", "after, by profit"],
   ["phiên đầu", "first sessions"], ["Biến động", "Move"], ["phiên trước", "sessions before"], ["giảm dần trong", "falling over"],
   ["lãi tăng", "profit up"], ["lãi giảm", "profit down"], ["Góc trên-trái = rẻ & sinh lời tốt (P/E thấp, ROE cao)", "Top-left = cheap & profitable (low P/E, high ROE)"],
   ["Chỉ số là trung vị giữa các mã", "Values are medians across tickers"], ["mã có dữ liệu định giá", "tickers with valuation data"],
@@ -464,6 +476,8 @@ PHRASES.push(
 RX.push(
   [/(\d) tỷ(?![A-Za-zÀ-ỹ])/g, "$1 bn"], [/(\d) nghìn tỷ(?![A-Za-zÀ-ỹ])/g, "$1 trillion"], [/(\d) nghìn(?![A-Za-zÀ-ỹ])/g, "$1k"],
   [/(\d) tr lượt/g, "$1m visits"], [/(\d) tr(?![A-Za-zÀ-ỹ])/g, "$1m"], [/(\d) cp(?![A-Za-zÀ-ỹ])/g, "$1 shares"],
+  [/(\d(?:m|k|bn)) cp(?![A-Za-zÀ-ỹ])/g, "$1 shares"], [/ trong (\d[\d.,]*) (?:năm|years?)(?![A-Za-zÀ-ỹ])/g, " over $1 yr"],
+  [/^trong (\d[\d.,]*) (?:mã|tickers)$/, "of $1 tickers"], [/^TB (-?[\d.,]+%)$/, "Avg $1"], [/ k DN(?![A-Za-zÀ-ỹ])/g, " k firms"],
   [/(\d) ngày(?![A-Za-zÀ-ỹ])/g, "$1 days"], [/(\d) tháng(?![A-Za-zÀ-ỹ])/g, "$1 months"], [/(\d) năm(?![A-Za-zÀ-ỹ])/g, "$1 years"],
   [/(\d) phiên(?![A-Za-zÀ-ỹ])/g, "$1 sessions"], [/(\d) kỳ(?![A-Za-zÀ-ỹ])/g, "$1 periods"], [/(\d) mã(?![A-Za-zÀ-ỹ])/g, "$1 tickers"],
   [/(\d) quý(?![A-Za-zÀ-ỹ])/g, "$1 quarters"], [/(\d) ngành(?![A-Za-zÀ-ỹ])/g, "$1 sectors"], [/(\d) điểm(?![A-Za-zÀ-ỹ])/g, "$1 pts"],

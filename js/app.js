@@ -41,7 +41,7 @@ if (window.Plotly && !window.Plotly.__namelengthPatched) {
     // truncating them back would undo the fix it was written for.
     const narrow = window.innerWidth < 560;
     [data, layout] = trPlot(data, layout);           // English labels when EN is selected (js/i18n.js)
-    return react(node, data, {
+    const out = react(node, data, {
       ...layout,
       hoverlabel: {
         namelength: -1,
@@ -49,6 +49,29 @@ if (window.Plotly && !window.Plotly.__namelengthPatched) {
         ...(layout.hoverlabel || {}),
       },
     }, config);
+    fitToBox(node);
+    return out;
+  };
+  // Plotly measures its box once, when it draws, and `responsive` only listens
+  // to the window. A chart drawn while its column was still narrow (layout not
+  // settled, a sibling card arriving later) kept that width -- the price chart
+  // sat in the left half of its card. Watch each chart's own box instead.
+  const watched = new WeakSet();
+  let ro = null;
+  const fitToBox = (node) => {
+    const gd = typeof node === "string" ? document.getElementById(node) : node;
+    if (!gd || watched.has(gd) || typeof ResizeObserver === "undefined") return;
+    ro ??= new ResizeObserver((entries) => {
+      for (const { target, contentRect } of entries) {
+        const w = Math.round(contentRect.width);
+        const fl = target._fullLayout;
+        // hidden (0 wide), not yet drawn, or already the right width: nothing to do
+        if (!w || !fl || target.layout?.width || Math.abs(fl.width - w) < 2) continue;
+        window.Plotly.Plots.resize(target);
+      }
+    });
+    watched.add(gd);
+    ro.observe(gd);
   };
   window.Plotly.__namelengthPatched = true;
 }
