@@ -45,6 +45,10 @@ const GROUPS = {
     { title: "Tổng vốn hình thành gộp (% GDP, World Bank)", kind: "line", unit: "%", series: [["Vốn hình thành", "wb_capital_formation", ORANGE]] },
     { title: "Tổng tiết kiệm (% GDP, World Bank)", kind: "line", unit: "%", series: [["Tiết kiệm", "wb_gross_savings", GREEN]] },
   ],
+  "Sản xuất & Doanh nghiệp": [
+    { title: "Chỉ số sản xuất công nghiệp IIP (theo tháng, so với cùng kỳ)", kind: "bar", unit: "%", series: [["IIP", "iip_yoy", BLUE]] },
+    { title: "Doanh nghiệp thành lập mới (theo tháng)", kind: "bar", unit: "nghìn DN", series: [["DN mới", "new_firms", TEAL]] },
+  ],
   "Xuất nhập khẩu": [
     { title: "Xuất khẩu & Nhập khẩu (theo tháng)", kind: "line", unit: "tỷ USD", series: [
       ["Xuất khẩu", "exports", GREEN], ["Nhập khẩu", "imports", RED]] },
@@ -74,7 +78,10 @@ const GROUPS = {
     { title: "Tăng trưởng cung tiền M2 (World Bank)", kind: "line", unit: "%", series: [["M2", "wb_broad_money_growth", GREEN]] },
   ],
   "Tiêu dùng": [
-    { title: "Tăng trưởng bán lẻ hàng hóa & dịch vụ", kind: "line", unit: "%", series: [["Bán lẻ", "retail_sales_growth", BLUE]] },
+    { title: "Bán lẻ hàng hóa & dịch vụ theo tháng (so với cùng kỳ)", kind: "bar", unit: "%", series: [["Bán lẻ tháng", "retail_yoy", PURPLE]] },
+    { title: "Tổng mức bán lẻ hàng hóa & dịch vụ (theo tháng)", kind: "line", unit: "nghìn tỷ ₫", series: [["Bán lẻ", "retail_month", BLUE]] },
+    { title: "Khách quốc tế đến Việt Nam (theo tháng)", kind: "bar", unit: "triệu lượt", series: [["Khách quốc tế", "intl_visitors", ORANGE]] },
+    { title: "Tăng trưởng bán lẻ hàng hóa & dịch vụ (theo quý / lũy kế)", kind: "line", unit: "%", series: [["Bán lẻ", "retail_sales_growth", BLUE]] },
     { title: "Tăng trưởng tiêu dùng (World Bank)", kind: "line", unit: "%", series: [["Tiêu dùng", "wb_consumption_growth", GREEN]] },
     { title: "Tiêu dùng / GDP (World Bank)", kind: "line", unit: "%", series: [["Tiêu dùng/GDP", "wb_consumption_gdp", ORANGE]] },
   ],
@@ -151,7 +158,7 @@ export async function renderMacro(root) {
   const LEAD = {
     "Tổng quan kinh tế": 0, "Tăng trưởng kinh tế": 1, "Giá cả & Lạm phát": 1,
     "Đầu tư & Tiết kiệm": 1, "Xuất nhập khẩu": 1, "Lao động & Việc làm": 1,
-    "Tiền tệ & Tỷ giá": 1, "Tiêu dùng": 1, "Lãi suất": 1,
+    "Tiền tệ & Tỷ giá": 1, "Tiêu dùng": 1, "Lãi suất": 1, "Sản xuất & Doanh nghiệp": 0,
   };
 
   const draw = () => {

@@ -691,6 +691,8 @@ def main() -> None:
         "gdp_sector_agri", "gdp_sector_industry", "gdp_sector_services",
         "wb_gdp_usd", "wb_gdp_per_capita", "wb_gdp_growth", "investment_growth",
         "gdp_nominal_usd", "gdp_per_capita_usd",
+        # Sản xuất, bán lẻ, du lịch (báo cáo KT-XH tháng)
+        "iip_yoy", "new_firms", "retail_yoy", "retail_month", "intl_visitors",
         # Giá cả & Lạm phát
         "core_inflation_yoy", "cpi_food", "cpi_transport", "ppi_yoy",
         # Đầu tư & Tiết kiệm
