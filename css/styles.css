@@ -1150,14 +1150,19 @@ table.bt-years td { text-align: center; }
 /* Market page: foreign & proprietary flow card */
 .flow-sum { margin: 10px 0; }
 table.screen.flow-sum td.num, table.screen.flow-sum th.num { text-align: right; }
-.flow-lead { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 8px; }
-.fl-h { font-weight: 600; margin-bottom: 4px; }
-.fl-two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.fl-s { font-size: 12px; margin-bottom: 2px; }
-.fl-two ol { margin: 0; padding-left: 20px; font-size: 13px; }
-.fl-two li span { float: right; font-family: var(--mono); }
-.flow-lead .muted { color: var(--muted); font-weight: 400; font-size: 12px; }
-.fl-two li a { font-weight: 600; color: inherit; }
+.flow-lead { display: grid; grid-template-columns: repeat(2, minmax(0, 520px)); gap: 16px 40px; margin-top: 10px; }
+.fl-h { font-weight: 600; margin-bottom: 6px; }
+.fl-empty { color: var(--muted); font-size: 13px; padding: 10px 0; }
+.fl-tab { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
+.fl-tab th { font-size: 12px; font-weight: 600; text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--border, #e2e8f0); }
+.fl-tab td { padding: 4px 6px; border-bottom: 1px solid rgba(148,163,184,0.15); }
+.fl-tab th:first-child, .fl-i { width: 22px; color: var(--muted); text-align: right; }
+.fl-t { width: 52px; }
+.fl-t a { font-weight: 600; color: inherit; }
+.fl-v { position: relative; text-align: right; font-family: var(--mono); }
+.fl-bar { position: absolute; right: 4px; top: 5px; bottom: 5px; border-radius: 3px; opacity: 0.16; }
+.fl-bar.gain { background: var(--gain); } .fl-bar.loss { background: var(--loss); }
+.fl-n { position: relative; }
 @media (max-width: 900px) { .flow-lead { grid-template-columns: 1fr; } }
 .flow-win { margin-top: 6px; }
 .fl-col { min-width: 0; }

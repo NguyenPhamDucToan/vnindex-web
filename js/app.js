@@ -1757,20 +1757,33 @@ async function renderMarket() {
     }, { displayModeBar: false, responsive: true });
 
     const lead = market.leaders || {};
-    const list = (items) => items && items.length
-      ? items.map((x) => `<li><a href="?ticker=${x.ticker}" data-t="${x.ticker}">${x.ticker}</a>
-          <span class="${tcls(x.net_val)}">${sgn(bn(x.net_val))}</span></li>`).join("")
-      : `<li class="muted">—</li>`;
+    const dm = (d) => d.slice(5).split("-").reverse().join("/");
+    // One compact table per side: rank, buy ticker + value, sell ticker + value,
+    // each value with a bar scaled to the largest absolute figure in the table.
+    const table = (kind, label) => {
+      const L = lead[`${kind}_${curN}`];
+      const head = `<div class="fl-h">${label}${L ? ` <span class="muted">${dm(L.from)}–${dm(L.to)} · tỷ VND</span>` : ""}</div>`;
+      if (!L || (!L.buy.length && !L.sell.length)) {
+        return `<div class="fl-col">${head}<div class="fl-empty">Chưa có dữ liệu cho khoảng này.</div></div>`;
+      }
+      const max = Math.max(...[...L.buy, ...L.sell].map((x) => Math.abs(x.net_val)));
+      const cell = (x, side) => x
+        ? `<td class="fl-t"><a href="?ticker=${x.ticker}" data-t="${x.ticker}">${x.ticker}</a></td>
+           <td class="fl-v ${side}"><span class="fl-bar ${side}" style="width:${(Math.abs(x.net_val) / max * 100).toFixed(0)}%"></span>
+             <span class="fl-n">${sgn(bn(x.net_val))}</span></td>`
+        : `<td class="fl-t"></td><td class="fl-v"></td>`;
+      const n = Math.max(L.buy.length, L.sell.length);
+      let rows = "";
+      for (let i = 0; i < n; i++) rows += `<tr><td class="fl-i">${i + 1}</td>${cell(L.buy[i], "gain")}${cell(L.sell[i], "loss")}</tr>`;
+      return `<div class="fl-col">${head}<table class="fl-tab"><thead><tr><th></th>
+        <th colspan="2" class="gain">Mua ròng nhiều nhất</th><th colspan="2" class="loss">Bán ròng nhiều nhất</th></tr></thead>
+        <tbody>${rows}</tbody></table></div>`;
+    };
+    let curN = 5;
     const drawLead = (n) => {
+      curN = n;
       const box = $(".flow-lead", c);
-      const blk = (kind, label) => {
-        const L = lead[`${kind}_${n}`];
-        if (!L) return "";
-        return `<div class="fl-col"><div class="fl-h">${label} <span class="muted">${L.from.slice(5).split("-").reverse().join("/")}–${L.to.slice(5).split("-").reverse().join("/")}</span></div>
-          <div class="fl-two"><div><div class="fl-s gain">Mua ròng nhiều nhất</div><ol>${list(L.buy)}</ol></div>
-          <div><div class="fl-s loss">Bán ròng nhiều nhất</div><ol>${list(L.sell)}</ol></div></div></div>`;
-      };
-      box.innerHTML = blk("foreign", "Khối ngoại") + blk("prop", "Tự doanh");
+      box.innerHTML = table("foreign", "Khối ngoại") + table("prop", "Tự doanh");
       box.querySelectorAll("a[data-t]").forEach((a) => a.addEventListener("click", (e) => {
         e.preventDefault(); selectTicker(a.dataset.t); }));
     };
