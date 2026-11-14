@@ -125,7 +125,19 @@ const PULSE = [
   ["unemployment_rate", "Thất nghiệp", "%", "q", false, 2, "theo quý"],
 ];
 
-function pulseTrend(pts, how) {
+// key -> {label, unit, how, dp}: the pulse rows plus series the sector card uses.
+export const SERIES_INFO = Object.fromEntries([
+  ...PULSE.map(([k, label, unit, how, , dp]) => [k, { label, unit, how, dp }]),
+  ["credit_growth_total", { label: "Tăng trưởng tín dụng (so đầu năm)", unit: "%", how: "q", dp: 2 }],
+  ["credit_growth_construction", { label: "Tín dụng ngành xây dựng (so đầu năm)", unit: "%", how: "q", dp: 2 }],
+  ["cpi_food", { label: "Giá lương thực (so tháng trước)", unit: "%", how: "m3", dp: 2 }],
+  ["cpi_transport", { label: "CPI giao thông (so tháng trước)", unit: "%", how: "m3", dp: 2 }],
+  ["ppi_yoy", { label: "Giá sản xuất công nghiệp PPI", unit: "%", how: "q", dp: 2 }],
+  ["imports", { label: "Nhập khẩu", unit: " tỷ USD", how: "y3", dp: 2 }],
+  ["gdp_sector_agri", { label: "GDP nông, lâm, thủy sản", unit: "%", how: "q", dp: 2 }],
+]);
+
+export function pulseTrend(pts, how) {
   const v = pts.map((p) => p.value);
   if (how === "q") return v.length > 1 ? { d: v[v.length - 1] - v[v.length - 2], ref: "kỳ trước" } : null;
   if (how === "m3") {

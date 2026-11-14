@@ -11,6 +11,7 @@ import { dupontSection, roicSection, peerSection, valuationBandSection,
          holdersSection } from "./sections.js";
 import { renderCompare } from "./compare.js";
 import { renderMacro } from "./macro.js";
+import { sectorMacroCard } from "./sector-macro.js";
 import * as F from "./format.js";
 import { buildScreener, isScreenerHash } from "./screener.js";
 import { markers, actionsSection, KIND_COLOR } from "./corp-actions.js";
@@ -1373,6 +1374,10 @@ async function renderSector() {
       <td>${F.isNum(s.q) ? s.q.toFixed(0) : "—"}</td></tr>`));
   }
   root.appendChild(tbl);
+
+  // ── 5. Macro drivers per sector, biggest sectors (most tickers) first ──
+  const smc = await sectorMacroCard(Object.keys(bySec).sort((a, b) => bySec[b].length - bySec[a].length));
+  if (smc) { root.appendChild(smc); smc.drawFirst(); }
 }
 
 // ── portfolio tracker (localStorage) ────────────────────────────────
