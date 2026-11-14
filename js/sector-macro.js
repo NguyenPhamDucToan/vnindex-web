@@ -2,7 +2,7 @@
 // each as a small chart with its latest reading and whether the recent trend
 // is good or bad for that sector (a stronger dollar hurts importers, helps
 // seafood exporters). The trend rule is the one the macro page's pulse card uses.
-import { loadMacro } from "./data.js";
+import { loadMacro, loadBankRates } from "./data.js";
 import { pulseTrend, SERIES_INFO } from "./macro.js";
 
 const el = (h) => { const t = document.createElement("template"); t.innerHTML = h.trim(); return t.content.firstElementChild; };
@@ -125,7 +125,35 @@ function tallyText(t) {
     + (t.down ? `, <b class="loss">${t.down}</b> bất lợi` : "");
 }
 
-function drawTiles(grid, macro, sec) {
+// Today's 12-month rate at each bank as a dot on one axis, the average as a
+// line, the cheapest and dearest banks named.
+function bankStrip(node, rates, avg, since) {
+  rates.sort((a, b) => a[1] - b[1]);
+  const lo = rates[0], hi = rates[rates.length - 1];
+  // stack equal rates so 28 dots on ~10 distinct values don't hide each other
+  const seen = {};
+  const y = rates.map(([, v]) => { const k = v.toFixed(2); seen[k] = (seen[k] || 0) + 1; return seen[k]; });
+  window.Plotly.react(node, [{
+    x: rates.map(([, v]) => v), y, text: rates.map(([b]) => b), type: "scatter", mode: "markers",
+    marker: { size: 9, opacity: 0.85, color: rates.map((_, i) => (i === 0 ? "#b91c1c" : i === rates.length - 1 ? "#15803d" : "#64748b")) },
+    hovertemplate: "%{text}: %{x:.2f}%<extra></extra>",
+  }], {
+    height: 150, margin: { l: 10, r: 10, t: 22, b: 30 }, dragmode: false, showlegend: false,
+    paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+    font: { family: "Fira Code, monospace", size: 9, color: "#0a121d" },
+    xaxis: { ticksuffix: "%", showgrid: false, tickfont: { size: 8 }, range: [lo[1] - 0.3, hi[1] + 0.3],
+             title: { text: `12 tháng · ${rates.length} ngân hàng · ${since}`, font: { size: 9 }, standoff: 4 } },
+    yaxis: { visible: false, range: [0, Math.max(...y) + 1.5] },
+    shapes: [{ type: "line", x0: avg, x1: avg, yref: "paper", y0: 0, y1: 1, line: { color: "#2563eb", width: 1.5, dash: "dot" } }],
+    annotations: [
+      { x: avg, yref: "paper", y: 1.12, text: `TB ${avg.toFixed(2)}%`, showarrow: false, font: { size: 9, color: "#2563eb" } },
+      { x: lo[1], y: 1, text: lo[0], showarrow: true, arrowhead: 0, ax: 0, ay: -22, font: { size: 9, color: "#b91c1c" } },
+      { x: hi[1], y: 1, text: hi[0], showarrow: true, arrowhead: 0, ax: 0, ay: -22, font: { size: 9, color: "#15803d" } },
+    ],
+  }, { displayModeBar: false, responsive: true });
+}
+
+function drawTiles(grid, macro, sec, banks) {
   grid.innerHTML = "";
   for (const [key, dir, why] of DRIVERS[sec] || []) {
     const r = readDriver(macro, key, dir);
@@ -140,12 +168,20 @@ function drawTiles(grid, macro, sec) {
       <div class="sm-c"></div>
       <div class="sm-w">${why}</div></div>`);
     grid.appendChild(box);
-    // One reading so far (a daily series that has just started): a placeholder
-    // the chart's height, so the tile lines up with its neighbours.
+    // One reading so far (a daily series that has just started). For the
+    // deposit rate there is still a picture worth drawing: today's 12-month
+    // rate at every bank, so the average sits in its spread. Anything else
+    // gets a quiet note of the chart's height.
     if (pts.length < 2) {
       const since = String(pts[0].period).slice(0, 10).split("-").reverse().join("/");
-      box.querySelector(".sm-c").outerHTML = `<div class="sm-ph"><div>📈 Biểu đồ đang được dựng</div>
-        <div>Số liệu thu thập hằng ngày từ ${since}, biểu đồ hiện khi có từ 2 ngày trở lên.</div></div>`;
+      const rates = key === "deposit_12m_avg" && banks
+        ? banks.map((b) => [b.bank, b.rates && b.rates["12m"]]).filter(([, v]) => Number.isFinite(v)) : [];
+      if (rates.length >= 5) {
+        bankStrip(box.querySelector(".sm-c"), rates, last.value, since);
+      } else {
+        box.querySelector(".sm-c").outerHTML = `<div class="sm-ph"><div>📈 Biểu đồ đang được dựng</div>
+          <div>Số liệu thu thập hằng ngày từ ${since}, biểu đồ hiện khi có từ 2 ngày trở lên.</div></div>`;
+      }
       continue;
     }
     const cut = new Date(last.period); cut.setFullYear(cut.getFullYear() - 3);
@@ -174,6 +210,7 @@ let sectorCard = null;
 
 export async function sectorMacroCard(sectors) {
   const macro = await loadMacro();
+  const banks = ((await loadBankRates().catch(() => null)) || {}).banks || null;
   const names = sectors.filter((s) => DRIVERS[s]);
   if (!names.length) return null;
   const card = el(`<div class="card" id="sector-macro">
@@ -187,7 +224,7 @@ export async function sectorMacroCard(sectors) {
   const draw = (sec) => {
     const t = tally(macro, sec);
     card.querySelector(".sm-sum").innerHTML = t ? tallyText(t) : "";
-    drawTiles(card.querySelector(".sm-grid"), macro, sec);
+    drawTiles(card.querySelector(".sm-grid"), macro, sec, banks);
   };
   sel.addEventListener("change", () => draw(sel.value));
   // Drawn once the card is in the page, so Plotly can measure its width.
@@ -217,6 +254,7 @@ export async function sectorMacroSection(sector, onOpenSector) {
   if (!DRIVERS[sector]) return null;
   const macro = await loadMacro().catch(() => null);
   if (!macro) return null;
+  const banks = ((await loadBankRates().catch(() => null)) || {}).banks || null;
   const t = tally(macro, sector);
   if (!t) return null;
   const d = el(`<details class="card sm-sec">
@@ -226,7 +264,7 @@ export async function sectorMacroSection(sector, onOpenSector) {
     <div class="vb-note">${NOTE}</div></details>`);
   let drawn = false;
   d.addEventListener("toggle", () => {
-    if (d.open && !drawn) { drawn = true; drawTiles(d.querySelector(".sm-grid"), macro, sector); }
+    if (d.open && !drawn) { drawn = true; drawTiles(d.querySelector(".sm-grid"), macro, sector, banks); }
   });
   d.querySelector(".sm-link").addEventListener("click", (e) => { e.preventDefault(); onOpenSector(sector); });
   return d;
