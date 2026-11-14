@@ -140,7 +140,14 @@ function drawTiles(grid, macro, sec) {
       <div class="sm-c"></div>
       <div class="sm-w">${why}</div></div>`);
     grid.appendChild(box);
-    if (pts.length < 2) { box.querySelector(".sm-c").remove(); continue; }   // one reading: no chart yet
+    // One reading so far (a daily series that has just started): a placeholder
+    // the chart's height, so the tile lines up with its neighbours.
+    if (pts.length < 2) {
+      const since = String(pts[0].period).slice(0, 10).split("-").reverse().join("/");
+      box.querySelector(".sm-c").outerHTML = `<div class="sm-ph"><div>📈 Biểu đồ đang được dựng</div>
+        <div>Số liệu thu thập hằng ngày từ ${since}, biểu đồ hiện khi có từ 2 ngày trở lên.</div></div>`;
+      continue;
+    }
     const cut = new Date(last.period); cut.setFullYear(cut.getFullYear() - 3);
     const pp = pts.filter((p) => new Date(p.period) >= cut);
     const bar = info.how !== "d63" && pp.length < 60;
