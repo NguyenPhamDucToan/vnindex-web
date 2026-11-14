@@ -155,6 +155,10 @@ function bankStrip(node, rates, avg, since) {
 
 function drawTiles(grid, macro, sec, banks) {
   grid.innerHTML = "";
+  // As many columns as the sector has drivers (2 or 3), so two tiles share the
+  // width instead of leaving a third of the row empty. Phones stack (CSS).
+  const n = (DRIVERS[sec] || []).filter(([k, d]) => readDriver(macro, k, d)).length;
+  grid.style.setProperty("--cols", Math.max(1, Math.min(3, n)));
   for (const [key, dir, why] of DRIVERS[sec] || []) {
     const r = readDriver(macro, key, dir);
     if (!r) continue;

@@ -1168,7 +1168,7 @@ table.screen.flow-sum td.num, table.screen.flow-sum th.num { text-align: right; 
 .fl-col { min-width: 0; }
 
 /* Sector page: macro drivers card */
-.sm-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.sm-grid { display: grid; grid-template-columns: repeat(var(--cols, 3), minmax(0, 1fr)); gap: 12px; }
 .sm-tile { border: 1px solid var(--border, #e2e8f0); border-top: 4px solid var(--muted); border-radius: 8px; padding: 8px 10px; min-width: 0; }
 .sm-tile.gain { border-top-color: var(--gain); } .sm-tile.loss { border-top-color: var(--loss); }
 .sm-h { font-weight: 600; font-size: 13px; }
