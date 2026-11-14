@@ -65,3 +65,22 @@ export const SIGNAL_COLOR = {
   "Neutral": "#6b7280", "Reduce": "#d97706", "Sell": "#dc2626",
   "Strong Sell": "#b91c1c",
 };
+
+// How many of the newest quarters in a row lost money. The model prices off
+// trailing-four-quarter earnings and historical multiples, so a company that
+// has just turned loss-making still reads cheap until the good quarters roll
+// out of the window: PNJ lost money in Q2 and Q3 2026 and fell from 66 to 15,
+// yet its model price stayed at 3x the market. (Not in the Python engine; the
+// stock page applies it on top of classifySignal.)
+export function lossStreak(financials) {
+  const q = (financials || []).filter((r) => r.period_type === "Q" && typeof r.net_income === "number")
+    .sort((a, b) => String(a.period).localeCompare(String(b.period)));
+  let n = 0;
+  for (let i = q.length - 1; i >= 0 && q[i].net_income < 0; i--) n++;
+  return n;
+}
+
+// Two losing quarters in a row cap a buy signal at Watch.
+export function capSignalForLosses(sig, streak) {
+  return streak >= 2 && (sig === "Strong Buy" || sig === "Buy") ? "Watch" : sig;
+}

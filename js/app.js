@@ -1,6 +1,7 @@
 import { loadCompanies, loadScreener, loadTicker, loadMeta, loadCommodities, loadQuality } from "./data.js";
 import { priceChart } from "./charts.js";
-import { computeQualityScore, classifySignal, SIGNAL_VI, SIGNAL_COLOR, SIGNAL_ORDER } from "./signals.js";
+import { computeQualityScore, classifySignal, SIGNAL_VI, SIGNAL_COLOR, SIGNAL_ORDER,
+         lossStreak, capSignalForLosses } from "./signals.js";
 import { ratingColor, sectorBand } from "./ratings.js";
 import { computeTTM } from "./ttm.js";
 import { insCombined } from "./sector-metrics.js";
@@ -832,13 +833,20 @@ function valuationSummary(co, v, model, analyst, last, financials) {
   // garbage for banks (VCB reads +715%).
   const upFrac = F.isNum(model.upside) ? model.upside : null;
   const q = computeQualityScore(v.roe, v.net_margin, v.profit_quality, v.fcf_margin, v.current_ratio, v.debt_to_equity, co.sector);
-  const sig = (upFrac != null) ? classifySignal(upFrac, q) : null;
+  const streak = lossStreak(financials);
+  const rawSig = (upFrac != null) ? classifySignal(upFrac, q) : null;
+  const sig = capSignalForLosses(rawSig, streak);
 
   const mColor = upFrac == null ? "#5b6675" : upFrac >= 0 ? "#15803d" : "#b91c1c";
   const qColor = q >= 70 ? "#15803d" : q >= 50 ? "#b45309" : "#b91c1c";
   const hasAnalyst = analyst && F.isNum(analyst.target_price) && analyst.target_price > 0;
 
-  const card = el(`<div class="card"><h2 class="sec-h">Đánh giá tổng hợp</h2><div class="ev-cards"></div>
+  // Two or more losing quarters in a row: the trailing-earnings model lags.
+  const lossWarn = streak >= 2
+    ? `<div class="ev-warn">⚠ <b>Lỗ ${streak} quý gần nhất liên tiếp.</b> Giá mô hình dựa trên lợi nhuận 4 quý và bội số
+       lịch sử, nên chưa phản ánh hết việc kinh doanh xấu đi — có thể đang quá cao so với thực tế.${rawSig !== sig
+       ? ` Tín hiệu được hạ từ "${SIGNAL_VI[rawSig]}" xuống "${SIGNAL_VI[sig]}".` : ""}</div>` : "";
+  const card = el(`<div class="card"><h2 class="sec-h">Đánh giá tổng hợp</h2>${lossWarn}<div class="ev-cards"></div>
     <div class="ev-note"></div></div>`);
   const wrap = $(".ev-cards", card);
 

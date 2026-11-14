@@ -1107,3 +1107,5 @@ table.bt-years td { text-align: center; }
   .disc-t { flex-basis: calc(100% - 30px); }
   .disc-ok { margin-left: auto; }
 }
+.ev-warn { background: #fff7ed; border: 1px solid #fed7aa; border-left: 4px solid #ea580c; border-radius: var(--radius-sm);
+  padding: 10px 14px; margin: 0 0 var(--space-md); font-size: 13.5px; color: #7c2d12; line-height: 1.5; }
