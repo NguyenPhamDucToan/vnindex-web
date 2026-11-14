@@ -98,6 +98,71 @@ def _records(df: pd.DataFrame) -> list[dict]:
 # foreign block; a success resets the count.
 _FOREIGN_MAX_FAILS = 8
 _foreign_fails = 0
+_prop_fails = 0                 # same breaker, separate count, for fetch_prop
+
+
+_prop_asof = None
+
+
+def prop_asof() -> "str | None":
+    """Newest session in VNDirect's proprietary feed, any ticker. The feed lags
+    the price data by a day (2026-11-13 prices, 11-12 desks), so a session
+    after this date is "not published yet", not "no trading"."""
+    global _prop_asof
+    if _prop_asof is None:
+        import requests
+        try:
+            r = requests.get("https://api-finfo.vndirect.com.vn/v4/proprietary_trading?size=1&sort=date:desc",
+                             timeout=12, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json",
+                                                  "Referer": "https://dstock.vndirect.com.vn/"})
+            _prop_asof = str(r.json()["data"][0]["date"])[:10]
+        except Exception:
+            _prop_asof = ""
+    return _prop_asof or None
+
+
+def fetch_prop(code: str, sessions: int = 30) -> "list[dict] | None":
+    """Brokers' proprietary-desk ("tự doanh") trading for the last N sessions,
+    from VNDirect finfo -- the same host as the foreign flow.
+
+    A row exists only for a session the desks traded the ticker: the large
+    caps have one every day, a small cap a handful a month (ACG, DPR none since
+    September), so a missing date means no proprietary trading, not missing
+    data. None = the call failed; [] = no rows.
+    """
+    global _prop_fails
+    import requests
+    from datetime import timedelta
+    if _prop_fails >= _FOREIGN_MAX_FAILS:
+        return None
+    try:
+        start = (date.today() - timedelta(days=sessions * 3 + 20)).strftime("%Y-%m-%d")
+        r = requests.get("https://api-finfo.vndirect.com.vn/v4/proprietary_trading"
+                         f"?q=code:{code}~date:gte:{start}&size=200&sort=date:asc",
+                         timeout=12, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json",
+                                              "Referer": "https://dstock.vndirect.com.vn/"})
+        if r.status_code != 200:
+            raise RuntimeError(f"HTTP {r.status_code}")
+        rows = [{
+            "date": str(d.get("date")),
+            "buy_vol": _clean(float(d.get("buyingVol") or 0)),
+            "sell_vol": _clean(float(d.get("sellingVol") or 0)),
+            "net_vol": _clean(float(d.get("netVol") or 0)),
+            "buy_val": _clean(float(d.get("buyingVal") or 0)),
+            "sell_val": _clean(float(d.get("sellingVal") or 0)),
+            "net_val": _clean(float(d.get("netVal") or 0)),
+            # share of the session's matched value, as fractions
+            "buy_pct": _clean(float(d.get("buyingValPct") or 0)),
+            "sell_pct": _clean(float(d.get("sellingValPct") or 0)),
+        } for d in r.json().get("data", [])]
+        _prop_fails = 0
+        return rows[-sessions:]
+    except Exception as e:
+        _prop_fails += 1
+        if _prop_fails == _FOREIGN_MAX_FAILS:
+            print(f"  ! VNDirect proprietary flow failed {_FOREIGN_MAX_FAILS} times in a row "
+                  f"(last: {e}); keeping committed data for the rest of the run", flush=True)
+        return None
 
 
 def _db_retry(fn, waits=(5, 15)):
@@ -510,6 +575,7 @@ def main() -> None:
         # call (~20/min Guest cap, with 57s penalties) so it can't run in this
         # synchronous loop -- export_analyst.py patches it in separately.
         foreign = fetch_foreign(t) if (vg is not None and len(vg)) else []
+        prop = fetch_prop(t) if (vg is not None and len(vg)) else []
 
         # Carry forward whatever export_analyst.py already fetched. Without
         # this, every re-export silently wipes the analyst column and the ~22
@@ -519,7 +585,8 @@ def main() -> None:
         # analyst (~22 min), detail + news_events (~80 min) and holders
         # (~40 min). This has bitten once already, on analyst alone.
         carried = {"analyst": None, "detail": None, "news_events": None, "holders": None,
-                   "actions": None, "insiders": None, "earnings": None, "foreign": []}
+                   "actions": None, "insiders": None, "earnings": None, "foreign": [],
+                   "prop": []}
         _prev = OUT / "ticker" / f"{t}.json"
         if _prev.exists():
             try:
@@ -530,6 +597,8 @@ def main() -> None:
                 pass
         if foreign is None:                    # VNDirect failed: keep the last good flow
             foreign = carried["foreign"] or []
+        if prop is None:
+            prop = carried["prop"] or []
 
         fin_rows = _records(fin_by_ticker[t]) if t in fin_by_ticker else []
         # Piotroski, Altman Z'', net debt/EBITDA, interest cover, PEG and
@@ -562,6 +631,8 @@ def main() -> None:
             "insiders": carried["insiders"],
             "earnings": carried["earnings"],
             "foreign": foreign,
+            "prop": prop,
+            "prop_asof": prop_asof(),
             "financials": fin_rows,
             "prices": _records(px_by_ticker[t][["date", "open", "high", "low",
                                                 "close", "volume"]])

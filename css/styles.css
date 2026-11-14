@@ -305,6 +305,8 @@ b, strong { font-weight: 600; }
    chart, not one row of six under it. */
 .ff-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 10px 14px; }
 .ff-stats + .ff-stats { padding-top: 0; }
+.ff-sum { font-size: 13px; color: var(--muted); padding: 2px 14px 6px; }
+.ff-sum b.gain { color: var(--gain); } .ff-sum b.loss { color: var(--loss); }
 .ff-tabs { margin-bottom: var(--space-sm); }
 .ff-body { display: block; }
 .ff-plot { margin-top: 4px; }

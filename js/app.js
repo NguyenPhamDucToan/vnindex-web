@@ -287,7 +287,7 @@ async function renderStock(t) {
   const peers = await loadScreener().catch(() => null);
   const pc = peerSection(co, v, peers, (d.model || {}).upside);
   if (pc) { left.appendChild(pc); pc.renderChart(); }
-  foreignSection(left, d.foreign || [], prices);
+  foreignSection(left, d.foreign || [], prices, d.prop, d.prop_asof);
   valuationBandSection(left, d.financials || [], prices);
 
   // Order matches the original: the financial-report tabs come BEFORE the TTM

@@ -728,9 +728,9 @@ export function quarterlyCharts(parent, co, financials, detail, prices, valHisto
 
 // Foreign net trading as its own section under the price chart -- the original
 // renders it inside col_chart as "Giao dịch Nước ngoài & Tự doanh". The
-// proprietary ("Tự doanh") half is a placeholder in the original too: its data
-// source does not expose it.
-export function foreignSection(parent, foreign, prices) {
+// proprietary ("Tự doanh") half was a placeholder in the original; it now
+// reads the `prop` block (export_data.fetch_prop, VNDirect).
+export function foreignSection(parent, foreign, prices, prop, propAsof) {
   if ((foreign || []).length < 2) return null;
   const card = el(`<div class="card">
     <h2 class="sec-h">Giao dịch Nước ngoài &amp; Tự doanh <span class="ta-sub">· 20 phiên gần nhất</span></h2>
@@ -810,8 +810,72 @@ export function foreignSection(parent, foreign, prices) {
 
   function renderProp() {
     body.innerHTML = "";
-    // The original shows the same notice: proprietary flow isn't in the feed.
-    body.appendChild(el(`<div class="vb-note">Dữ liệu giao dịch tự doanh chưa có sẵn từ nguồn dữ liệu hiện tại.</div>`));
+    if (!Array.isArray(prop)) {            // a ticker file exported before the block existed
+      body.appendChild(el(`<div class="vb-note">Dữ liệu giao dịch tự doanh chưa có sẵn từ nguồn dữ liệu hiện tại.</div>`));
+      return;
+    }
+    // VNDirect only has a row for a session the desks traded, so the foreign
+    // tab's sessions are laid out and a missing one is zero -- but only up to
+    // the feed's newest session (propAsof): it publishes a day after prices,
+    // and a session after that is "not out yet", not "no trading".
+    const byDate = new Map(prop.map((d) => [String(d.date).slice(0, 10), d]));
+    const ZERO = { buy_vol: 0, sell_vol: 0, net_vol: 0, buy_val: 0, sell_val: 0, net_val: 0, buy_pct: 0, sell_pct: 0 };
+    const asof = propAsof ? String(propAsof).slice(0, 10) : null;
+    const sess = (foreign || []).filter((d) => !asof || String(d.date).slice(0, 10) <= asof).slice(-20);
+    const xs = sess.map((d) => String(d.date).slice(5, 10).split("-").reverse().join("/"));
+    const cl = sess.map((d) => { const v = closeBy.get(String(d.date)); return isN(v) ? v : null; });
+    const px = sess.map((d) => byDate.get(String(d.date).slice(0, 10)) || ZERO);
+    if (!px.length) return;
+    const P = px[px.length - 1];
+    const sum20 = px.reduce((a, d) => a + (d.net_val || 0), 0);
+    const active = px.filter((d) => d.buy_val || d.sell_val).length;
+    const rows = [
+      [["KL Mua", n0(P.buy_vol), ""], ["KL Bán", n0(P.sell_vol), ""],
+       ["KL Mua-Bán", nS(P.net_vol), sign(P.net_vol)]],
+      [["GT Mua (tỷ)", bn(P.buy_val), ""], ["GT Bán (tỷ)", bn(P.sell_val), ""],
+       ["GT Mua-Bán (tỷ)", bnS(P.net_val), sign(P.net_val)]],
+    ];
+    for (const r of rows) {
+      body.appendChild(el(`<div class="ff-stats">${r.map(([k, v, c]) =>
+        `<div class="ff-cell"><div class="ff-k">${k}</div><div class="ff-v ${c}">${v}</div></div>`).join("")}</div>`));
+    }
+    const share = (P.buy_pct || 0) + (P.sell_pct || 0);
+    body.appendChild(el(`<div class="ff-sum">Tự doanh ròng 20 phiên: <b class="${sign(sum20)}">${bnS(sum20)} tỷ</b>
+      · có giao dịch ${active}/${px.length} phiên · số đến phiên ${xs[xs.length - 1]}${share ? ` · phiên gần nhất chiếm ${(share * 100).toFixed(1)}% giá trị khớp lệnh` : ""}</div>`));
+    if (!active) {
+      body.appendChild(el(`<div class="vb-note">Khối tự doanh các công ty chứng khoán không giao dịch mã này trong 20 phiên gần nhất.</div>`));
+      return;
+    }
+    const canvas = el(`<div class="ff-plot"></div>`);
+    body.appendChild(canvas);
+    body.appendChild(el(`<div class="vb-note">Tự doanh = giao dịch bằng vốn của chính các công ty chứng khoán (nguồn: VNDirect).
+      Phiên không có số là tự doanh không mua bán mã này.</div>`));
+    const yv = px.map((d) => (d.net_val || 0) / 1e9);
+    const traces = [{
+      type: "bar", x: xs, y: yv, name: "Tự doanh mua ròng (tỷ)",
+      marker: { color: yv.map((v) => (v >= 0 ? MARK_UP : MARK_DOWN)) },
+      customdata: px.map((d) => [(d.buy_val || 0) / 1e9, (d.sell_val || 0) / 1e9]),
+      hovertemplate: "Net: %{y:,.2f} tỷ<br>Buy: %{customdata[0]:,.2f} tỷ<br>"
+                   + "Sell: %{customdata[1]:,.2f} tỷ<extra>Tự doanh ròng</extra>",
+    }];
+    if (cl.some(isN)) {
+      traces.push({ type: "scatter", mode: "lines", x: xs, y: cl, yaxis: "y2",
+        name: "Giá đóng cửa", connectgaps: true, line: { color: SKY, width: 2 },
+        hovertemplate: "%{y:,.1f}<extra>Giá đóng cửa</extra>" });
+    }
+    window.Plotly.react(canvas, traces, {
+      height: 280, dragmode: false, margin: { l: 52, r: 52, t: 28, b: 30 },
+      paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: FONT,
+      hovermode: "x unified",
+      legend: { orientation: "h", y: 1.1, x: 0, font: { ...FONT, size: 11 } },
+      xaxis: { type: "category", showgrid: false, tickfont: { ...FONT, size: 10 } },
+      yaxis: { title: { text: "Tự doanh ròng (tỷ)", font: { ...FONT, size: 10 } },
+               gridcolor: RULE, zeroline: false },
+      yaxis2: { title: { text: "Giá (nghìn VND)", font: { ...FONT, size: 10 } },
+                overlaying: "y", side: "right", showgrid: false },
+      shapes: [{ type: "line", xref: "paper", x0: 0, x1: 1, y0: 0, y1: 0,
+                 line: { color: "#cbd5e1", width: 1 } }],
+    }, { displayModeBar: false, responsive: true });
   }
 
   for (const name of ["Nước ngoài", "Tự doanh"]) {
