@@ -256,7 +256,7 @@ async function renderStock(t) {
   // Ownership, dividends, insider deals and the earnings reaction share one
   // tabbed card near the bottom (built below), not four stacked cards above
   // the price chart.
-  const ownership = tabbedCard("Sở hữu, cổ tức & sự kiện", [
+  const ownership = tabbedCard("Sở hữu, cổ tức, sự kiện & vĩ mô", [
     [holdersSection(d.holders), "Cổ đông lớn"],
     [actionsSection(d.actions, prices), "Quyền & cổ tức"],
     [insidersSection(d.insiders, d.financials), "Giao dịch nội bộ"],

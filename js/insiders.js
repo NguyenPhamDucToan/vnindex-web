@@ -113,6 +113,12 @@ export function insidersSection(insiders, financials) {
   // Monthly executed buys (up) and sells (down), last 24 months.
   let drawn = false;
   const draw = () => {
+    // The toggle can fire twice (opened for an alert, then again by the tabbed
+    // card); after a first pass that removed an empty chart there is nothing to draw.
+    if (!card.querySelector(".ins-chart")) return;
+    // Opened for an alert before the tabbed card is in the page: Plotly can't
+    // draw into a detached node (null namespaceURI), so wait until it is attached.
+    if (!card.isConnected) { requestAnimationFrame(() => { if (card.open) draw(); }); return; }
     if (drawn) return;
     drawn = true;
     const months = [];
