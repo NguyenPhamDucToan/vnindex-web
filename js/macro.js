@@ -17,7 +17,7 @@ const GROUPS = {
     { title: "Lạm phát (so với cùng kỳ năm trước)", kind: "bar", unit: "%", series: [["CPI YoY", "cpi_yoy", ORANGE]] },
     { title: "Lạm phát (so với tháng trước)", kind: "bar", unit: "%", series: [["CPI MoM", "cpi_mom", ORANGE]] },
     { title: "Cán cân thương mại", kind: "bar", unit: "tỷ USD", series: [["Cán cân", "trade_balance", GREEN]] },
-    { title: "Tăng trưởng bán lẻ (so với cùng kỳ năm trước)", kind: "bar", unit: "%", series: [["Bán lẻ", "retail_sales_growth", PURPLE]] },
+    { title: "Bán lẻ theo tháng (so với cùng kỳ năm trước)", kind: "bar", unit: "%", series: [["Bán lẻ", "retail_yoy", PURPLE]] },
     { title: "Vốn đầu tư nước ngoài (FDI đăng ký, theo quý)", kind: "bar", unit: "tỷ USD", series: [["FDI", "fdi", TEAL]] },
   ],
   "Tăng trưởng kinh tế": [
@@ -48,6 +48,11 @@ const GROUPS = {
   "Sản xuất & Doanh nghiệp": [
     { title: "Chỉ số sản xuất công nghiệp IIP (theo tháng, so với cùng kỳ)", kind: "bar", unit: "%", series: [["IIP", "iip_yoy", BLUE]] },
     { title: "Doanh nghiệp thành lập mới (theo tháng)", kind: "bar", unit: "nghìn DN", series: [["DN mới", "new_firms", TEAL]] },
+  ],
+  "Ngân sách & Đầu tư công": [
+    { title: "Thu & chi ngân sách nhà nước (theo tháng)", kind: "line", unit: "nghìn tỷ ₫", series: [
+      ["Thu", "budget_revenue", GREEN], ["Chi", "budget_spending", RED]] },
+    { title: "Giải ngân vốn đầu tư từ ngân sách (theo tháng)", kind: "bar", unit: "nghìn tỷ ₫", series: [["Đầu tư công", "public_investment", ORANGE]] },
   ],
   "Xuất nhập khẩu": [
     { title: "Xuất khẩu & Nhập khẩu (theo tháng)", kind: "line", unit: "tỷ USD", series: [
@@ -81,7 +86,6 @@ const GROUPS = {
     { title: "Bán lẻ hàng hóa & dịch vụ theo tháng (so với cùng kỳ)", kind: "bar", unit: "%", series: [["Bán lẻ tháng", "retail_yoy", PURPLE]] },
     { title: "Tổng mức bán lẻ hàng hóa & dịch vụ (theo tháng)", kind: "line", unit: "nghìn tỷ ₫", series: [["Bán lẻ", "retail_month", BLUE]] },
     { title: "Khách quốc tế đến Việt Nam (theo tháng)", kind: "bar", unit: "triệu lượt", series: [["Khách quốc tế", "intl_visitors", ORANGE]] },
-    { title: "Tăng trưởng bán lẻ hàng hóa & dịch vụ (theo quý / lũy kế)", kind: "line", unit: "%", series: [["Bán lẻ", "retail_sales_growth", BLUE]] },
     { title: "Tăng trưởng tiêu dùng (World Bank)", kind: "line", unit: "%", series: [["Tiêu dùng", "wb_consumption_growth", GREEN]] },
     { title: "Tiêu dùng / GDP (World Bank)", kind: "line", unit: "%", series: [["Tiêu dùng/GDP", "wb_consumption_gdp", ORANGE]] },
   ],
@@ -100,6 +104,88 @@ function isAnnual(points) {
   return points.length > 1 && points.every((p) => String(p.period).slice(5, 7) === "12");
 }
 
+// The opening card: is each part of the economy getting better or worse?
+// [key, label, unit, how the trend is read, rising is good?, decimals, note]
+//   "m3": monthly, mean of the last 3 readings vs the 3 before
+//   "y3": seasonal monthly levels, last 3 readings vs the same months a year earlier, in %
+//   "q":  last reading vs the one before
+//   "d63": daily, last vs ~3 months (63 sessions) earlier, in %
+const PULSE = [
+  ["gdp_growth", "Tăng trưởng GDP", "%", "q", true, 2, "theo quý, so với cùng kỳ"],
+  ["iip_yoy", "Sản xuất công nghiệp (IIP)", "%", "m3", true, 1, "so với cùng kỳ"],
+  ["retail_yoy", "Bán lẻ hàng hóa & dịch vụ", "%", "m3", true, 1, "so với cùng kỳ"],
+  ["exports", "Xuất khẩu", " tỷ USD", "y3", true, 2, "tháng"],
+  ["trade_balance", "Cán cân thương mại", " tỷ USD", "y3", true, 2, "tháng"],
+  ["cpi_yoy", "Lạm phát (CPI)", "%", "m3", false, 2, "so với cùng kỳ"],
+  ["exchange_rate", "Tỷ giá USD/VND", " ₫", "d63", false, 0, "VND mất giá = xấu"],
+  ["deposit_12m_avg", "Lãi suất tiết kiệm 12T (TB)", "%", "d63", false, 2, "lãi tăng = tiền đắt hơn"],
+  ["public_investment", "Giải ngân đầu tư công", " nghìn tỷ", "y3", true, 1, "tháng"],
+  ["new_firms", "Doanh nghiệp mới", " nghìn", "y3", true, 1, "tháng"],
+  ["intl_visitors", "Khách quốc tế", " tr lượt", "y3", true, 2, "tháng"],
+  ["unemployment_rate", "Thất nghiệp", "%", "q", false, 2, "theo quý"],
+];
+
+function pulseTrend(pts, how) {
+  const v = pts.map((p) => p.value);
+  if (how === "q") return v.length > 1 ? { d: v[v.length - 1] - v[v.length - 2], ref: "kỳ trước" } : null;
+  if (how === "m3") {
+    if (v.length < 6) return null;
+    const avg = (a) => a.reduce((x, y) => x + y, 0) / a.length;
+    return { d: avg(v.slice(-3)) - avg(v.slice(-6, -3)), ref: "TB 3 kỳ trước" };
+  }
+  if (how === "y3") {
+    const by = new Map(pts.map((p) => [String(p.period).slice(0, 7), p.value]));
+    let a = 0, b = 0, n = 0;
+    for (const p of pts.slice(-3)) {
+      const y = String(Number(String(p.period).slice(0, 4)) - 1) + String(p.period).slice(4, 7);
+      if (by.has(y)) { a += p.value; b += by.get(y); n++; }
+    }
+    // a balance can be negative: report the change in level, not a ratio
+    if (!n || b === 0) return null;
+    return pts.some((p) => p.value < 0) ? { d: (a - b) / n, ref: "cùng kỳ năm trước" }
+      : { d: (a / b - 1) * 100, pct: true, ref: "cùng kỳ năm trước" };
+  }
+  // daily: compare with the reading ~3 months back (or the oldest one we have)
+  if (v.length < 2) return null;
+  const last = pts[pts.length - 1];
+  const cut = new Date(last.period); cut.setMonth(cut.getMonth() - 3);
+  const base = pts.find((p) => new Date(p.period) >= cut) || pts[0];
+  if (base === last) return null;
+  return { d: (last.value / base.value - 1) * 100, pct: true, ref: `${String(base.period).slice(0, 10)}` };
+}
+
+function macroPulse(macro, box, sum) {
+  let up = 0, down = 0;
+  for (const [key, label, unit, how, risingGood, dp, note] of PULSE) {
+    const pts = (macro[key] || []).filter((x) => F.isNum(x.value));
+    if (!pts.length) continue;
+    const cur = pts[pts.length - 1];
+    const t = pulseTrend(pts, how);
+    // a move smaller than this is "flat" (noise)
+    const eps = t && (t.pct ? 0.3 : Math.max(0.05, Math.abs(cur.value) * 0.01));
+    let cls = "flat", arrow = "→", txt = "chưa đủ dữ liệu để xem xu hướng";
+    if (t) {
+      const better = Math.abs(t.d) < eps ? null : (t.d > 0) === risingGood;
+      cls = better === null ? "flat" : better ? "gain" : "loss";
+      arrow = Math.abs(t.d) < eps ? "→" : t.d > 0 ? "▲" : "▼";
+      if (better === true) up++; else if (better === false) down++;
+      txt = `${t.d >= 0 ? "+" : ""}${t.d.toFixed(t.pct ? 1 : Math.max(dp, 1))}${t.pct ? "%" : unit.trim() === "%" ? " điểm %" : unit} so với ${t.ref}`;
+    }
+    const per = how === "d63" ? String(cur.period).slice(0, 10) : String(cur.period).slice(0, 7);
+    const val = cur.value.toLocaleString("vi-VN", { minimumFractionDigits: dp, maximumFractionDigits: dp });
+    box.appendChild(el(`<div class="mp-tile ${cls}">
+      <div class="mp-k">${label}</div>
+      <div class="mp-v">${val}${unit} <span class="mp-a ${cls}">${arrow}</span></div>
+      <div class="mp-s">${per} · ${note}</div>
+      <div class="mp-t ${cls}">${txt}</div>
+    </div>`));
+  }
+  const tone = up > down + 1 ? "gain" : down > up + 1 ? "loss" : "flat";
+  const word = tone === "gain" ? "đang tốt lên" : tone === "loss" ? "đang xấu đi" : "lẫn lộn";
+  sum.innerHTML = `Nhìn chung <b class="${tone}">${word}</b>: <b class="gain">${up}</b> chỉ báo tốt lên,
+    <b class="loss">${down}</b> xấu đi, còn lại đi ngang hoặc chưa đủ dữ liệu.`;
+}
+
 export async function renderMacro(root) {
   root.innerHTML = `<div class="loading">Đang tải dữ liệu vĩ mô…</div>`;
   const macro = await loadMacro();
@@ -111,11 +197,13 @@ export async function renderMacro(root) {
   const shell = el(`<div>
     <h2 class="view-title">Kinh tế vĩ mô</h2>
     <div class="vb-note">Nguồn: Tổng cục Thống kê (nso.gov.vn)</div>
-    <div class="card"><h2 class="sec-h">Các chỉ số quan trọng nhất hiện nay</h2>
-      <div class="metrics metrics-4" id="macro-kpi"></div>
-      <div class="vb-note">💡 Lạm phát = giá cả tăng nhanh bao nhiêu so với năm trước, cao quá thì
-        tiền mất giá nhanh. GDP = quy mô sản xuất của cả nước, tăng = kinh tế đang phát triển.
-        Cán cân thương mại dương = xuất khẩu nhiều hơn nhập khẩu (có lợi cho VND).</div>
+    <div class="card"><h2 class="sec-h">Bức tranh vĩ mô hiện nay</h2>
+      <div class="mp-sum" id="macro-sum"></div>
+      <div class="mp-grid" id="macro-kpi"></div>
+      <div class="vb-note">Mỗi ô: số mới nhất, kỳ của số đó, và xu hướng gần đây. Số theo tháng so trung bình
+        3 kỳ gần nhất với 3 kỳ trước đó (bớt nhiễu), riêng số có tính mùa vụ (xuất khẩu, cán cân, đầu tư công,
+        doanh nghiệp mới, khách quốc tế) so 3 tháng gần nhất với cùng kỳ năm trước; số theo quý so với quý trước; tỷ giá so với 3 tháng trước.
+        <span class="gain">Xanh</span> = đang tốt lên cho nền kinh tế / thị trường, <span class="loss">đỏ</span> = xấu đi.</div>
     </div>
     <div class="range-row macro-tabs"></div>
     <div class="card"><div id="macro-grid"></div></div>
@@ -125,40 +213,14 @@ export async function renderMacro(root) {
   const tabs = shell.querySelector(".macro-tabs");
   const grid = shell.querySelector("#macro-grid");
 
-  // The four headline readings, as the original opens the tab with. Delta is
-  // against the previous reading; for inflation and unemployment a rise is the
-  // bad direction, so those two are coloured the other way round.
-  const KPI = [
-    ["cpi_yoy", "Lạm phát (so với năm trước)", "%", true],
-    ["gdp_growth", "Tăng trưởng kinh tế (GDP)", "%", false],
-    ["unemployment_rate", "Tỷ lệ thất nghiệp", "%", true],
-    ["trade_balance", "Cán cân thương mại", " tỷ USD", false],
-  ];
-  const kpiBox = shell.querySelector("#macro-kpi");
-  for (const [key, label, unit, invert] of KPI) {
-    const pts = (macro[key] || []).filter((x) => F.isNum(x.value));
-    if (!pts.length) {
-      kpiBox.appendChild(el(`<div class="metric"><div class="mk">${label}</div><div class="mv">—</div></div>`));
-      continue;
-    }
-    const cur = pts[pts.length - 1], prev = pts.length > 1 ? pts[pts.length - 2] : null;
-    const d = prev ? cur.value - prev.value : null;
-    const good = d === null ? null : (invert ? d < 0 : d > 0);
-    const cls = good === null ? "" : good ? "gain" : "loss";
-    kpiBox.appendChild(el(`<div class="metric">
-      <div class="mk">${label}</div>
-      <div class="mv">${cur.value.toFixed(2)}${unit}</div>
-      <div class="ms ${cls}">${d === null ? String(cur.period).slice(0, 7)
-        : `${d >= 0 ? "+" : ""}${d.toFixed(2)}${unit} · ${String(cur.period).slice(0, 7)}`}</div>
-    </div>`));
-  }
+  macroPulse(macro, shell.querySelector("#macro-kpi"), shell.querySelector("#macro-sum"));
 
   // Groups whose first chart is the theme's headline series and runs the full
   // width in the original. The overview is the exception: six equal charts.
   const LEAD = {
     "Tổng quan kinh tế": 0, "Tăng trưởng kinh tế": 1, "Giá cả & Lạm phát": 1,
     "Đầu tư & Tiết kiệm": 1, "Xuất nhập khẩu": 1, "Lao động & Việc làm": 1,
-    "Tiền tệ & Tỷ giá": 1, "Tiêu dùng": 1, "Lãi suất": 1, "Sản xuất & Doanh nghiệp": 0,
+    "Tiền tệ & Tỷ giá": 1, "Tiêu dùng": 1, "Lãi suất": 1, "Sản xuất & Doanh nghiệp": 0, "Ngân sách & Đầu tư công": 0,
   };
 
   const draw = () => {

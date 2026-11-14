@@ -1133,3 +1133,16 @@ table.bt-years td { text-align: center; }
 .gold .gv.loss { color: var(--loss); } .gold .gv.gain { color: var(--gain); }
 .gold .gs { font-size: 11px; color: var(--muted); }
 @media (max-width: 640px) { .gold-row { grid-template-columns: repeat(2, 1fr); } }
+
+/* Macro page: "Bức tranh vĩ mô" pulse tiles */
+.mp-sum { margin: 2px 0 12px; font-size: 14px; }
+.mp-sum b.gain { color: var(--gain); } .mp-sum b.loss { color: var(--loss); } .mp-sum b.flat { color: var(--muted); }
+.mp-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 10px; }
+.mp-tile { border: 1px solid var(--border, #e2e8f0); border-left: 4px solid var(--muted); border-radius: 8px; padding: 8px 10px; min-width: 0; }
+.mp-tile.gain { border-left-color: var(--gain); } .mp-tile.loss { border-left-color: var(--loss); }
+.mp-k { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mp-v { font-size: 18px; font-weight: 600; margin: 2px 0; }
+.mp-a { font-size: 13px; }
+.mp-s { font-size: 11px; color: var(--muted); }
+.mp-t { font-size: 12px; margin-top: 2px; }
+@media (max-width: 900px) { .mp-grid { grid-template-columns: repeat(2, 1fr); } }

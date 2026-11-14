@@ -693,6 +693,7 @@ def main() -> None:
         "gdp_nominal_usd", "gdp_per_capita_usd",
         # Sản xuất, bán lẻ, du lịch (báo cáo KT-XH tháng)
         "iip_yoy", "new_firms", "retail_yoy", "retail_month", "intl_visitors",
+        "budget_revenue", "budget_spending", "public_investment",
         # Giá cả & Lạm phát
         "core_inflation_yoy", "cpi_food", "cpi_transport", "ppi_yoy",
         # Đầu tư & Tiết kiệm
