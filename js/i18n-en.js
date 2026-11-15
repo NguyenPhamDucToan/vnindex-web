@@ -33,7 +33,7 @@ export const EXACT = {
   "Phân tích cổ phiếu": "Stock analysis", "Sàng lọc": "Screener", "So sánh cổ phiếu": "Compare stocks",
   "Phân tích ngành": "Sector analysis", "Phân tích Ngành": "Sector analysis", "Tổng quan thị trường": "Market overview",
   "Tổng quan Thị trường": "Market overview", "Sàng lọc cổ phiếu": "Stock screener", "So sánh Cổ phiếu": "Compare stocks",
-  "📊 Thị trường": "📊 Market", "📈 Vĩ mô": "📈 Macro", "Kinh tế vĩ mô": "Macroeconomy",
+  "📊 Thị trường": "📊 Market", "📋 Kết quả quý gần nhất": "📋 Latest quarter results", "📈 Vĩ mô": "📈 Macro", "Kinh tế vĩ mô": "Macroeconomy",
   "Tìm mã / tên…": "Search ticker / name…", "Tìm mã hoặc tên công ty…": "Search ticker or company…",
   "Mã": "Ticker", "Tên": "Name", "Ngành": "Sector", "Giá": "Price", "Giá (VND)": "Price (VND)", "Khối lượng": "Volume",
   "Thay đổi": "Change", "Vốn hoá": "Market cap", "Ngày": "Date", "Quý": "Quarter", "Loại": "Type", "Nhóm": "Group",
@@ -763,4 +763,46 @@ RX.push(
   [/(\d+) kỳ báo cáo/g, "$1 reporting periods"], [/trung bình độ lớn, (\d+)/g, "average size, $1"],
   [/(\d+) lượt(?![A-Za-zÀ-ỹ])/g, "$1 visits"], [/(\d)m lượt/g, "$1m visits"],
   [/xoá nợ thực tế \(trung vị ngành ([\d.,]+) năm\)\./g, "of actual write-offs (sector median $1 years)."],
+);
+
+// Earnings standouts (js/earnings-board.js) and the screener's quarterly-growth filters.
+Object.assign(EXACT, {
+  "Tăng đột biến": "Surge", "Lãi trở lại": "Back to profit", "Giảm mạnh": "Sharp drop", "Sửa số liệu": "Restated",
+  "Doanh thu +30% và lợi nhuận +50% so với cùng quý năm trước.": "Revenue +30% and profit +50% vs the same quarter last year.",
+  "Cùng quý năm trước lỗ, quý này lãi từ 5 tỷ.": "A loss in the same quarter last year, a profit of 5bn or more this quarter.",
+  "Lợi nhuận giảm từ 50% so với cùng quý năm trước, hoặc chuyển sang lỗ.": "Profit down 50% or more vs the same quarter last year, or turned to a loss.",
+  "Bấm tiêu đề cột để sắp xếp.": "Click a column header to sort.", "Mở trong Sàng lọc": "Open in the screener",
+  "So với cùng quý năm trước; lợi nhuận là lợi nhuận sau thuế.": "Against the same quarter last year; profit is net profit after tax.",
+  "DT quý (tỷ)": "Revenue Q (bn)", "DT YoY": "Revenue YoY", "LN quý (tỷ)": "Profit Q (bn)", "LN YoY": "Profit YoY",
+  "LN YoY ngành": "Sector profit YoY", "LN lũy kế YoY": "YTD profit YoY", "Giá 5 phiên sau BCTC": "Price 5 sessions after report",
+  "Trung vị tăng trưởng lợi nhuận cùng quý của các mã cùng ngành (cần ít nhất 3 mã)":
+    "Median same-quarter profit growth of the sector's tickers (needs at least 3)",
+  "Lợi nhuận cộng dồn từ đầu năm so với cùng kỳ năm trước": "Profit year to date vs the same months last year",
+  "Biến động giá từ ngày ra báo cáo đến 5 phiên sau, trừ đi VN-Index": "Price move from the report date to 5 sessions later, minus VN-Index",
+  "lãi trở lại": "back to profit", "vẫn lỗ": "still a loss", "Chưa có mã nào trong nhóm này.": "No tickers in this group yet.",
+  "Chưa phát hiện công ty nào sửa số liệu đã công bố. Mỗi lần tải lại báo cáo, số mới được so với số đã lưu; chênh lệch từ 1% (và từ 1 tỷ) được ghi lại ở đây.":
+    "No company has restated a published figure yet. Each time a report is re-fetched, the new figures are compared with the stored ones; a change of 1% or more (and at least 1bn) is listed here.",
+  "Số liệu kỳ trước bị công ty điều chỉnh sau khi đã công bố (soát xét, kiểm toán, hợp nhất lại).":
+    "Past figures the company changed after publishing them (review, audit, re-consolidation).",
+  "Kỳ": "Period", "Phát hiện": "Detected", "Chỉ tiêu: số cũ → số mới (tỷ)": "Item: old → new (bn)",
+  "Tổng tài sản": "Total assets", "Dòng tiền kinh doanh": "Operating cash flow",
+  "Tăng trưởng đột biến": "Earnings surge",
+  "Quý gần nhất: doanh thu +30% và lợi nhuận +50% so với cùng kỳ": "Latest quarter: revenue +30% and profit +50% year on year",
+  "DT quý tăng tối thiểu": "Min quarterly revenue growth", "DT quý tăng": "Quarterly revenue growth", "LN quý tăng": "Quarterly profit growth", "LN quý tăng tối thiểu": "Min quarterly profit growth",
+  "Quy mô & tăng trưởng quý": "Size & quarterly growth", "DT quý YoY": "Revenue Q YoY", "LN quý YoY": "Profit Q YoY",
+  "Doanh thu quý gần nhất so với cùng quý năm trước": "Latest quarter's revenue vs the same quarter last year",
+  "Lợi nhuận sau thuế quý gần nhất so với cùng quý năm trước": "Latest quarter's net profit vs the same quarter last year",
+  "Lợi nhuận sau thuế quý gần nhất so với cùng quý năm trước. Không tính khi năm trước lỗ":
+    "Latest quarter's net profit vs the same quarter last year. Not computed when that quarter was a loss",
+});
+PHRASES.push(
+  ["Doanh thu quý gần nhất so với cùng quý năm trước", "Latest quarter's revenue vs the same quarter last year"],
+  ["Lợi nhuận sau thuế quý gần nhất so với cùng quý năm trước. Không tính khi năm trước lỗ",
+   "Latest quarter's net profit vs the same quarter last year. Not computed when that quarter was a loss"],
+);
+RX.unshift(
+  [/^Kết quả kinh doanh quý (\d)\/(\d{4}): nổi bật$/, "Q$1 $2 results: standouts"],
+  [/^(\d+)\/(\d+) (?:mã|tickers) đã có báo cáo quý (\d)\/(\d{4})\.$/, "$1/$2 tickers have reported Q$3 $4."],
+  [/^quý (\d)\/(\d{4})$/, "Q$1 $2"], [/^năm (\d{4})$/, "FY$1"],
+  [/^(>\+999|<−999|[+−]\d+) điểm$/, "$1 pts"],
 );

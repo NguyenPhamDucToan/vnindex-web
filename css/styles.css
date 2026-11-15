@@ -1220,3 +1220,18 @@ table.screen.flow-sum td.num, table.screen.flow-sum th.num { text-align: right; 
   background: #fff; padding: 0; cursor: pointer; font: inherit; font-size: 12px; }
 .lang-tog span { padding: 4px 8px; color: var(--muted); }
 .lang-tog span.on { background: #0f2a5c; color: #fff; font-weight: 600; }
+
+/* Earnings standouts on the market view (js/earnings-board.js) */
+.eb-tabs { flex-wrap: wrap; margin-top: var(--space-sm, 8px); }
+.eb-n { font-family: var(--mono); font-size: 11px; opacity: .75; margin-left: 2px; }
+.eb-hint { margin: 0 0 8px; }
+.eb-tw { overflow-x: auto; -webkit-overflow-scrolling: touch; max-height: 560px; overflow-y: auto; }
+table.eb-table { min-width: 980px; }
+table.eb-table thead th { position: sticky; top: 0; z-index: 1; background: var(--paper); cursor: pointer; white-space: nowrap; }
+table.eb-table td { vertical-align: top; }
+table.eb-table td:nth-child(2) { max-width: 150px; }
+.eb-nm { font-family: var(--sans); font-size: 11px; color: var(--muted); max-width: 210px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eb-vs { font-size: 11px; }
+.eb-fs { text-align: left !important; font-family: var(--sans) !important; font-size: 12px; }
+.eb-empty { padding: 14px 4px; }
+.eb-arrow { margin-left: 4px; font-size: 10px; }

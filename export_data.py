@@ -18,6 +18,7 @@ Outputs (all under ./data):
   ticker/<TICKER>.json    -- company + latest valuation (all fields) +
                              quarterly financials + ~2y daily prices +
                              valuation history (dcf/avg over time)
+  revisions.json          -- figures companies restated (financial_revisions)
   meta.json               -- {generated_at, n_tickers, price_from}
 """
 from __future__ import annotations
@@ -813,6 +814,32 @@ def main() -> None:
             print(f"  wrote quality.json ({len(dq)} findings from {run_at})")
     except Exception as e:
         print(f"  quality.json skipped: {type(e).__name__}")
+
+    # ---- revisions.json (restated figures) -----------------------------
+    # The sibling's upsert_financials logs every reported figure that changed
+    # after it was first stored (financial_revisions). One item per ticker and
+    # period, newest first, a year back. Missing table (sibling not yet
+    # deployed): skip, and the market view hides its tab.
+    try:
+        with engine.connect() as conn:
+            rv = pd.read_sql(text(
+                "SELECT detected_at, ticker, period, period_type, field, old_value, new_value "
+                "FROM financial_revisions WHERE detected_at >= :since "
+                "ORDER BY detected_at DESC, ticker, period"),
+                conn, params={"since": datetime.utcnow() - timedelta(days=365)})
+        items: dict = {}
+        for _, r in rv.iterrows():
+            k = (r["ticker"], r["period"])
+            it = items.setdefault(k, {"ticker": r["ticker"], "period": r["period"],
+                                      "type": r["period_type"], "date": str(r["detected_at"])[:10],
+                                      "fields": {}})
+            # the oldest old_value and the newest new_value, if it moved twice
+            f = it["fields"].setdefault(r["field"], [_clean(r["old_value"]), _clean(r["new_value"])])
+            f[0] = _clean(r["old_value"])
+        _write(OUT / "revisions.json", {"asof": date.today().isoformat(), "items": list(items.values())})
+        print(f"  wrote revisions.json ({len(items)} restated periods)")
+    except Exception as e:
+        print(f"  revisions.json skipped: {type(e).__name__}")
 
     _write(OUT / "meta.json", {
         "generated_at": datetime.utcnow().isoformat() + "Z",

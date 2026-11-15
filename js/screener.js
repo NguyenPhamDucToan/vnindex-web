@@ -34,6 +34,10 @@ const FILTERS = [
   ["dy", "Cổ tức tối thiểu", "%", "min", (r) => F.isNum(r.div_yield) ? r.div_yield * 100 : null, 0.5, "5", "Cổ tức tiền mặt năm gần nhất / vốn hoá"],
   ["nd", "Nợ ròng/EBITDA tối đa", "x", "max", (r) => r.net_debt_ebitda, 0.5, "2", "Âm = tiền mặt nhiều hơn nợ. Ngành tài chính luôn đạt"],
   ["z", "Altman Z'' tối thiểu", "", "min", (r) => r.altman_z, 0.1, "2.6", "≥ 2.6 là vùng an toàn. Không tính cho ngành tài chính"],
+  ["rg", "DT quý tăng tối thiểu", "% YoY", "min", (r) => F.isNum(r.rev_yoy) ? r.rev_yoy * 100 : null, 5, "30",
+    "Doanh thu quý gần nhất so với cùng quý năm trước"],
+  ["ng", "LN quý tăng tối thiểu", "% YoY", "min", (r) => F.isNum(r.ni_yoy) ? r.ni_yoy * 100 : null, 5, "50",
+    "Lợi nhuận sau thuế quý gần nhất so với cùng quý năm trước. Không tính khi năm trước lỗ"],
   ["ins", "Nội bộ mua ròng tối thiểu", "% CP", "min", (r) => F.isNum(r.ins_net12) ? r.ins_net12 * 100 : null, 0.05, "0.1",
     "Mua trừ bán đã thực hiện (có báo cáo kết quả) của lãnh đạo, người liên quan và tổ chức trong 12 tháng, theo % cổ phần"],
 ];
@@ -47,6 +51,7 @@ const PRESETS = [
   ["dividend", "Cổ tức", "Tỷ suất cổ tức cao, nợ vừa phải", { liq: "1", dy: "5", nd: "2" }],
   ["garp", "Tăng trưởng giá hợp lý", "PEG ≤ 1: trả ít hơn tốc độ tăng lợi nhuận", { liq: "1", peg: "1", roe: "12" }],
   ["safe", "An toàn tài chính", "Xa vùng kiệt quệ, nợ thấp", { liq: "1", z: "2.6", nd: "2" }],
+  ["spike", "Tăng trưởng đột biến", "Quý gần nhất: doanh thu +30% và lợi nhuận +50% so với cùng kỳ", { liq: "1", rg: "30", ng: "50" }],
 ];
 
 // [key, header, sort value, cell html, default direction, title]
@@ -82,6 +87,10 @@ const COLS = [
     : `<span class="sx-na">—</span>`), -1, "9 phép thử sức khoẻ tài chính"],
   ["dy", "Cổ tức", (r) => r.div_yield, (r) => (F.isNum(r.div_yield) && r.div_yield > 0 ? `<span class="${r.div_yield >= 0.05 ? "sx-g" : ""}">${F.pct(r.div_yield, 1)}</span>` : `<span class="sx-na">—</span>`), -1,
     "Tỷ suất cổ tức tiền mặt"],
+  ["rg", "DT quý YoY", (r) => r.rev_yoy, (r) => growthCell(r.rev_yoy, r), -1,
+    "Doanh thu quý gần nhất so với cùng quý năm trước"],
+  ["ng", "LN quý YoY", (r) => r.ni_yoy, (r) => growthCell(r.ni_yoy, r, true), -1,
+    "Lợi nhuận sau thuế quý gần nhất so với cùng quý năm trước"],
   ["ins", "Nội bộ 12T", (r) => r.ins_net12, (r) => (F.isNum(r.ins_net12) && r.ins_net12 !== 0
     ? `<span class="${r.ins_net12 > 0 ? "sx-g" : "sx-r"}">${r.ins_net12 > 0 ? "+" : ""}${(r.ins_net12 * 100).toFixed(2)}%</span>`
     : `<span class="sx-na">—</span>`), -1,
@@ -93,6 +102,18 @@ const COLS = [
   ["liq", "Thanh khoản", liq, (r) => (F.isNum(liq(r)) ? fmtBn(liq(r)) : "—"), -1, "Tỷ đồng/phiên, bình quân 20 phiên"],
 ];
 const CBY = Object.fromEntries(COLS.map((c) => [c[0], c]));
+
+// YoY growth cell. A loss a year earlier has no ratio: show "lãi trở lại"
+// when the quarter turned to a profit, "lỗ" when it is still a loss.
+function growthCell(g, r, ni = false) {
+  if (!F.isNum(g)) {
+    if (ni && F.isNum(r.ni_p) && r.ni_p <= 0 && F.isNum(r.ni_q))
+      return r.ni_q > 0 ? `<span class="sx-g">lãi trở lại</span>` : `<span class="sx-na">lỗ</span>`;
+    return `<span class="sx-na">—</span>`;
+  }
+  const v = g * 100;
+  return `<span class="${v >= 30 ? "sx-g" : v <= -30 ? "sx-r" : ""}" title="${esc(r.g_q || "")}">${v > 999 ? ">+999%" : F.pctSigned(v, 0)}</span>`;
+}
 
 function fmtBn(v) {
   if (v >= 1000) return `${(v / 1000).toLocaleString("en-US", { maximumFractionDigits: 1 })}k`;
@@ -185,7 +206,7 @@ export function buildScreener(root, rows, { selectTicker, loadWL, saveWL, onFilt
   // Four fixed groups, each a vertical list, so the panel lines up at any
   // width instead of an auto-fill grid leaving one or two orphans on a row.
   const GROUPS = [
-    ["Quy mô & thanh khoản", ["liq", "mcap"]],
+    ["Quy mô & tăng trưởng quý", ["liq", "mcap", "rg", "ng"]],
     ["Định giá", ["up", "pe", "pb", "peg"]],
     ["Chất lượng & nội bộ", ["q", "roe", "pio", "ins"]],
     ["Cổ tức & an toàn", ["dy", "nd", "z"]],

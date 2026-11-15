@@ -19,6 +19,7 @@ import { markers, actionsSection, KIND_COLOR } from "./corp-actions.js";
 import { insidersSection } from "./insiders.js";
 import { earningsSection } from "./earnings.js";
 import { tabbedCard } from "./tabcard.js";
+import { renderEarningsBoard } from "./earnings-board.js";
 // "Kiểm định chiến lược" (Phase 10 backtest) is built but private for now: the
 // owner doesn't want it public yet. With the flag off nothing loads backtest.js
 // (deploy.yml also leaves it and data/backtest.json out of the upload).
@@ -1520,21 +1521,37 @@ async function renderMarket() {
   // The original splits this view into "Thị trường" and "Vĩ mô" sub-tabs.
   const subtabs = el(`<div class="range-row mo-tabs">
     <button class="range-btn active" data-sub="market">📊 Thị trường</button>
-    <button class="range-btn" data-sub="macro">📈 Vĩ mô</button></div>`);
+    <button class="range-btn" data-sub="macro">📈 Vĩ mô</button>
+    <button class="range-btn" data-sub="earn">📋 Kết quả quý gần nhất</button></div>`);
   view.appendChild(subtabs);
   const mktPane = el(`<div id="mo-market"></div>`);
+  const earnPane = el(`<div id="mo-earn" class="hidden"></div>`);
   const macroPane = el(`<div id="mo-macro" class="hidden"></div>`);
-  view.appendChild(mktPane); view.appendChild(macroPane);
-  let macroLoaded = false;
+  view.appendChild(mktPane); view.appendChild(earnPane); view.appendChild(macroPane);
+  let macroLoaded = false, earnLoaded = false;
   subtabs.querySelectorAll(".range-btn").forEach((b) => {
     b.onclick = async () => {
       subtabs.querySelectorAll(".range-btn").forEach((x) => x.classList.remove("active"));
       b.classList.add("active");
-      const isMacro = b.dataset.sub === "macro";
-      mktPane.classList.toggle("hidden", isMacro);
-      macroPane.classList.toggle("hidden", !isMacro);
+      const sub = b.dataset.sub;
+      mktPane.classList.toggle("hidden", sub !== "market");
+      earnPane.classList.toggle("hidden", sub !== "earn");
+      macroPane.classList.toggle("hidden", sub !== "macro");
       // Lazy: the macro pane builds ~30 charts, so only on first open.
-      if (isMacro && !macroLoaded) { macroLoaded = true; await renderMacro(macroPane); }
+      if (sub === "macro" && !macroLoaded) { macroLoaded = true; await renderMacro(macroPane); }
+      // The latest quarter's earnings standouts (add_growth.py): a season
+      // view of individual companies, so its own tab, not the market's top.
+      if (sub === "earn" && !earnLoaded) {
+        earnLoaded = true;
+        const revisions = await fetch("data/revisions.json").then((r) => (r.ok ? r.json() : null)).catch(() => null);
+        renderEarningsBoard(earnPane, rows, revisions, selectTicker, (hash) => {
+          // The screener reads its filters from the hash only when it is built.
+          history.replaceState(null, "", `${location.pathname}${location.search}${hash}`);
+          screenerBuilt = false;
+          window.scrollTo(0, 0);
+          showView("screen");
+        });
+      }
     };
   });
   // Market sections render into the first pane; `view` stays the shell.
