@@ -474,6 +474,10 @@ def main() -> None:
                    "dcf_estimate", "fcfe_estimate", "graham_number", "upside_pct",
                    "debt_to_equity", "current_ratio", "profit_quality", "fcf_margin"]
     screener = valuations[[c for c in screen_cols if c in valuations.columns]].copy()
+    # Only listed companies: a delisted ticker (BCG, TCD, VNE) keeps its last
+    # valuation row but has left `companies`, so it showed with no name or
+    # sector and a stale price.
+    screener = screener[screener.ticker.isin(sec_by_ticker)].copy()
     screener["name"] = screener.ticker.map(name_by_ticker)
     screener["sector"] = screener.ticker.map(sec_by_ticker)
     # screener.json is written after the per-ticker loop below, once the

@@ -1235,3 +1235,5 @@ table.eb-table td:nth-child(2) { max-width: 150px; }
 .eb-fs { text-align: left !important; font-family: var(--sans) !important; font-size: 12px; }
 .eb-empty { padding: 14px 4px; }
 .eb-arrow { margin-left: 4px; font-size: 10px; }
+.eb-card { min-width: 0; }
+.eb-open { white-space: nowrap; }
