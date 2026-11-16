@@ -806,3 +806,46 @@ RX.unshift(
   [/^quý (\d)\/(\d{4})$/, "Q$1 $2"], [/^năm (\d{4})$/, "FY$1"],
   [/^(>\+999|<−999|[+−]\d+) điểm$/, "$1 pts"],
 );
+
+// Momentum filters (screener), market breadth and the "Sự kiện" tab (js/market-extra.js).
+Object.assign(EXACT, {
+  "Cách đỉnh 52 tuần tối đa": "Max distance from 52-week high", "Cách đỉnh 52 tuần": "Distance from 52-week high",
+  "Mạnh hơn VN-Index 3T tối thiểu": "Min 3-month return vs VN-Index", "Mạnh hơn VN-Index 3T": "3-month return vs VN-Index",
+  "Giá đóng cửa thấp hơn giá cao nhất 52 tuần bao nhiêu %. 0 = đang ở đỉnh": "How far the close is below its 52-week high, %. 0 = at the high",
+  "Mức tăng giá 3 tháng (63 phiên) trừ mức tăng của VN-Index cùng kỳ": "3-month (63-session) price return minus VN-Index over the same period",
+  "Mức tăng giá 3 tháng trừ mức tăng của VN-Index cùng kỳ": "3-month price return minus VN-Index over the same period",
+  "điểm %": "pts", "Rẻ + đang lên": "Cheap + rising", "Sát đỉnh 52 tuần": "Near 52-week high",
+  "Upside từ 20%, chất lượng từ 50, giá 3 tháng mạnh hơn VN-Index": "Upside 20%+, quality 50+, 3-month price ahead of VN-Index",
+  "Giá cách đỉnh 52 tuần không quá 5%": "Price within 5% of its 52-week high",
+  "Cách đỉnh 52T": "From 52W high", "So VN-Index 3T": "vs VN-Index 3M", "Giá so với giá đóng cửa cao nhất 52 tuần": "Price against the highest close of 52 weeks",
+  "▲ đỉnh mới": "▲ new high", "Vừa lập đỉnh 52 tuần mới trong 5 phiên": "Made a new 52-week high in the last 5 sessions",
+  "Quy mô & xu hướng giá": "Size & price trend", "Chất lượng & tăng trưởng": "Quality & growth", "Cổ tức, an toàn & nội bộ": "Dividend, safety & insiders",
+  "Độ rộng thị trường": "Market breadth",
+  "Tỷ lệ cổ phiếu có giá trên đường trung bình 50 và 200 phiên.": "Share of stocks trading above their 50- and 200-session averages.",
+  "rộng, đa số cổ phiếu đang khỏe": "broad, most stocks are healthy", "hẹp, đa số cổ phiếu đang yếu": "narrow, most stocks are weak", "trung tính": "neutral",
+  "Chỉ số tăng mà độ rộng giảm nghĩa là vài mã vốn hoá lớn đang kéo chỉ số, phần lớn thị trường không đi theo.":
+    "An index rising while breadth falls means a few large caps are carrying it and most of the market is not following.",
+  "% trên MA50": "% above MA50", "% trên MA200": "% above MA200",
+  "📅 Sự kiện": "📅 Events", "Quyền & cổ tức sắp tới": "Upcoming rights & dividends",
+  "Ngày giao dịch không hưởng quyền (GDKHQ) trong 60 ngày tới. Mua trước ngày GDKHQ mới được nhận quyền.":
+    "Ex-dates in the next 60 days. Only shares bought before the ex-date receive the entitlement.",
+  "Cổ tức cổ phiếu & thưởng": "Stock dividends & bonus", "Quyền mua & phát hành": "Rights & issues",
+  "Tỷ suất": "Yield", "Ngày chốt": "Record date", "Giao dịch nội bộ gần đây": "Recent insider deals",
+  "Ngày công bố": "Filed", "Người / tổ chức": "Person / institution", "Mua / bán": "Buy / sell", "% cổ phần": "% of shares",
+  "Giá trị (tỷ)": "Value (bn)", "Đăng ký": "Registered", "hôm nay": "today", "ngày mai": "tomorrow", "Tìm mã hoặc tên công ty… (vd: HPG)": "Search ticker or company… (e.g. HPG)", "có báo cáo kết quả": "result report filed", "còn trong thời hạn giao dịch": "trading window still open", "hết hạn, chưa có báo cáo kết quả": "window closed, no result report yet", "Đã hết thời hạn đăng ký, chưa có báo cáo kết quả": "Window closed, no result report yet", "Đang trong thời gian giao dịch đã đăng ký": "Within the registered trading window",
+  "Không có sự kiện nào trong nhóm này.": "No events in this group.", "Chưa có dữ liệu sự kiện.": "No event data yet.",
+});
+PHRASES.push(
+  ["Giá đóng cửa thấp hơn giá cao nhất 52 tuần bao nhiêu %. 0 = đang ở đỉnh", "How far the close is below its 52-week high, %. 0 = at the high"],
+  ["Mức tăng giá ba tháng qua trừ mức tăng của VN-Index cùng kỳ", "3-month price return minus VN-Index over the same period"],
+);
+Object.assign(EXACT, {
+  "Lãnh đạo, người liên quan và tổ chức đăng ký hoặc báo cáo giao dịch trong 45 ngày qua.":
+    "Deals registered or reported by management, related parties and institutions in the last 45 days.",
+  "Đăng ký là ý định, chưa chắc đã thực hiện; đã thực hiện là có báo cáo kết quả.":
+    "Registered is an intention that may not be carried out; executed has a result report.",
+});RX.unshift(
+  [/^Hiện (\d+|—)% trên MA50, (\d+|—)% trên MA200:$/, "Now $1% above MA50, $2% above MA200:"],
+  [/^Giá 3 tháng: (\S+) · 6 tháng so VN-Index: (\S+)$/, "3-month price: $1 · 6 months vs VN-Index: $2"],
+  [/^([\d,]+)đ\/cp$/, "$1 VND/share"], [/^còn (\d+) (?:ngày|days)$/, "in $1 days"], [/^(\d+) sự kiện quyền sắp tới · (\d+) giao dịch nội bộ$/, "$1 upcoming rights events · $2 insider deals"],
+);

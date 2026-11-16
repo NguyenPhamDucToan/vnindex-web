@@ -38,6 +38,10 @@ const FILTERS = [
     "Doanh thu quý gần nhất so với cùng quý năm trước"],
   ["ng", "LN quý tăng tối thiểu", "% YoY", "min", (r) => F.isNum(r.ni_yoy) ? r.ni_yoy * 100 : null, 5, "50",
     "Lợi nhuận sau thuế quý gần nhất so với cùng quý năm trước. Không tính khi năm trước lỗ"],
+  ["hi", "Cách đỉnh 52 tuần tối đa", "%", "max", (r) => F.isNum(r.hi52) ? -r.hi52 * 100 : null, 1, "10",
+    "Giá đóng cửa thấp hơn giá cao nhất 52 tuần bao nhiêu %. 0 = đang ở đỉnh"],
+  ["rs", "Mạnh hơn VN-Index 3T tối thiểu", "điểm %", "min", (r) => F.isNum(r.rs3m) ? r.rs3m * 100 : null, 1, "0",
+    "Mức tăng giá ba tháng qua trừ mức tăng của VN-Index cùng kỳ (63 phiên)"],
   ["ins", "Nội bộ mua ròng tối thiểu", "% CP", "min", (r) => F.isNum(r.ins_net12) ? r.ins_net12 * 100 : null, 0.05, "0.1",
     "Mua trừ bán đã thực hiện (có báo cáo kết quả) của lãnh đạo, người liên quan và tổ chức trong 12 tháng, theo % cổ phần"],
 ];
@@ -51,6 +55,8 @@ const PRESETS = [
   ["dividend", "Cổ tức", "Tỷ suất cổ tức cao, nợ vừa phải", { liq: "1", dy: "5", nd: "2" }],
   ["garp", "Tăng trưởng giá hợp lý", "PEG ≤ 1: trả ít hơn tốc độ tăng lợi nhuận", { liq: "1", peg: "1", roe: "12" }],
   ["safe", "An toàn tài chính", "Xa vùng kiệt quệ, nợ thấp", { liq: "1", z: "2.6", nd: "2" }],
+  ["momo", "Rẻ + đang lên", "Upside từ 20%, chất lượng từ 50, giá 3 tháng mạnh hơn VN-Index", { liq: "1", up: "20", q: "50", rs: "0" }],
+  ["high", "Sát đỉnh 52 tuần", "Giá cách đỉnh 52 tuần không quá 5%", { liq: "1", hi: "5" }],
   ["spike", "Tăng trưởng đột biến", "Quý gần nhất: doanh thu +30% và lợi nhuận +50% so với cùng kỳ", { liq: "1", rg: "30", ng: "50" }],
 ];
 
@@ -91,6 +97,12 @@ const COLS = [
     "Doanh thu quý gần nhất so với cùng quý năm trước"],
   ["ng", "LN quý YoY", (r) => r.ni_yoy, (r) => growthCell(r.ni_yoy, r, true), -1,
     "Lợi nhuận sau thuế quý gần nhất so với cùng quý năm trước"],
+  ["hi", "Cách đỉnh 52T", (r) => r.hi52, (r) => (F.isNum(r.hi52)
+    ? `<span class="${r.hi52 >= -0.05 ? "sx-g" : r.hi52 <= -0.4 ? "sx-r" : ""}">${r.brk ? `<b title="Vừa lập đỉnh 52 tuần mới trong 5 phiên">▲ đỉnh mới</b>` : F.pctSigned(r.hi52 * 100, 0)}</span>`
+    : `<span class="sx-na">—</span>`), -1, "Giá so với giá đóng cửa cao nhất 52 tuần"],
+  ["rs", "So VN-Index 3T", (r) => r.rs3m, (r) => (F.isNum(r.rs3m)
+    ? `<span class="${r.rs3m >= 0 ? "sx-g" : "sx-r"}" title="Giá 3 tháng: ${F.isNum(r.r3m) ? F.pctSigned(r.r3m * 100, 1) : "—"} · 6 tháng so VN-Index: ${F.isNum(r.rs6m) ? F.pctSigned(r.rs6m * 100, 1) : "—"}">${F.pctSigned(r.rs3m * 100, 0)}</span>`
+    : `<span class="sx-na">—</span>`), -1, "Mức tăng giá 3 tháng trừ mức tăng của VN-Index cùng kỳ"],
   ["ins", "Nội bộ 12T", (r) => r.ins_net12, (r) => (F.isNum(r.ins_net12) && r.ins_net12 !== 0
     ? `<span class="${r.ins_net12 > 0 ? "sx-g" : "sx-r"}">${r.ins_net12 > 0 ? "+" : ""}${(r.ins_net12 * 100).toFixed(2)}%</span>`
     : `<span class="sx-na">—</span>`), -1,
@@ -206,10 +218,10 @@ export function buildScreener(root, rows, { selectTicker, loadWL, saveWL, onFilt
   // Four fixed groups, each a vertical list, so the panel lines up at any
   // width instead of an auto-fill grid leaving one or two orphans on a row.
   const GROUPS = [
-    ["Quy mô & tăng trưởng quý", ["liq", "mcap", "rg", "ng"]],
+    ["Quy mô & xu hướng giá", ["liq", "mcap", "hi", "rs"]],
     ["Định giá", ["up", "pe", "pb", "peg"]],
-    ["Chất lượng & nội bộ", ["q", "roe", "pio", "ins"]],
-    ["Cổ tức & an toàn", ["dy", "nd", "z"]],
+    ["Chất lượng & tăng trưởng", ["q", "roe", "pio", "rg", "ng"]],
+    ["Cổ tức, an toàn & nội bộ", ["dy", "nd", "z", "ins"]],
   ];
   const fInput = (id) => {
     const [, label, unit, kind, , step, ph, hint] = FBY[id];

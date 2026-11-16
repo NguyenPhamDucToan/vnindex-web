@@ -20,6 +20,7 @@ import { insidersSection } from "./insiders.js";
 import { earningsSection } from "./earnings.js";
 import { tabbedCard } from "./tabcard.js";
 import { renderEarningsBoard } from "./earnings-board.js";
+import { breadthCard, renderEvents } from "./market-extra.js";
 // "Kiểm định chiến lược" (Phase 10 backtest) is built but private for now: the
 // owner doesn't want it public yet. With the flag off nothing loads backtest.js
 // (deploy.yml also leaves it and data/backtest.json out of the upload).
@@ -1522,13 +1523,15 @@ async function renderMarket() {
   const subtabs = el(`<div class="range-row mo-tabs">
     <button class="range-btn active" data-sub="market">📊 Thị trường</button>
     <button class="range-btn" data-sub="macro">📈 Vĩ mô</button>
-    <button class="range-btn" data-sub="earn">📋 Kết quả quý gần nhất</button></div>`);
+    <button class="range-btn" data-sub="earn">📋 Kết quả quý gần nhất</button>
+    <button class="range-btn" data-sub="events">📅 Sự kiện</button></div>`);
   view.appendChild(subtabs);
   const mktPane = el(`<div id="mo-market"></div>`);
   const earnPane = el(`<div id="mo-earn" class="hidden"></div>`);
   const macroPane = el(`<div id="mo-macro" class="hidden"></div>`);
-  view.appendChild(mktPane); view.appendChild(earnPane); view.appendChild(macroPane);
-  let macroLoaded = false, earnLoaded = false;
+  const evPane = el(`<div id="mo-events" class="hidden"></div>`);
+  view.appendChild(mktPane); view.appendChild(earnPane); view.appendChild(macroPane); view.appendChild(evPane);
+  let macroLoaded = false, earnLoaded = false, evLoaded = false;
   subtabs.querySelectorAll(".range-btn").forEach((b) => {
     b.onclick = async () => {
       subtabs.querySelectorAll(".range-btn").forEach((x) => x.classList.remove("active"));
@@ -1537,6 +1540,8 @@ async function renderMarket() {
       mktPane.classList.toggle("hidden", sub !== "market");
       earnPane.classList.toggle("hidden", sub !== "earn");
       macroPane.classList.toggle("hidden", sub !== "macro");
+      evPane.classList.toggle("hidden", sub !== "events");
+      if (sub === "events" && !evLoaded) { evLoaded = true; await renderEvents(evPane, selectTicker); }
       // Lazy: the macro pane builds ~30 charts, so only on first open.
       if (sub === "macro" && !macroLoaded) { macroLoaded = true; await renderMacro(macroPane); }
       // The latest quarter's earnings standouts (add_growth.py): a season
@@ -1625,6 +1630,9 @@ async function renderMarket() {
       <span><b class="loss">▼ ${down}</b><span class="dimtxt"> Giảm</span></span>
     </div>
     <div class="ad-total">trong ${withChg.length} mã</div>`;
+
+  // ── 1b. Breadth: share of stocks above MA50 / MA200 (add_momentum.py) ──
+  await breadthCard(root);
 
   // ── 2. Market P/E and P/B, each against its own history ──────────
   // Two charts, as the original has them: a single dual-axis line can show the

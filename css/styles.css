@@ -1237,3 +1237,43 @@ table.eb-table td:nth-child(2) { max-width: 150px; }
 .eb-arrow { margin-left: 4px; font-size: 10px; }
 .eb-card { min-width: 0; }
 .eb-open { white-space: nowrap; }
+
+/* Market view: breadth card and "Sự kiện" tab (js/market-extra.js) */
+.ev-tw { overflow-x: auto; -webkit-overflow-scrolling: touch; max-height: 560px; overflow-y: auto; }
+table.ev-table { min-width: 820px; }
+table.ev-table th, table.ev-table td { padding-left: 8px; padding-right: 8px; }
+table.ev-table thead th { position: sticky; top: 0; z-index: 1; background: var(--paper); cursor: pointer; white-space: nowrap; }
+table.ev-table td { vertical-align: top; }
+.ev-who { text-align: left !important; font-family: var(--sans) !important; }
+.ev-nm { font-size: 12px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ev-st { white-space: nowrap; }
+table.ev-table th:nth-child(2), table.ev-table td:nth-child(2),
+table.ev-table th:nth-child(3), table.ev-table td:nth-child(3) { text-align: left; }
+table.ev-table td:nth-child(3).dim { font-family: var(--sans); }
+/* Colour in the "Sự kiện" tables */
+table.ev-table tr.ev-r td:first-child { box-shadow: inset 3px 0 0 var(--c); }
+table.ev-table tbody tr.ev-r:hover td:first-child { box-shadow: inset 5px 0 0 var(--c); }
+.ev-pill { display: inline-block; font-family: var(--sans); font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 999px;
+  color: var(--c); background: color-mix(in srgb, var(--c) 12%, transparent); border: 1px solid color-mix(in srgb, var(--c) 35%, transparent); white-space: nowrap; }
+.ev-pill.ev-done { color: #fff; background: var(--c); border-color: var(--c); }
+.ev-pill.ev-reg { background: color-mix(in srgb, var(--c) 12%, transparent); }
+.ev-tag { display: inline-block; margin-top: 3px; font-family: var(--sans); font-size: 10.5px; font-weight: 600; padding: 0 6px; border-radius: 4px;
+  color: var(--c); background: color-mix(in srgb, var(--c) 10%, transparent); }
+.ev-side { display: inline-block; font-family: var(--sans); font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 4px; color: #fff; white-space: nowrap; }
+.ev-buy { background: #15803d; } .ev-sell { background: #b91c1c; }
+.ev-soon { display: inline-block; margin-top: 3px; font-family: var(--sans); font-size: 10.5px; color: var(--muted); }
+.ev-soon.ev-hot { color: #fff; background: #d97706; padding: 0 6px; border-radius: 4px; font-weight: 600; }
+.ev-y { display: inline-block; padding: 1px 7px; border-radius: 4px; font-weight: 600; }
+.ev-y1 { color: var(--ink-2); } .ev-y2 { color: #15803d; background: rgba(21,128,61,.10); } .ev-y3 { color: #fff; background: #15803d; }
+.ev-big { font-weight: 700; }
+.ev-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12px; color: var(--muted); margin: 2px 0 10px; }
+.ev-legend > span { display: inline-flex; align-items: center; gap: 6px; }
+.ev-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 18px; margin-bottom: var(--space-md, 16px); }
+.ev-toolbar .range-row { margin-bottom: 0; }
+.ev-toolbar .ev-legend { margin: 0; }
+.ev-toolbar .ev-legend { margin-left: auto; justify-content: flex-end; }
+@media (max-width: 600px) { .ev-toolbar .ev-legend { margin-left: 0; justify-content: flex-start; } }
+.ev-search { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding-top: 14px; padding-bottom: 14px; }
+.ev-q { flex: 0 1 360px; min-width: 0; font: inherit; font-size: 14px; padding: 9px 12px; border: 1px solid var(--rule); border-radius: 8px; background: var(--paper); color: var(--ink); }
+.ev-q:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-ring); }
+.ev-q-out { font-size: 13px; }

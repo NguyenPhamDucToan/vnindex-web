@@ -180,6 +180,18 @@ jobs:
         working-directory: vnindex-web
         run: python add_growth.py
 
+      # 52-week high, 3/6-month return vs VN-Index for the screener, and
+      # data/breadth.json (% of shares above MA50/MA200). Local files only.
+      - name: Add price momentum and market breadth
+        working-directory: vnindex-web
+        run: python add_momentum.py
+
+      # Market-wide rights/dividend calendar and recent insider deals
+      # (data/events.json) for the market view's "Sự kiện" tab.
+      - name: Gather upcoming events and insider deals
+        working-directory: vnindex-web
+        run: python add_events.py
+
       # Today's site model price per ticker into the database (model_snapshots),
       # for the private scorecard `python model_track.py eval`. Only the
       # database sees it: this repo and its run logs are public.
