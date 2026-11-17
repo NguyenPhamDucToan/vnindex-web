@@ -919,7 +919,7 @@ table.sx-table tbody tr:hover td.c-ticker { background: var(--paper-3); }
 }
 .sx-arrow { font-size: 9px; }
 table.sx-table .sx-star { width: 28px; }
-.sx-ftoggle { display: none; margin-bottom: 10px; }
+.sx-ftoggle { display: inline-flex; align-items: center; gap: 6px; }
 .sx-in input::placeholder { color: #c8ced7; }
 @media (max-width: 760px) {
   .sx-ftoggle { display: inline-block; }
@@ -1395,3 +1395,42 @@ table.sc-table tr.sc-detail { cursor: default; }
 @media (prefers-reduced-motion: reduce) { .sc-caret { transition: none; } }
 /* Events tab: the search stays in reach while scrolling the two long tables */
 #mo-events .ev-search { position: sticky; top: 0; z-index: 5; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05); }
+
+/* Screener: the detailed filter panel folds away on every width; the active
+   thresholds show as chips beside its toggle, each clearable on its own. */
+.card.sx-filters { display: none; }
+.card.sx-filters.sx-open { display: block; }
+.sx-fbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0 12px; }
+.sx-chipsf { display: flex; flex-wrap: wrap; gap: 6px; }
+.sx-fchip { display: inline-flex; align-items: center; gap: 4px; font: inherit; font-size: 12.5px; font-family: var(--mono);
+  padding: 4px 10px; border-radius: 999px; border: 1px solid var(--primary-light, #93c5fd); background: var(--primary-soft); color: var(--primary); cursor: pointer; }
+.sx-fchip span { font-family: var(--sans); font-weight: 600; }
+.sx-fchip i { font-style: normal; margin-left: 2px; opacity: .7; }
+.sx-fchip:hover { border-color: var(--loss); color: var(--loss); }
+.sx-fchip:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--primary-ring); }
+.sx-presets { gap: 6px; }
+.sx-preset { font-size: 13px; padding: 6px 13px; }
+.sx-views { flex-wrap: wrap; margin: 4px 0 10px; }
+table.sx-table { min-width: 0; }
+table.sx-table.sx-all { min-width: 1280px; }
+.sx-fchip em { font-style: normal; opacity: .8; }
+/* Side-by-side cards: the section rule belongs to the pair, not to each card.
+   Per card, .card:last-child dropped the rule on the right card only, so the
+   left one carried a divider its neighbour did not. */
+.mk-duo > .card, .cmp-duo > .card, .sc-duo > .card { border-bottom: none; padding-bottom: 0; margin-bottom: 0; }
+.mk-duo, .cmp-duo, .sc-duo { border-bottom: 1px solid var(--rule); padding-bottom: var(--space-xl); margin-bottom: var(--space-xl); }
+.mk-duo:last-child, .cmp-duo:last-child, .sc-duo:last-child { border-bottom: none; }
+/* A group heading (.mk-group) draws its own rule; the card or pair right
+   before it must not add a second one a few pixels above. */
+.card:has(+ .mk-group), .mk-duo:has(+ .mk-group), .cmp-duo:has(+ .mk-group), .mv-row:has(+ .mk-group) {
+  border-bottom: none; padding-bottom: 0;
+}
+.mk-group { margin-top: 30px; }
+
+/* Advance/decline panel: the day in a few rows under the bar */
+.ad-rows { margin-top: 14px; border-top: 1px solid var(--rule); }
+.ad-row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--rule); font-size: 13px; }
+.ad-rl { color: var(--muted); }
+.ad-rv { font-family: var(--mono); text-align: right; }
+.ad-rv b { font-weight: 700; }
+.ad-sec { font-family: var(--sans); color: var(--ink); margin-right: 4px; }

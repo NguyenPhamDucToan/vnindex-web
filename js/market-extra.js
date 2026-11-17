@@ -28,22 +28,31 @@ export async function breadthCard(root) {
   root.appendChild(card);
   const pct = (xs) => xs.map((v) => (F.isNum(v) ? v * 100 : null));
   window.Plotly.react(card.querySelector("#breadth-chart"), [
-    { type: "scatter", mode: "lines", name: "% trên MA50", x: b.dates, y: pct(b.ma50),
-      line: { color: "#2563eb", width: 1.6 }, hovertemplate: "%{y:.0f}%<extra>% trên MA50</extra>" },
-    { type: "scatter", mode: "lines", name: "% trên MA200", x: b.dates, y: pct(b.ma200),
-      line: { color: "#d97706", width: 1.6 }, hovertemplate: "%{y:.0f}%<extra>% trên MA200</extra>" },
+    // VN-Index first so it sits behind: a faint reference, not a third series to read.
     { type: "scatter", mode: "lines", name: "VN-Index", x: b.dates, y: b.vni, yaxis: "y2",
-      line: { color: "#94a3b8", width: 1.2, dash: "dot" }, connectgaps: true,
+      line: { color: "rgba(100,116,139,0.45)", width: 1.4 }, connectgaps: true,
       hovertemplate: "%{y:,.0f}<extra>VN-Index</extra>" },
+    { type: "scatter", mode: "lines", name: "% trên MA50", x: b.dates, y: pct(b.ma50),
+      line: { color: "#2563eb", width: 2.4 }, hovertemplate: "%{y:.0f}%<extra>% trên MA50</extra>" },
+    { type: "scatter", mode: "lines", name: "% trên MA200", x: b.dates, y: pct(b.ma200),
+      line: { color: "#d97706", width: 2.4 }, hovertemplate: "%{y:.0f}%<extra>% trên MA200</extra>" },
   ], {
-    height: 300, dragmode: false, margin: { l: 44, r: 54, t: 8, b: 28 },
+    height: 320, dragmode: false, margin: { l: 48, r: 58, t: 12, b: 32 },
     paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
-    font: { family: "Fira Code, monospace", size: 10, color: "#0a121d" },
-    legend: { orientation: "h", y: 1.12, x: 0 }, hovermode: "x unified",
-    xaxis: { showgrid: false, tickfont: { size: 9 }, hoverformat: "%d/%m/%Y" },
-    yaxis: { range: [0, 100], ticksuffix: "%", gridcolor: "rgba(148,163,184,0.22)", tickfont: { size: 9 } },
-    yaxis2: { overlaying: "y", side: "right", showgrid: false, tickfont: { size: 9, color: "#94a3b8" } },
-    shapes: [{ type: "line", xref: "paper", x0: 0, x1: 1, y0: 50, y1: 50, line: { color: "#cbd5e1", width: 1, dash: "dot" } }],
+    font: { family: "Fira Code, monospace", size: 11, color: "#0a121d" },
+    legend: { orientation: "h", y: 1.1, x: 0, font: { size: 11 } }, hovermode: "x unified",
+    xaxis: { showgrid: false, tickfont: { size: 11 }, hoverformat: "%d/%m/%Y" },
+    yaxis: { range: [0, 100], ticksuffix: "%", gridcolor: "rgba(148,163,184,0.18)", tickfont: { size: 11 }, dtick: 25 },
+    yaxis2: { overlaying: "y", side: "right", showgrid: false, tickfont: { size: 10, color: "#94a3b8" }, tickformat: ",.0f" },
+    // Zones: above 70% most stocks are in uptrends, below 30% most are not.
+    shapes: [
+      { type: "rect", xref: "paper", x0: 0, x1: 1, y0: 70, y1: 100, fillcolor: "rgba(22,163,74,0.07)", line: { width: 0 }, layer: "below" },
+      { type: "rect", xref: "paper", x0: 0, x1: 1, y0: 0, y1: 30, fillcolor: "rgba(220,38,38,0.06)", line: { width: 0 }, layer: "below" },
+    ],
+    annotations: [
+      { xref: "paper", x: 0.005, y: 97, xanchor: "left", yanchor: "top", showarrow: false, text: "vùng mạnh", font: { size: 10, color: "#15803d" } },
+      { xref: "paper", x: 0.005, y: 3, xanchor: "left", yanchor: "bottom", showarrow: false, text: "vùng yếu", font: { size: 10, color: "#b91c1c" } },
+    ],
   }, { displayModeBar: false, responsive: true });
   return { card, p50, p200 };
 }

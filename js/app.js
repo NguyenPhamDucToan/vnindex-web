@@ -269,6 +269,7 @@ async function renderStock(t) {
   const head = header(co, last, prev, chg, chgPct);
   headRow.appendChild(head);
   const allRows = await loadScreener().catch(() => []);
+  EPS_TTM = (computeTTM(d.financials || []) || {}).net_income ?? null;
   const grid = metricsGrid(co, v, q, mcap, shares, vol15);
   trendCells(grid, allRows.find((r) => r.ticker === co.ticker) || {}, allRows);
   headRow.appendChild(grid);
@@ -559,6 +560,12 @@ function header(co, last, prev, chg, chgPct) {
     </div>`);
 }
 
+let EPS_TTM = null;      // trailing-4-quarter net income (VND bn), set per render
+function eps4q(q, shares) {
+  if (F.isNum(EPS_TTM) && F.isNum(shares) && shares > 0) return Math.round(EPS_TTM * 1000 / shares);
+  return q && F.isNum(q.eps) && q.eps !== 0 ? q.eps : null;
+}
+
 function metricsGrid(co, v, q, mcap, shares, vol15) {
   // Same nine cells, same order, same accent on P/E + P/B as the original
   // header's 3x3 grid.
@@ -567,7 +574,10 @@ function metricsGrid(co, v, q, mcap, shares, vol15) {
     ["Book Value (bn)", F.num(q ? q.equity : null, 0), false],
     ["P/E", F.mult(v.pe, 1), true],
     ["Avg Vol 15D (K)", F.num(vol15 / 1000, 0), false],
-    ["EPS (VND)", q && F.isNum(q.eps) ? F.rawVND(q.eps) : "—", false],
+    // Trailing four quarters, on the same base as the P/E beside it. The stored
+    // per-row EPS is a single quarter (VCB 1,081 against 4,989 TTM) and is 0
+    // for some tickers (HPG, SSI).
+    ["EPS (VND)", eps4q(q, shares) != null ? F.rawVND(eps4q(q, shares)) : "—", false],
     ["P/B", F.mult(v.pb, 1), true],
     ["Shares (M)", F.num(shares, 0), false],
     ["EV/EBITDA", F.mult(v.ev_ebitda, 1), false],
@@ -1154,9 +1164,9 @@ function screenerAnalytics(root, rows) {
         hovertemplate: "%{x}: %{y:.1f}%<extra></extra>" },
     ], {
       height: 540, barmode: "stack", dragmode: false,
-      margin: { l: 46, r: 50, t: 20, b: 200 },
+      margin: { l: 46, r: 50, t: 40, b: 200 },
       paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: P,
-      legend: { orientation: "h", y: -0.55, x: 0, font: { size: 11 } },
+      legend: { orientation: "h", y: 1.02, yanchor: "bottom", x: 0, font: { size: 11 } },  // above: below it ran into the rotated sector names
       hovermode: "x unified",
       hoverlabel: { bgcolor: "white", font: { size: 12, color: "#374151" } },
       xaxis: { gridcolor: GRID, tickangle: -90, automargin: true, tickfont: { size: 11 } },
@@ -1675,29 +1685,41 @@ async function renderMarket() {
     // direction is already stated in the caption above the chart, and a red
     // line made a mildly negative year look like a crash.
     const firstClose = closes[0];
+    const lastPt = idx[idx.length - 1];
     window.Plotly.react($("#vni-chart", top), [{
       type: "scatter", mode: "lines", x: idx.map((d) => d.date), y: closes,
-      line: { color: "#5b9bd5", width: 2 },
-      fill: "tozeroy", fillcolor: "rgba(91,155,213,0.08)",
+      line: { color: "#2563eb", width: 2.6 },
+      fill: "tozeroy", fillcolor: "rgba(37,99,235,0.10)",
       hovertemplate: "%{y:,.2f}<extra></extra>",
+    }, {
+      // The latest close, marked at the end of the line; its value sits in a
+      // tag in the right margin rather than on top of the line.
+      type: "scatter", mode: "markers", x: [lastPt.date], y: [lastPt.close],
+      marker: { size: 9, color: "#2563eb", line: { color: "#fff", width: 2 } }, hoverinfo: "skip", showlegend: false,
     }], {
-      height: 300, dragmode: false, margin: { l: 54, r: 12, t: 8, b: 28 },
+      height: 320, dragmode: false, margin: { l: 56, r: 64, t: 12, b: 32 }, showlegend: false,
       paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
-      font: { family: "Fira Code, monospace", size: 10, color: "#0a121d" },
-      xaxis: { showgrid: false, tickfont: { size: 9 }, nticks: 8 },
+      font: { family: "Fira Code, monospace", size: 11, color: "#0a121d" },
+      // Exactly first to last session: autorange padded the right edge, which
+      // left the price tag floating away from the end of the line.
+      xaxis: { showgrid: false, tickfont: { size: 11 }, nticks: 8, showspikes: true, spikemode: "across",
+               spikethickness: 1, spikecolor: "#94a3b8", spikedash: "dot",
+               range: [idx[0].date, lastPt.date], hoverformat: "%d/%m/%Y" },
       // Ranged around the actual band, not from zero -- an index that moves 10%
       // would otherwise render as a flat line against a 0-baseline axis.
       yaxis: {
-        gridcolor: "rgba(148,163,184,0.22)", tickfont: { size: 9 },
+        gridcolor: "rgba(148,163,184,0.18)", tickfont: { size: 11 }, tickformat: ",.0f",
         range: [Math.min(...closes) * 0.985, Math.max(...closes) * 1.015],
       },
       hovermode: "x unified",
       shapes: [{ type: "line", xref: "paper", x0: 0, x1: 1, yref: "y",
                  y0: firstClose, y1: firstClose,
                  line: { color: "#cbd5e1", width: 1, dash: "dot" } }],
-      annotations: [{ xref: "paper", x: 1, y: firstClose, yanchor: "top", xanchor: "right",
-                      showarrow: false, text: `1 năm trước: ${Math.round(firstClose).toLocaleString("en-US")}`,
-                      font: { size: 11, color: "#475569" } }],
+      annotations: [
+        { xref: "paper", x: 1.005, y: lastPt.close, xanchor: "left", yanchor: "middle", showarrow: false,
+          text: `<b>${Math.round(lastPt.close).toLocaleString("en-US")}</b>`, bgcolor: "#2563eb",
+          font: { size: 11, color: "#ffffff", family: "Fira Code, monospace" }, borderpad: 3 },
+      ],
     }, { displayModeBar: false, responsive: true });
   }
 
@@ -1716,7 +1738,8 @@ async function renderMarket() {
       <span><b style="color:#b45309">— ${flat}</b><span class="dimtxt"> Đứng</span></span>
       <span><b class="loss">▼ ${down}</b><span class="dimtxt"> Giảm</span></span>
     </div>
-    <div class="ad-total">trong ${withChg.length} mã</div>`;
+    <div class="ad-total">trong ${withChg.length} mã</div>
+    ${adDetail(withChg)}`;
 
   // ── 1b. Breadth: share of stocks above MA50 / MA200 (add_momentum.py) ──
   const breadth = await breadthCard(root);
@@ -2055,6 +2078,33 @@ async function renderMarket() {
     vni: { last: iLast, day: iDay, yr: iYr }, up, down, flat,
     ma50: breadth ? breadth.p50 : null, pe: kpi.pe, ff5: kpi.ff5,
   });
+}
+
+// More of the day under the advance/decline bar: limit moves (band depends on
+// the exchange), big movers either way, and the best and worst sector.
+function adDetail(rows) {
+  const exOf = new Map(COMPANIES.map((c) => [c.ticker, c.exchange]));
+  let ceil = 0, floor = 0, up3 = 0, dn3 = 0;
+  for (const r of rows) {
+    const prev = F.isNum(r.close) ? r.close / (1 + r.chg) : null;
+    const st = priceState(exOf.get(r.ticker), r.close, prev);
+    if (st === PRICE_STATES.ceiling) ceil++;
+    if (st === PRICE_STATES.floor) floor++;
+    if (r.chg >= 0.03) up3++;
+    if (r.chg <= -0.03) dn3++;
+  }
+  const bySec = {};
+  for (const r of rows) if (r.sector) (bySec[r.sector] ||= []).push(r.chg);
+  const sec = Object.entries(bySec).filter(([, v]) => v.length >= 3)
+    .map(([k, v]) => [k, v.reduce((a, b) => a + b, 0) / v.length]).sort((a, b) => b[1] - a[1]);
+  const pc = (v) => `${v >= 0 ? "+" : "−"}${Math.abs(v * 100).toFixed(1)}%`;
+  const row = (label, val) => `<div class="ad-row"><span class="ad-rl">${label}</span><span class="ad-rv">${val}</span></div>`;
+  return `<div class="ad-rows">
+    ${row("Trần / sàn", `<b style="color:${PRICE_STATES.ceiling.c}">${ceil}</b> / <b style="color:${PRICE_STATES.floor.c}">${floor}</b>`)}
+    ${row("Tăng / giảm trên 3%", `<b class="gain">${up3}</b> / <b class="loss">${dn3}</b>`)}
+    ${sec.length ? row("Ngành mạnh nhất", `<span class="ad-sec">${F.escapeHtml(sec[0][0])}</span> <b class="${sec[0][1] >= 0 ? "gain" : "loss"}">${pc(sec[0][1])}</b>`) : ""}
+    ${sec.length > 1 ? row("Ngành yếu nhất", `<span class="ad-sec">${F.escapeHtml(sec.at(-1)[0])}</span> <b class="${sec.at(-1)[1] >= 0 ? "gain" : "loss"}">${pc(sec.at(-1)[1])}</b>`) : ""}
+  </div>`;
 }
 
 // Reading order for the market tab: a strip of headline figures, then the

@@ -115,6 +115,20 @@ const COLS = [
 ];
 const CBY = Object.fromEntries(COLS.map((c) => [c[0], c]));
 
+// Column sets: twenty columns ran to 2,000px in a 1,000px box, so the table
+// shows one family at a time (ticker and signal always). A preset picks the
+// set that shows what it filters on; the choice is remembered.
+const VIEWS = [
+  ["overview", "Tổng quan", ["ticker", "sig", "sector", "close", "up", "rank", "q", "pe", "pb", "liq"]],
+  ["value", "Định giá", ["ticker", "sig", "sector", "close", "model", "up", "rank", "pe", "pb", "peg", "dy", "mcap"]],
+  ["quality", "Chất lượng & an toàn", ["ticker", "sig", "sector", "q", "roe", "pio", "nd", "dy", "ins", "liq"]],
+  ["growth", "Tăng trưởng & xu hướng", ["ticker", "sig", "sector", "up", "rg", "ng", "hi", "rs", "liq"]],
+  ["all", "Tất cả cột", COLS.map((c) => c[0])],
+];
+const PRESET_VIEW = { all: "overview", value: "value", garp: "value", dividend: "value", quality: "quality",
+                      safe: "quality", momo: "growth", high: "growth", spike: "growth" };
+const VIEW_KEY = "vnindex.screenView";
+
 // YoY growth cell. A loss a year earlier has no ratio: show "lãi trở lại"
 // when the quarter turned to a profit, "lỗ" when it is still a loss.
 function growthCell(g, r, ni = false) {
@@ -213,8 +227,9 @@ export function buildScreener(root, rows, { selectTicker, loadWL, saveWL, onFilt
   root.appendChild(presetNote);
 
   // Filters
-  const ftoggle = el(`<button class="sx-btn sx-ftoggle">Bộ lọc ▾ <span id="sx-fon"></span></button>`);
-  root.appendChild(ftoggle);
+  const fbar = el(`<div class="sx-fbar"><button class="sx-btn sx-ftoggle" aria-expanded="false">Bộ lọc chi tiết ▾ <span id="sx-fon"></span></button><div class="sx-chipsf"></div></div>`);
+  const ftoggle = fbar.querySelector(".sx-ftoggle");
+  root.appendChild(fbar);
   // Four fixed groups, each a vertical list, so the panel lines up at any
   // width instead of an auto-fill grid leaving one or two orphans on a row.
   const GROUPS = [
@@ -248,17 +263,41 @@ export function buildScreener(root, rows, { selectTicker, loadWL, saveWL, onFilt
       <span class="sx-count" id="sx-count"></span>
       <button class="sx-btn sx-ghost" id="sx-reset">Xoá lọc</button>
     </div>
-    <div class="ta-scroll sx-scroll"><table class="screen sx-table"><thead><tr><th class="sx-star"></th>
-      ${COLS.map(([k, h, , , , t]) => `<th data-k="${k}" title="${esc(t)}">${h}<span class="sx-arrow"></span></th>`).join("")}
-    </tr></thead><tbody></tbody></table></div>
+    <div class="range-row sx-views" role="tablist">${VIEWS.map(([id, label]) => `<button class="range-btn" data-v="${id}">${label}</button>`).join("")}</div>
+    <div class="ta-scroll sx-scroll"><table class="screen sx-table"><thead><tr></tr></thead><tbody></tbody></table></div>
     <div class="sx-empty hidden">Không có mã nào thoả mọi điều kiện. Thử nới một ngưỡng hoặc chọn "Tất cả".</div>
   </div>`);
   root.appendChild(tcard);
   const tb = tcard.querySelector("tbody");
-  ftoggle.onclick = () => {
-    const open = fcard.classList.toggle("sx-open");
-    ftoggle.firstChild.textContent = open ? "Bộ lọc ▴ " : "Bộ lọc ▾ ";
+  const setOpen = (open) => {
+    fcard.classList.toggle("sx-open", open);
+    ftoggle.setAttribute("aria-expanded", String(open));
+    ftoggle.firstChild.textContent = open ? "Bộ lọc chi tiết ▴ " : "Bộ lọc chi tiết ▾ ";
   };
+  ftoggle.onclick = () => setOpen(!fcard.classList.contains("sx-open"));
+  // A shared link with hand-set thresholds opens with the panel showing them.
+  setOpen(st.preset === "custom");
+
+  let view = (() => { try { return localStorage.getItem(VIEW_KEY); } catch { return null; } })() || "overview";
+  if (!VIEWS.some(([id]) => id === view)) view = "overview";
+  const setView = (v) => {
+    view = v;
+    try { localStorage.setItem(VIEW_KEY, v); } catch { /* ignore */ }
+  };
+  tcard.querySelector(".sx-views").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-v]");
+    if (!b) return;
+    setView(b.dataset.v); apply();
+  });
+  // Each active threshold as a chip; x clears just that one.
+  const chipsF = fbar.querySelector(".sx-chipsf");
+  chipsF.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-clear]");
+    if (!b) return;
+    const k = b.dataset.clear;
+    if (k === "__sec") { st.sec = []; secPick.reset(); } else { st.f[k] = ""; }
+    markCustom(); putInputs(); apply();
+  });
 
   const secPick = tagPicker(fcard.querySelector("#sx-sector"), sectors, "Tất cả ngành", (v) => { st.sec = v; markCustom(); apply(); });
   for (const s of st.sec) secPick.add(s);
@@ -302,6 +341,7 @@ export function buildScreener(root, rows, { selectTicker, loadWL, saveWL, onFilt
     if (b.dataset.p === "__wl") { st.wl = !st.wl; apply(); return; }
     const p = PRESETS.find((x) => x[0] === b.dataset.p);
     st.preset = p[0]; st.f = { ...p[3] }; st.sec = []; secPick.reset();
+    if (PRESET_VIEW[p[0]]) setView(PRESET_VIEW[p[0]]);
     putInputs(); apply();
   });
 
@@ -396,14 +436,21 @@ export function buildScreener(root, rows, { selectTicker, loadWL, saveWL, onFilt
     });
     current = out;
 
-    for (const th of tcard.querySelectorAll("th[data-k]")) {
-      const on = th.dataset.k === col[0];
-      th.classList.toggle("sorted", on);
-      th.querySelector(".sx-arrow").textContent = on ? (dir > 0 ? " ▲" : " ▼") : "";
-    }
+    const shown = (VIEWS.find(([id]) => id === view) || VIEWS[0])[2].map((k) => CBY[k]).filter(Boolean);
+    // Sorting by a column the view hides still works; its header just is not there.
+    tcard.querySelector("thead tr").innerHTML = `<th class="sx-star"></th>` + shown.map(([k, h, , , , t]) =>
+      `<th data-k="${k}" title="${esc(t)}" class="${k === col[0] ? "sorted" : ""}">${h}<span class="sx-arrow">${k === col[0] ? (dir > 0 ? " ▲" : " ▼") : ""}</span></th>`).join("");
+    tcard.querySelectorAll(".sx-views [data-v]").forEach((b) => b.classList.toggle("active", b.dataset.v === view));
+    tcard.querySelector("table.sx-table").classList.toggle("sx-all", view === "all");
     tb.innerHTML = out.map((r) => `<tr data-t="${r.ticker}">
       <td class="sx-star"><button class="wl-star ${wl.has(r.ticker) ? "on" : ""}" title="Theo dõi">${wl.has(r.ticker) ? "★" : "☆"}</button></td>
-      ${COLS.map(([k, , , cell]) => `<td class="c-${k}">${cell(r, ctx)}</td>`).join("")}</tr>`).join("");
+      ${shown.map(([k, , , cell]) => `<td class="c-${k}">${cell(r, ctx)}</td>`).join("")}</tr>`).join("");
+
+    chipsF.innerHTML = [
+      ...(st.sec.length ? [`<button type="button" class="sx-fchip" data-clear="__sec" title="Bỏ điều kiện này"><span>Ngành</span>: ${esc(st.sec.join(", "))} <i>×</i></button>`] : []),
+      ...FILTERS.filter(([id]) => st.f[id] !== "" && st.f[id] != null).map(([id, label, unit, kind]) =>
+        `<button type="button" class="sx-fchip" data-clear="${id}" title="Bỏ điều kiện này"><span>${esc(label.replace(/ (tối thiểu|tối đa)$/, ""))}</span> ${kind === "min" ? "≥" : "≤"} ${esc(st.f[id])}${unit ? ` <em>${esc(unit)}</em>` : ""} <i>×</i></button>`),
+    ].join("");
     tcard.querySelector(".sx-empty").classList.toggle("hidden", out.length > 0);
     tcard.querySelector("#sx-count").innerHTML = `<b>${out.length}</b> / ${rows.length} mã`;
     writeHash(st);
