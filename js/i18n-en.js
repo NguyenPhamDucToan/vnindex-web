@@ -342,7 +342,7 @@ export const EXACT = {
   "= đang tốt lên cho nền kinh tế / thị trường,": "= improving for the economy / market,", "= xấu đi.": "= worsening.",
   "chưa đủ dữ liệu để xem xu hướng": "not enough data for a trend",
   "Nguồn: Tổng cục Thống kê (nso.gov.vn)": "Source: General Statistics Office (nso.gov.vn)",
-  "Nguồn: Tổng cục Thống kê (nso.gov.vn), Ngân hàng Nhà nước, World Bank.": "Sources: General Statistics Office (nso.gov.vn), State Bank of Vietnam, World Bank.",
+  "Nguồn: Tổng cục Thống kê (nso.gov.vn), Ngân hàng Nhà nước, CafeF.": "Sources: General Statistics Office (nso.gov.vn), State Bank of Vietnam, CafeF.",
   "Tổng quan kinh tế": "Overview", "Tăng trưởng kinh tế": "Growth", "Giá cả & Lạm phát": "Prices & inflation",
   "Đầu tư & Tiết kiệm": "Investment & savings", "Sản xuất & Doanh nghiệp": "Production & business", "Ngân sách & Đầu tư công": "Budget & public investment",
   "Xuất nhập khẩu": "Trade", "Lao động & Việc làm": "Labour", "Tiền tệ & Tỷ giá": "Money & FX", "Tiêu dùng": "Consumption", "Lãi suất": "Interest rates",
@@ -515,7 +515,7 @@ Object.assign(EXACT, {
     "Each tile: latest figure, its period, and the recent trend. Monthly figures compare the mean of the last 3 with the 3 before (less noise); seasonal ones (exports, trade balance, public investment, new businesses, visitors) compare the last 3 months with a year earlier; quarterly ones the previous quarter; the FX rate 3 months earlier.",
   "Ngày dự kiến theo lịch họp báo của NSO (ngày 6 tháng sau). Dữ liệu được lấy tự động mỗi ngày làm việc, thường có trên trang trong ngày công bố hoặc ngày kế tiếp.":
     "Expected dates follow NSO's press calendar (the 6th of the following month). Data is collected automatically every working day and usually appears on release day or the next.",
-  "Số năm (GDP USD, tiết kiệm, M2…), thường cập nhật khoảng tháng 7": "Annual figures (GDP in USD, savings, M2…), usually updated around July",
+  "Số năm (GDP USD, tiết kiệm…), thường cập nhật khoảng tháng 7": "Annual figures (GDP in USD, savings…), usually updated around July",
   "Tốn bao nhiêu đồng chi phí để tạo ra 100 đồng thu nhập. Càng thấp càng vận hành hiệu quả": "Cost spent per 100 of income. Lower = more efficient",
   "Tiền thật kiếm được gấp bao nhiêu lần tiền lãi phải trả. Trên 100x nghĩa là gần như không vay": "Real cash earned as a multiple of interest due. Above 100x = barely borrows",
   "Tự nuôi được việc mở rộng hay phải đi vay. Dưới 1.5x là chưa tự tài trợ nổi mức đầu tư đang làm": "Can it fund its own expansion or must it borrow? Below 1.5x = not self-funding its current investment",
@@ -804,7 +804,7 @@ RX.unshift(
   [/^Kết quả kinh doanh quý (\d)\/(\d{4}): nổi bật$/, "Q$1 $2 results: standouts"],
   [/^(\d+)\/(\d+) (?:mã|tickers) đã có báo cáo quý (\d)\/(\d{4})\.$/, "$1/$2 tickers have reported Q$3 $4."],
   [/^quý (\d)\/(\d{4})$/, "Q$1 $2"], [/^năm (\d{4})$/, "FY$1"],
-  [/^(>\+999|<−999|[+−]\d+) điểm$/, "$1 pts"],
+  [/^([+−][\d,]+) điểm$/, "$1 pts"],
 );
 
 // Momentum filters (screener), market breadth and the "Sự kiện" tab (js/market-extra.js).
@@ -827,12 +827,12 @@ Object.assign(EXACT, {
     "An index rising while breadth falls means a few large caps are carrying it and most of the market is not following.",
   "% trên MA50": "% above MA50", "% trên MA200": "% above MA200",
   "📅 Sự kiện": "📅 Events", "Quyền & cổ tức sắp tới": "Upcoming rights & dividends",
-  "Ngày giao dịch không hưởng quyền (GDKHQ) trong 60 ngày tới. Mua trước ngày GDKHQ mới được nhận quyền.":
-    "Ex-dates in the next 60 days. Only shares bought before the ex-date receive the entitlement.",
+  "Ngày giao dịch không hưởng quyền (GDKHQ) trong 120 ngày tới. Mua trước ngày GDKHQ mới được nhận quyền.":
+    "Ex-dates in the next 120 days. Only shares bought before the ex-date receive the entitlement.",
   "Cổ tức cổ phiếu & thưởng": "Stock dividends & bonus", "Quyền mua & phát hành": "Rights & issues",
   "Tỷ suất": "Yield", "Ngày chốt": "Record date", "Giao dịch nội bộ gần đây": "Recent insider deals",
   "Ngày công bố": "Filed", "Người / tổ chức": "Person / institution", "Mua / bán": "Buy / sell", "% cổ phần": "% of shares",
-  "Giá trị (tỷ)": "Value (bn)", "Đăng ký": "Registered", "hôm nay": "today", "ngày mai": "tomorrow", "Tìm mã hoặc tên công ty… (vd: HPG)": "Search ticker or company… (e.g. HPG)", "có báo cáo kết quả": "result report filed", "còn trong thời hạn giao dịch": "trading window still open", "hết hạn, chưa có báo cáo kết quả": "window closed, no result report yet", "Đã hết thời hạn đăng ký, chưa có báo cáo kết quả": "Window closed, no result report yet", "Đang trong thời gian giao dịch đã đăng ký": "Within the registered trading window",
+  "Giá trị (tỷ)": "Value (bn)", "Đăng ký": "Registered", "hôm nay": "today", "ngày mai": "tomorrow", "Đầu tư": "Investment", "Tăng trưởng GDP theo quý (so với cùng kỳ năm trước)": "Quarterly GDP growth (year on year)", "Lãi suất tiết kiệm 12 tháng — 28 ngân hàng (CafeF, hằng ngày)": "12-month savings rate — 28 banks (CafeF, daily)", "Giao dịch của mã đang tìm trong 2 năm qua.": "Deals of the searched ticker over the last 2 years.", "Lãnh đạo, người liên quan và tổ chức đăng ký hoặc báo cáo giao dịch trong 12 tháng qua.": "Deals registered or reported by management, related parties and institutions in the last 12 months.", "Tìm mã hoặc tên công ty… (vd: HPG)": "Search ticker or company… (e.g. HPG)", "có báo cáo kết quả": "result report filed", "còn trong thời hạn giao dịch": "trading window still open", "hết hạn, chưa có báo cáo kết quả": "window closed, no result report yet", "Đã hết thời hạn đăng ký, chưa có báo cáo kết quả": "Window closed, no result report yet", "Đang trong thời gian giao dịch đã đăng ký": "Within the registered trading window",
   "Không có sự kiện nào trong nhóm này.": "No events in this group.", "Chưa có dữ liệu sự kiện.": "No event data yet.",
 });
 PHRASES.push(
@@ -847,5 +847,5 @@ Object.assign(EXACT, {
 });RX.unshift(
   [/^Hiện (\d+|—)% trên MA50, (\d+|—)% trên MA200:$/, "Now $1% above MA50, $2% above MA200:"],
   [/^Giá 3 tháng: (\S+) · 6 tháng so VN-Index: (\S+)$/, "3-month price: $1 · 6 months vs VN-Index: $2"],
-  [/^([\d,]+)đ\/cp$/, "$1 VND/share"], [/^còn (\d+) (?:ngày|days)$/, "in $1 days"], [/^(\d+) sự kiện quyền sắp tới · (\d+) giao dịch nội bộ$/, "$1 upcoming rights events · $2 insider deals"],
+  [/^([\d,]+)đ\/cp$/, "$1 VND/share"], [/^còn (\d+) (?:ngày|days)$/, "in $1 days"], [/ · cao hơn trung bình ([\d.]+) điểm %/g, " · $1 pts above average"], [/ · thấp hơn trung bình ([\d.]+) điểm %/g, " · $1 pts below average"], [/ · bằng trung bình/g, " · at the average"], [/ · cao nhất$/, " · highest"], [/ · thấp nhất$/, " · lowest"], [/^(\d+) sự kiện quyền sắp tới · (\d+) giao dịch nội bộ trong 2 năm$/, "$1 upcoming rights events · $2 insider deals in 2 years"],
 );

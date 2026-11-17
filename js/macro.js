@@ -22,14 +22,14 @@ const GROUPS = {
     { title: "Vốn đầu tư nước ngoài (FDI đăng ký, theo quý)", kind: "bar", unit: "tỷ USD", series: [["FDI", "fdi", TEAL]] },
   ],
   "Tăng trưởng kinh tế": [
+    // Quarterly NSO figures only: the World Bank's yearly GDP charts (size, per
+    // head, long-run growth) ended at 2025 and were dropped for being a year old.
+    { title: "Tăng trưởng GDP theo quý (so với cùng kỳ năm trước)", kind: "line", unit: "%", series: [["GDP", "gdp_growth", BLUE]] },
     { title: "Tăng trưởng GDP theo khu vực (so với cùng kỳ)", kind: "line", unit: "%", series: [
       ["Nông, lâm, thủy sản", "gdp_sector_agri", GREEN],
       ["Công nghiệp & Xây dựng", "gdp_sector_industry", BLUE],
       ["Dịch vụ", "gdp_sector_services", ORANGE]] },
-    { title: "Quy mô GDP (World Bank, theo năm)", kind: "line", unit: "USD", series: [["Quy mô GDP", "wb_gdp_usd", BLUE]] },
-    { title: "GDP bình quân đầu người (World Bank, theo năm)", kind: "line", unit: "USD", series: [["GDP/người", "wb_gdp_per_capita", TEAL]] },
     { title: "Tăng trưởng vốn đầu tư toàn xã hội (so với cùng kỳ)", kind: "line", unit: "%", series: [["Vốn đầu tư", "investment_growth", PURPLE]] },
-    { title: "Tăng trưởng GDP dài hạn (World Bank, 1985–nay)", kind: "line", unit: "%", series: [["Tăng trưởng GDP (World Bank)", "wb_gdp_growth", BLUE]] },
   ],
   "Giá cả & Lạm phát": [
     { title: "Lạm phát (so với cùng kỳ năm trước)", kind: "line", unit: "%", series: [
@@ -39,12 +39,11 @@ const GROUPS = {
     { title: "CPI nhóm giao thông (so với tháng trước)", kind: "line", unit: "%", series: [["Giao thông", "cpi_transport", TEAL]] },
     { title: "Chỉ số giá sản xuất công nghiệp (so với cùng kỳ)", kind: "line", unit: "%", series: [["PPI", "ppi_yoy", PURPLE]] },
   ],
-  "Đầu tư & Tiết kiệm": [
+  "Đầu tư": [
     { title: "Tăng trưởng vốn đầu tư toàn xã hội", kind: "line", unit: "%", series: [["Vốn đầu tư", "investment_growth", BLUE]] },
     { title: "Vốn đầu tư nước ngoài (FDI đăng ký)", kind: "line", unit: "tỷ USD", series: [
       ["FDI theo quý", "fdi", TEAL], ["FDI lũy kế", "fdi_cumulative", BLUE]] },
-    { title: "Tổng vốn hình thành gộp (% GDP, World Bank)", kind: "line", unit: "%", series: [["Vốn hình thành", "wb_capital_formation", ORANGE]] },
-    { title: "Tổng tiết kiệm (% GDP, World Bank)", kind: "line", unit: "%", series: [["Tiết kiệm", "wb_gross_savings", GREEN]] },
+    { title: "Giải ngân vốn đầu tư từ ngân sách (theo tháng)", kind: "bar", unit: "nghìn tỷ ₫", series: [["Đầu tư công", "public_investment", ORANGE]] },
   ],
   "Sản xuất & Doanh nghiệp": [
     { title: "Chỉ số sản xuất công nghiệp IIP (theo tháng, so với cùng kỳ)", kind: "bar", unit: "%", series: [["IIP", "iip_yoy", BLUE]] },
@@ -59,16 +58,12 @@ const GROUPS = {
     { title: "Xuất khẩu & Nhập khẩu (theo tháng)", kind: "line", unit: "tỷ USD", series: [
       ["Xuất khẩu", "exports", GREEN], ["Nhập khẩu", "imports", RED]] },
     { title: "Cán cân thương mại (theo tháng)", kind: "bar", unit: "tỷ USD", series: [["Cán cân", "trade_balance", BLUE]] },
-    { title: "Cán cân vãng lai (% GDP, World Bank)", kind: "line", unit: "%", series: [["Vãng lai", "wb_current_account_gdp", PURPLE]] },
-    { title: "Độ mở thương mại (% GDP, World Bank)", kind: "line", unit: "%", series: [["Thương mại/GDP", "wb_trade_pct_gdp", TEAL]] },
   ],
   "Lao động & Việc làm": [
     { title: "Tỷ lệ thất nghiệp", kind: "line", unit: "%", series: [["Thất nghiệp", "unemployment_rate", RED]] },
     { title: "Tỷ lệ thiếu việc làm", kind: "line", unit: "%", series: [["Thiếu việc làm", "underemployment_rate", ORANGE]] },
     { title: "Thu nhập bình quân người lao động (theo quý)", kind: "line", unit: "nghìn ₫", series: [["Thu nhập", "avg_income", GREEN]] },
     { title: "Lực lượng lao động", kind: "line", unit: "triệu người", series: [["LLLĐ", "labor_force", BLUE]] },
-    { title: "Tỷ lệ tham gia LLLĐ (World Bank)", kind: "line", unit: "%", series: [["Tham gia LLLĐ", "wb_labor_participation", TEAL]] },
-    { title: "Tỷ lệ có việc làm / dân số (World Bank)", kind: "line", unit: "%", series: [["Có việc làm", "wb_employment_ratio", PURPLE]] },
   ],
   "Tiền tệ & Tỷ giá": [
     { title: "Tỷ giá USD/VND", kind: "line", unit: "₫", series: [["USD/VND", "exchange_rate", BLUE]] },
@@ -81,21 +76,18 @@ const GROUPS = {
       ["Thương mại", "credit_growth_commerce", PURPLE],
       ["Nông, lâm, thủy sản", "credit_growth_agri", TEAL],
       ["Vận tải & Viễn thông", "credit_growth_transport", RED]] },
-    { title: "Tăng trưởng cung tiền M2 (World Bank)", kind: "line", unit: "%", series: [["M2", "wb_broad_money_growth", GREEN]] },
   ],
   "Tiêu dùng": [
     { title: "Bán lẻ hàng hóa & dịch vụ theo tháng (so với cùng kỳ)", kind: "bar", unit: "%", series: [["Bán lẻ tháng", "retail_yoy", PURPLE]] },
     { title: "Tổng mức bán lẻ hàng hóa & dịch vụ (theo tháng)", kind: "line", unit: "nghìn tỷ ₫", series: [["Bán lẻ", "retail_month", BLUE]] },
     { title: "Khách quốc tế đến Việt Nam (theo tháng)", kind: "bar", unit: "triệu lượt", series: [["Khách quốc tế", "intl_visitors", ORANGE]] },
-    { title: "Tăng trưởng tiêu dùng (World Bank)", kind: "line", unit: "%", series: [["Tiêu dùng", "wb_consumption_growth", GREEN]] },
-    { title: "Tiêu dùng / GDP (World Bank)", kind: "line", unit: "%", series: [["Tiêu dùng/GDP", "wb_consumption_gdp", ORANGE]] },
   ],
   "Lãi suất": [
     { title: "Lãi suất tiết kiệm 12 tháng — 28 ngân hàng (CafeF, hằng ngày)", kind: "line", unit: "%/năm", series: [
       ["Cao nhất", "deposit_12m_max", GREEN], ["Trung bình", "deposit_12m_avg", BLUE], ["Thấp nhất", "deposit_12m_min", RED]] },
-    { title: "Lãi suất cho vay & tiền gửi (SBV)", kind: "line", unit: "%/năm", series: [
-      ["Cho vay", "lending_rate", RED], ["Tiền gửi 6-12T", "deposit_rate", BLUE]] },
-    { title: "Lãi suất thực (World Bank)", kind: "line", unit: "%", series: [["Lãi suất thực", "wb_real_interest_rate", PURPLE]] },
+    // World Bank's real rate stopped at 2023 and SBV's rate bulletin at May 2026
+    // (its site blocks automated access since June); both dropped rather than
+    // shown stale. Only published figures here, nothing derived.
   ],
 };
 
@@ -213,7 +205,6 @@ const CAL = [
   ["Giá vàng SJC", "sjc_gold_sell", "d", "Mua vào / bán ra vàng miếng"],
   ["Tỷ giá USD/VND (VNDirect)", "exchange_rate", "d", "Tỷ giá đóng cửa"],
   ["Tín dụng theo ngành (NHNN)", "credit_growth_total", "x", "Không theo lịch cố định, NHNN công bố khi họp báo"],
-  ["World Bank", "wb_gdp_growth", "y", "Số năm (GDP USD, tiết kiệm, M2…), thường cập nhật khoảng tháng 7"],
 ];
 
 function releaseCalendar(macro, box, headNext) {
@@ -272,7 +263,7 @@ export async function renderMacro(root) {
     <div class="card"><div id="macro-grid"></div></div>
     <details class="card mc-cal"><summary class="sec-h">🗓 Lịch cập nhật số liệu <span class="mc-next"></span></summary>
       <div id="macro-cal"></div></details>
-    <div class="vb-note">Nguồn: Tổng cục Thống kê (nso.gov.vn), Ngân hàng Nhà nước, World Bank.</div>
+    <div class="vb-note">Nguồn: Tổng cục Thống kê (nso.gov.vn), Ngân hàng Nhà nước, CafeF.</div>
   </div>`);
   root.appendChild(shell);
   const tabs = shell.querySelector(".macro-tabs");
@@ -285,7 +276,7 @@ export async function renderMacro(root) {
   // width in the original. The overview is the exception: six equal charts.
   const LEAD = {
     "Tổng quan kinh tế": 0, "Tăng trưởng kinh tế": 1, "Giá cả & Lạm phát": 1,
-    "Đầu tư & Tiết kiệm": 1, "Xuất nhập khẩu": 1, "Lao động & Việc làm": 1,
+    "Đầu tư": 1, "Xuất nhập khẩu": 1, "Lao động & Việc làm": 1,
     "Tiền tệ & Tỷ giá": 1, "Tiêu dùng": 1, "Lãi suất": 1, "Sản xuất & Doanh nghiệp": 0, "Ngân sách & Đầu tư công": 0,
   };
 
@@ -340,17 +331,27 @@ export async function renderMacro(root) {
           ? { color: pts.map((q) => (q.value >= 0 ? "#22c55e" : "#ef4444")) }
           : { color: colour, size: 4 },
         line: { color: colour, width: 1.6 },
-        hovertemplate: `${label} %{x}: %{y:,.2f} ${spec.unit}<extra></extra>`,
+        // The unified hover box already heads with the date (xaxis.hoverformat
+        // below), so each line carries only its name and value.
+        hovertemplate: `${label}: %{y:,.2f} ${spec.unit}<extra></extra>`,
       }));
+      // Date shown at the series' own grain: a year, a month, or a day.
+      const monthly = series.every(([, pts]) => pts.every((q) => String(q.period).slice(8, 10) === "01"));
+      const hoverformat = yearly ? "%Y" : monthly ? "%m/%Y" : "%d/%m/%Y";
       pending.push(() => window.Plotly.react(canvas, traces, {
         height: 240, dragmode: false, margin: { l: 54, r: 12, t: 22, b: 30 },
         paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: FONT,
         showlegend: series.length > 1,
         legend: { orientation: "h", y: 1.16, x: 0, font: { size: 9 } },
-        xaxis: { type: annual ? "category" : "date", showgrid: false, tickfont: { size: 8 }, nticks: 6 },
+        xaxis: { type: annual ? "category" : "date", showgrid: false, tickfont: { size: 8 }, nticks: 6,
+                 ...(annual ? {} : { hoverformat }) },
         yaxis: { gridcolor: "rgba(148,163,184,0.22)", tickfont: { size: 8 },
                  ticksuffix: spec.unit === "%" ? "%" : "", zeroline: true },
         hovermode: "x unified",
+        // Monthly or yearly series with only a few points: the default 20px
+        // reach left the gaps between them dead, so the SBV rate chart (four
+        // points) showed nothing on hover. -1 snaps to the nearest point.
+        hoverdistance: -1,
       }, { displayModeBar: false, responsive: true }));
     }
     // Place the boxes now that the count is known. Charts with no data drop
@@ -409,6 +410,7 @@ export async function renderMacro(root) {
 // Today's savings rates bank by bank (data/bank_rates.json), highest of each
 // tenor in green and lowest in red, average underneath. Sorted by the 12-month
 // rate, the tenor most people compare.
+const TENOR_VI = { "1m": "1 tháng", "3m": "3 tháng", "6m": "6 tháng", "9m": "9 tháng", "12m": "12 tháng", "18m": "18 tháng", "24m": "24 tháng" };
 const TENORS = [["1m", "1 tháng"], ["3m", "3 tháng"], ["6m", "6 tháng"], ["9m", "9 tháng"],
   ["12m", "12 tháng"], ["18m", "18 tháng"], ["24m", "24 tháng"]];
 function bankRateTable(br) {
@@ -426,7 +428,11 @@ function bankRateTable(br) {
     if (!F.isNum(v)) return `<td class="num muted">—</td>`;
     const s = stat[k];
     const cls = s && v === s.max ? "br-hi" : s && v === s.min ? "br-lo" : "";
-    return `<td class="num ${cls}">${v.toFixed(2)}%</td>`;
+    const d = s ? v - s.avg : null;
+    const tip = `${b.bank} · ${TENOR_VI[k]}: ${v.toFixed(2)}%`
+      + (d == null ? "" : ` · ${Math.abs(d) < 0.005 ? "bằng trung bình" : `${d > 0 ? "cao hơn" : "thấp hơn"} trung bình ${Math.abs(d).toFixed(2)} điểm %`}`)
+      + (s && v === s.max ? " · cao nhất" : s && v === s.min ? " · thấp nhất" : "");
+    return `<td class="num ${cls}" title="${F.escapeHtml(tip)}">${v.toFixed(2)}%</td>`;
   };
   const s12 = stat["12m"];
   const box = el(`<div class="br">

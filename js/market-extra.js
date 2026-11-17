@@ -60,6 +60,8 @@ const pctSh = (f) => {
   return p < 0.001 ? "<0.001%" : p.toFixed(p < 0.01 ? 3 : 2) + "%";
 };
 const dm = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+const SUB12 = "Lãnh đạo, người liên quan và tổ chức đăng ký hoặc báo cáo giao dịch trong 12 tháng qua.";
+const SUB24 = "Giao dịch của mã đang tìm trong 2 năm qua.";
 const qty = (q) => (q >= 1e6 ? (q / 1e6).toLocaleString("en-US", { maximumFractionDigits: 2 }) + " tr" : q.toLocaleString("en-US"));
 
 function sortable(tw, cols, rows, rowHtml, state, onRow) {
@@ -111,7 +113,7 @@ export async function renderEvents(root, selectTicker) {
   const actsAll = (ev.actions || []).filter((a) => a.ex >= today);
   let acts = actsAll;
   const aCard = el(`<div class="card"><h2 class="sec-h">Quyền & cổ tức sắp tới</h2>
-    <div class="chart-sub">Ngày giao dịch không hưởng quyền (GDKHQ) trong 60 ngày tới. Mua trước ngày GDKHQ mới được nhận quyền.</div>
+    <div class="chart-sub">Ngày giao dịch không hưởng quyền (GDKHQ) trong 120 ngày tới. Mua trước ngày GDKHQ mới được nhận quyền.</div>
     <div class="range-row eb-tabs"></div><div class="ev-tw"></div></div>`);
   root.appendChild(aCard);
   const aCols = [
@@ -145,10 +147,13 @@ export async function renderEvents(root, selectTicker) {
   aPick("all");
 
   // Insider deals
-  const dealsAll = ev.insiders || [];
+  // events.json carries 2 years: the table shows 12 months, a search both years.
+  const dealsYear = ev.insiders || [];
+  const since = new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10);
+  const dealsAll = dealsYear.filter((d) => d.date >= since);
   let deals = dealsAll;
   const iCard = el(`<div class="card"><h2 class="sec-h">Giao dịch nội bộ gần đây</h2>
-    <div class="chart-sub"><span>Lãnh đạo, người liên quan và tổ chức đăng ký hoặc báo cáo giao dịch trong 45 ngày qua.</span>
+    <div class="chart-sub"><span class="ev-ins-sub">${SUB12}</span>
       <span>Đăng ký là ý định, chưa chắc đã thực hiện; đã thực hiện là có báo cáo kết quả.</span></div>
     <div class="ev-toolbar"><div class="range-row eb-tabs"></div>
     <div class="ev-legend"> <span><span class="ev-pill ev-done" style="--c:#0f766e">Đã thực hiện</span> <span>có báo cáo kết quả</span></span> <span><span class="ev-pill ev-reg" style="--c:#d97706">Đăng ký</span> <span>còn trong thời hạn giao dịch</span></span> <span><span class="ev-pill ev-reg" style="--c:#64748b">Đăng ký</span> <span>hết hạn, chưa có báo cáo kết quả</span></span> </div></div><div class="ev-tw"></div></div>`);
@@ -185,11 +190,12 @@ export async function renderEvents(root, selectTicker) {
   sCard.querySelector(".ev-q").addEventListener("input", (e) => {
     q = norm(e.target.value.trim());
     acts = actsAll.filter(hit);
-    deals = dealsAll.filter(hit);
+    deals = q ? dealsYear.filter(hit) : dealsAll;
+    iCard.querySelector(".ev-ins-sub").textContent = q ? SUB24 : SUB12;
     aG = aCard.querySelector(".eb-tabs .active")?.dataset.k || "all";
     iG = iCard.querySelector(".eb-tabs .active")?.dataset.k || "all";
     aPick0(aG);
     iPick(iG);
-    out.textContent = q ? `${acts.length} sự kiện quyền sắp tới · ${deals.length} giao dịch nội bộ` : "";
+    out.textContent = q ? `${acts.length} sự kiện quyền sắp tới · ${deals.length} giao dịch nội bộ trong 2 năm` : "";
   });
 }

@@ -29,12 +29,15 @@ const median = (xs) => {
   const n = s.length;
   return n ? (n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2) : null;
 };
+// The real figure, however large (CRV's revenue +2,274%), with a thousands separator.
+const signedInt = (p) => `${p >= 0 ? "+" : "−"}${Math.abs(Math.round(p)).toLocaleString("en-US")}`;
+export const growthText = (g) => `${signedInt(g * 100)}%`;
 const qLabel = (q) => { const [y, n] = String(q).split("-Q"); return `quý ${n}/${y}`; };
 const bn = (v) => (F.isNum(v) ? Math.round(v).toLocaleString("en-US") : "—");
 const pctCell = (g, good = 0.3) => {
   if (!F.isNum(g)) return `<span class="dim">—</span>`;
   const v = g * 100;
-  return `<span class="${g >= good ? "gain" : g <= -good ? "loss" : ""}">${v > 999 ? ">+999%" : F.pctSigned(v, 0)}</span>`;
+  return `<span class="${g >= good ? "gain" : g <= -good ? "loss" : ""}">${growthText(g)}</span>`;
 };
 const niCell = (r) => {
   if (F.isNum(r.ni_yoy)) return pctCell(r.ni_yoy, 0.3);
@@ -121,7 +124,7 @@ export function renderEarningsBoard(root, rows, revisions, selectTicker, openScr
           <td class="dim">${esc(r.sector)}</td>
           <td>${bn(r.rev_q)}</td><td>${pctCell(r.rev_yoy)}</td>
           <td>${bn(r.ni_q)}</td><td>${niCell(r)}</td>
-          <td>${F.isNum(m) ? `${pctCell(m)}${vs == null ? "" : `<div class="eb-vs ${vs >= 0 ? "gain" : "loss"}">${Math.abs(vs * 100) > 999 ? (vs > 0 ? ">+999" : "<−999") : `${vs >= 0 ? "+" : "−"}${Math.abs(vs * 100).toFixed(0)}`} điểm</div>`}` : `<span class="dim">—</span>`}</td>
+          <td>${F.isNum(m) ? `${pctCell(m)}${vs == null ? "" : `<div class="eb-vs ${vs >= 0 ? "gain" : "loss"}">${signedInt(vs * 100)} điểm</div>`}` : `<span class="dim">—</span>`}</td>
           <td>${pctCell(r.ni_ytd_yoy)}</td>
           <td>${F.isNum(r.er_d5) ? `<span class="${r.er_d5 >= 0 ? "gain" : "loss"}">${F.pctSigned(r.er_d5 * 100, 1)}</span>` : `<span class="dim">—</span>`}</td></tr>`;
       }).join("")}</tbody></table>`;

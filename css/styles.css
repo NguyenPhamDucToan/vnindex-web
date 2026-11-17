@@ -1277,3 +1277,8 @@ table.ev-table tbody tr.ev-r:hover td:first-child { box-shadow: inset 5px 0 0 va
 .ev-q { flex: 0 1 360px; min-width: 0; font: inherit; font-size: 14px; padding: 9px 12px; border: 1px solid var(--rule); border-radius: 8px; background: var(--paper); color: var(--ink); }
 .ev-q:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-ring); }
 .ev-q-out { font-size: 13px; }
+/* Bank rate table: row and column hover so a rate can be read across and down */
+.br-t tbody tr:hover td { background: var(--paper-3); }
+.br-t tbody tr:hover td.br-hi { background: #bbf7d0; }
+.br-t tbody tr:hover td.br-lo { background: #fecaca; }
+.br-t tbody td.num:hover { outline: 2px solid var(--primary); outline-offset: -2px; cursor: default; }

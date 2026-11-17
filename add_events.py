@@ -9,9 +9,10 @@ needs into data/events.json. Deploy runs it after add_momentum.py.
 
 events.json:
     asof
-    actions   ex-dates from 7 days back to 60 days ahead, with the cash yield
+    actions   ex-dates from 7 days back to 120 days ahead, with the cash yield
               against the latest close where the action is a cash dividend
-    insiders  deals registered or reported in the last 45 days, with the
+    insiders  deals registered or reported in the last 2 years (the tab shows
+              12 months, both years once a ticker is searched), with the
               quantity as a fraction of shares outstanding and an approximate
               value at the latest close (VND billions)
 """
@@ -22,7 +23,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 DATA = Path(__file__).resolve().parent / "data"
-BACK_DAYS, AHEAD_DAYS, INSIDER_DAYS = 7, 60, 45
+BACK_DAYS, AHEAD_DAYS, INSIDER_DAYS = 7, 120, 730
 
 
 def _num(v):

@@ -124,7 +124,7 @@ function growthCell(g, r, ni = false) {
     return `<span class="sx-na">—</span>`;
   }
   const v = g * 100;
-  return `<span class="${v >= 30 ? "sx-g" : v <= -30 ? "sx-r" : ""}" title="${esc(r.g_q || "")}">${v > 999 ? ">+999%" : F.pctSigned(v, 0)}</span>`;
+  return `<span class="${v >= 30 ? "sx-g" : v <= -30 ? "sx-r" : ""}" title="${esc(r.g_q || "")}">${v >= 0 ? "+" : "−"}${Math.abs(Math.round(v)).toLocaleString("en-US")}%</span>`;
 }
 
 function fmtBn(v) {
