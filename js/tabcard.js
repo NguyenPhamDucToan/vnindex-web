@@ -29,6 +29,7 @@ export function tabbedCard(title, sections) {
     const badge = d.querySelector(":scope > summary .ins-mood");
     const b = el(`<button type="button" class="tc-tab" role="tab"></button>`);
     b.textContent = label;
+    b.dataset.tab = label;        // untranslated, so other code can open a tab by name
     if (badge) b.appendChild(badge.cloneNode(true));
     d.classList.add("tc-pane", "hidden");
     tabs.appendChild(b);

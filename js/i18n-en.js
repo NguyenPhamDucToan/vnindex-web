@@ -832,7 +832,7 @@ Object.assign(EXACT, {
   "Cổ tức cổ phiếu & thưởng": "Stock dividends & bonus", "Quyền mua & phát hành": "Rights & issues",
   "Tỷ suất": "Yield", "Ngày chốt": "Record date", "Giao dịch nội bộ gần đây": "Recent insider deals",
   "Ngày công bố": "Filed", "Người / tổ chức": "Person / institution", "Mua / bán": "Buy / sell", "% cổ phần": "% of shares",
-  "Giá trị (tỷ)": "Value (bn)", "Đăng ký": "Registered", "hôm nay": "today", "ngày mai": "tomorrow", "Đầu tư": "Investment", "Tăng trưởng GDP theo quý (so với cùng kỳ năm trước)": "Quarterly GDP growth (year on year)", "Lãi suất tiết kiệm 12 tháng — 28 ngân hàng (CafeF, hằng ngày)": "12-month savings rate — 28 banks (CafeF, daily)", "Giao dịch của mã đang tìm trong 2 năm qua.": "Deals of the searched ticker over the last 2 years.", "Lãnh đạo, người liên quan và tổ chức đăng ký hoặc báo cáo giao dịch trong 12 tháng qua.": "Deals registered or reported by management, related parties and institutions in the last 12 months.", "Tìm mã hoặc tên công ty… (vd: HPG)": "Search ticker or company… (e.g. HPG)", "có báo cáo kết quả": "result report filed", "còn trong thời hạn giao dịch": "trading window still open", "hết hạn, chưa có báo cáo kết quả": "window closed, no result report yet", "Đã hết thời hạn đăng ký, chưa có báo cáo kết quả": "Window closed, no result report yet", "Đang trong thời gian giao dịch đã đăng ký": "Within the registered trading window",
+  "Giá trị (tỷ)": "Value (bn)", "Đăng ký": "Registered", "hôm nay": "today", "ngày mai": "tomorrow", "Vĩ mô": "Macro", "Toàn cảnh": "Overview", "Chi tiết từng ngành": "Sector detail", "Bấm một ngành để xem 5 mã có upside cao nhất.": "Click a sector to see its five names with the highest upside.", "Upside cao nhất": "Highest upside", "Chưa có mã nào có giá mô hình.": "No ticker with a model price yet.", "Biên LN ròng": "Net margin", "Tăng mạnh nhất": "Top gainers", "Giảm mạnh nhất": "Top losers", "Khối lượng lớn nhất": "Most traded", "trong 20 mã thanh khoản tốt nhất": "among the 20 most-traded stocks", "toàn thị trường": "whole market", "1 năm": "1 year", "Diễn biến": "Price action", "Dòng tiền": "Money flow", "Cổ phiếu nổi bật": "Stand-out stocks", "Ngành hôm nay": "Sectors today", "Mã trên MA50": "Stocks above MA50", "P/E thị trường": "Market P/E", "Khối ngoại 5 phiên": "Foreign, 5 sessions", "độ rộng tốt": "broad", "đa số cổ phiếu yếu": "most stocks weak", "so với trung bình": "vs average", "mua ròng": "net buying", "bán ròng": "net selling", "Lịch sử 5 năm": "5-year history", "Doanh thu & lợi nhuận": "Revenue & profit", "Biên lợi nhuận": "Margins", "lỗ": "loss", "Định giá ngành so với lịch sử": "Sector valuation against its history", "P/E hiện tại": "P/E now", "P/E trung vị": "P/E median", "P/B hiện tại": "P/B now", "P/B trung vị": "P/B median", "Lệch": "Gap", "Đánh giá": "Verdict", "Rẻ hơn lịch sử": "Cheaper than usual", "Đắt hơn lịch sử": "Dearer than usual", "Quanh mức thường": "Around usual", "Hiện tại": "Now", "Lệch quá 10% so với trung vị là rẻ hoặc đắt hơn mức thường của chính ngành đó. Bấm một ngành để xem lịch sử.": "More than 10% off the median is cheaper or dearer than the sector's own usual level. Click a sector to see its history.", "Tăng trưởng quý": "Quarterly growth", "Xu hướng giá": "Price trend", "So VN-Index 6 tháng": "vs VN-Index 6M", "Tỷ suất cổ tức": "Dividend yield", "Quyền sắp tới": "Upcoming entitlement", "Sự kiện": "Events", "LN lũy kế YoY": "YTD profit YoY", "ngành": "sector", "So VN-Index 3 tháng": "vs VN-Index 3M", "📅 Sắp có quyền": "📅 Upcoming entitlement", "vẫn lỗ": "still a loss", "Lợi nhuận sau thuế quý gần nhất so với cùng quý năm trước; dòng dưới là trung vị của các mã cùng ngành": "Latest quarter net profit vs the same quarter last year; below, the median of the same-sector tickers", "Giá đóng cửa so với giá đóng cửa cao nhất 52 tuần": "Close against the highest close of 52 weeks", "Đầu tư": "Investment", "Tăng trưởng GDP theo quý (so với cùng kỳ năm trước)": "Quarterly GDP growth (year on year)", "Lãi suất tiết kiệm 12 tháng — 28 ngân hàng (CafeF, hằng ngày)": "12-month savings rate — 28 banks (CafeF, daily)", "Giao dịch của mã đang tìm trong 2 năm qua.": "Deals of the searched ticker over the last 2 years.", "Lãnh đạo, người liên quan và tổ chức đăng ký hoặc báo cáo giao dịch trong 12 tháng qua.": "Deals registered or reported by management, related parties and institutions in the last 12 months.", "Tìm mã hoặc tên công ty… (vd: HPG)": "Search ticker or company… (e.g. HPG)", "có báo cáo kết quả": "result report filed", "còn trong thời hạn giao dịch": "trading window still open", "hết hạn, chưa có báo cáo kết quả": "window closed, no result report yet", "Đã hết thời hạn đăng ký, chưa có báo cáo kết quả": "Window closed, no result report yet", "Đang trong thời gian giao dịch đã đăng ký": "Within the registered trading window",
   "Không có sự kiện nào trong nhóm này.": "No events in this group.", "Chưa có dữ liệu sự kiện.": "No event data yet.",
 });
 PHRASES.push(
@@ -847,5 +847,51 @@ Object.assign(EXACT, {
 });RX.unshift(
   [/^Hiện (\d+|—)% trên MA50, (\d+|—)% trên MA200:$/, "Now $1% above MA50, $2% above MA200:"],
   [/^Giá 3 tháng: (\S+) · 6 tháng so VN-Index: (\S+)$/, "3-month price: $1 · 6 months vs VN-Index: $2"],
-  [/^([\d,]+)đ\/cp$/, "$1 VND/share"], [/^còn (\d+) (?:ngày|days)$/, "in $1 days"], [/ · cao hơn trung bình ([\d.]+) điểm %/g, " · $1 pts above average"], [/ · thấp hơn trung bình ([\d.]+) điểm %/g, " · $1 pts below average"], [/ · bằng trung bình/g, " · at the average"], [/ · cao nhất$/, " · highest"], [/ · thấp nhất$/, " · lowest"], [/^(\d+) sự kiện quyền sắp tới · (\d+) giao dịch nội bộ trong 2 năm$/, "$1 upcoming rights events · $2 insider deals in 2 years"],
+  [/^([\d,]+)đ\/cp$/, "$1 VND/share"], [/^còn (\d+) (?:ngày|days)$/, "in $1 days"], [/^(\d+) đứng giá · tỷ lệ ([\d.]+)$/, "$1 unchanged · ratio $2"], [/(\d+) (?:ngày|days) trước/g, "$1 days ago"], [/(\d+) (?:giờ|hours?) trước/g, "$1 hours ago"], [/(\d+) (?:phút|minutes?) trước/g, "$1 minutes ago"], [/^RIM \(ROE giảm dần(?: (?:trong|over) ([\d.]+) (?:năm|yr))?\)$/, (m, n) => (n ? `RIM (ROE fading over ${n} yr)` : "RIM (fading ROE)")], [/^P\/E và P\/B trung vị của ngành hôm nay so với trung vị các quý (Q\d\/\d{4})–(Q\d\/\d{4})\.$/, "The sector\'s median P/E and P/B today against the median of quarters $1–$2."], [/^trung vị ([\d.]+x)$/, "median $1"], [/^(\d+) (?:mã|tickers)$/, "$1 tickers"], [/^LN quý YoY · Q(\d)\/(\d{4})$/, "Profit Q YoY · Q$1 $2"], [/^LN quý YoY$/, "Profit Q YoY"], [/ · GDKHQ (\d\d\/\d\d\/\d{4})$/, " · ex-date $1"], [/^GDKHQ (\d\d\/\d\d\/\d{4})$/, "Ex-date $1"], [/ · cao hơn trung bình ([\d.]+) điểm %/g, " · $1 pts above average"], [/ · thấp hơn trung bình ([\d.]+) điểm %/g, " · $1 pts below average"], [/ · bằng trung bình/g, " · at the average"], [/ · cao nhất$/, " · highest"], [/ · thấp nhất$/, " · lowest"], [/^(\d+) sự kiện quyền sắp tới · (\d+) giao dịch nội bộ trong 2 năm$/, "$1 upcoming rights events · $2 insider deals in 2 years"], [/^(\d+) sự kiện quyền sắp tới · (\d+) giao dịch nội bộ trong 12 tháng$/, "$1 upcoming rights events · $2 insider deals in 12 months"],
 );
+
+// Compare page (js/compare.js): never had dictionary entries; found by a
+// VI-vs-EN scan of four sector line-ups with and without the sector column.
+Object.assign(EXACT, {
+  "Thị trường": "Market", "Vốn hóa (nghìn tỷ)": "Market cap (VND tn)", "Sinh lời": "Profitability",
+  "Biên gộp": "Gross margin", "Biên EBIT": "EBIT margin", "Biên lợi nhuận ròng": "Net margin", "Biên FCF": "FCF margin",
+  "Sức khỏe": "Health", "Triển vọng": "Outlook", "Chất lượng": "Quality", "Chỉ số": "Metric",
+  "So sánh chỉ số tài chính": "Financial metrics compared", "Tổng kết so sánh": "Comparison summary",
+  "Hồ sơ tổng thể": "Overall profile", "Mạnh": "Strong", "Yếu": "Weak",
+  "Thứ hạng tính trong chính nhóm đang so, không phải toàn thị trường.": "Ranks are within the group being compared, not the whole market.",
+  "★ = dẫn đầu hàng đó, tô theo màu của mã; hạng nhì đậm hơn phần còn lại.": "★ = leads that row, shaded in the ticker's colour; the runner-up is darker than the rest.",
+  "Cột": "The", "Trung vị ngành": "sector median", "gồm chỉ số riêng của ngành": "incl. the sector's own metrics:",
+  "Trung vị chứ không phải trung bình, để vài mã ngoại lai không kéo lệch cả cột; đây là mốc tham chiếu nên không xếp hạng và không nhận ★.":
+    "A median rather than a mean, so a few outliers cannot drag the column; it is a reference, so it is not ranked and never gets a ★.",
+  "Trục:": "Axes:", "Rê chuột dọc một trục": "Hover along an axis",
+  "Mỗi trục chuẩn hóa 0–100 theo ngưỡng tham chiếu; trục \"càng thấp càng tốt\" được đảo chiều nên xa tâm luôn là tốt hơn.":
+    "Each axis is scaled 0–100 against reference thresholds; \"lower is better\" axes are flipped, so further from the centre is always better.",
+  "để xem toàn bộ mã đang so trên tiêu chí đó, xếp từ tốt nhất.": "to see every ticker being compared on that measure, best first.",
+  "Doanh thu & Lợi nhuận ròng (5 năm)": "Revenue & net profit (5 years)", "Biên lợi nhuận (5 năm)": "Margins (5 years)",
+  "Doanh thu (tỷ đồng)": "Revenue (VND bn)", "Lợi nhuận ròng (tỷ đồng)": "Net profit (VND bn)", "Tăng trưởng doanh thu YoY (%)": "Revenue growth YoY (%)",
+  "Biên gộp và biên EBIT trống với ngân hàng và bảo hiểm — hai ngành không có giá vốn hàng bán theo nghĩa thông thường.":
+    "Gross and EBIT margins are blank for banks and insurers, which have no cost of goods sold in the usual sense.",
+  "Hiệu suất giá (chuẩn hóa về 100)": "Price performance (rebased to 100)", "Giá chuẩn hóa (100 = đầu kỳ)": "Rebased price (100 = start)",
+  "Rủi ro & Hiệu suất": "Risk & performance", "Lợi suất giá": "Price return", "Rủi ro": "Risk",
+  "Biến động (năm hóa)": "Volatility (annualised)", "Biến động giảm giá": "Downside volatility", "Sụt giảm tối đa": "Max drawdown",
+  "Thời gian hồi phục": "Recovery time", "Tỷ lệ phiên tăng": "Up-session ratio", "chưa hồi": "not recovered",
+  "Hiệu quả điều chỉnh rủi ro": "Risk-adjusted return", "Nhạy cảm thị trường": "Market sensitivity",
+  "Alpha (năm hóa)": "Alpha (annualised)", "Tương quan VN-Index": "Correlation with VN-Index", "GTGD bình quân/phiên": "Avg traded value/session",
+  "Beta > 1 = dao động mạnh hơn VN-Index. Alpha = phần lãi vượt trên mức mà riêng độ nhạy beta đã giải thích được. Sortino giống Sharpe nhưng chỉ tính biến động của các phiên giảm — thứ rủi ro người cầm thực sự bận tâm. Beta và tương quan không chấm ★: cao hay thấp tốt hơn còn tùy mục đích nắm giữ.":
+    "Beta > 1 = swings more than VN-Index. Alpha = the return beyond what beta alone explains. Sortino is Sharpe counting only down-session volatility, the risk a holder actually minds. Beta and correlation get no ★: whether high or low is better depends on why you hold.",
+  "Bỏ": "Remove", "Bỏ chọn tất cả": "Clear the selection", "✕ Xoá hết": "✕ Clear all",
+  "Chi phí tín dụng": "Credit cost", "Chất lượng lợi nhuận": "Earnings quality", "Đòn bẩy": "Leverage",
+  "Dư nợ margin / Vốn chủ sở hữu": "Margin loans / equity", "Tài sản tài chính / Tổng tài sản": "Financial assets / total assets",
+  "Vốn chủ sở hữu / Tổng tài sản": "Equity / total assets", "Đầu tư / Tổng tài sản": "Investments / total assets",
+});
+PHRASES.push(
+  ["Trung vị ngành", "Sector median"], ["Median ngành", "Sector median"], ["càng thấp càng tốt", "lower is better"],
+);
+RX.unshift(
+  [/^\/(\d+) chỉ số dẫn đầu$/, "/$1 metrics led"],
+  [/^Đặc thù ngành · (.+)$/, (m, s) => `Sector-specific · ${EXACT[s] || s}`],
+  [/^lấy trên (\d+) (?:mã|tickers) thanh khoản nhất cùng ngành\.$/, "is taken over the sector's $1 most-traded tickers."],
+  [/\((\d+) CP\)/g, "($1 stocks)"],
+);
+// Strong / weak lists in the summary: "P/B · Vốn hóa (nghìn tỷ) · D/E".
+RX.push([/^[^·<>]+(?: · [^·<>]+)+$/, (m) => m.split(" · ").map((x) => EXACT[x] || x).join(" · ")]);

@@ -18,7 +18,7 @@ export async function breadthCard(root) {
   const last = b.dates.length - 1;
   const p50 = b.ma50[last], p200 = b.ma200[last];
   const read = (p) => (p >= 0.6 ? "rộng, đa số cổ phiếu đang khỏe" : p <= 0.35 ? "hẹp, đa số cổ phiếu đang yếu" : "trung tính");
-  const card = el(`<div class="card">
+  const card = el(`<div class="card mk-breadth">
     <h2 class="sec-h">Độ rộng thị trường</h2>
     <div class="chart-sub"><span>Tỷ lệ cổ phiếu có giá trên đường trung bình 50 và 200 phiên.</span>
       <span>Hiện ${F.isNum(p50) ? Math.round(p50 * 100) : "—"}% trên MA50, ${F.isNum(p200) ? Math.round(p200 * 100) : "—"}% trên MA200:</span>
@@ -45,6 +45,7 @@ export async function breadthCard(root) {
     yaxis2: { overlaying: "y", side: "right", showgrid: false, tickfont: { size: 9, color: "#94a3b8" } },
     shapes: [{ type: "line", xref: "paper", x0: 0, x1: 1, y0: 50, y1: 50, line: { color: "#cbd5e1", width: 1, dash: "dot" } }],
   }, { displayModeBar: false, responsive: true });
+  return { card, p50, p200 };
 }
 
 // ── "Sự kiện" tab ────────────────────────────────────────────────────
@@ -187,6 +188,7 @@ export async function renderEvents(root, selectTicker) {
   iPick("all");
 
   const out = sCard.querySelector(".ev-q-out");
+  out.textContent = `${actsAll.length} sự kiện quyền sắp tới · ${dealsAll.length} giao dịch nội bộ trong 12 tháng`;
   sCard.querySelector(".ev-q").addEventListener("input", (e) => {
     q = norm(e.target.value.trim());
     acts = actsAll.filter(hit);
@@ -196,6 +198,7 @@ export async function renderEvents(root, selectTicker) {
     iG = iCard.querySelector(".eb-tabs .active")?.dataset.k || "all";
     aPick0(aG);
     iPick(iG);
-    out.textContent = q ? `${acts.length} sự kiện quyền sắp tới · ${deals.length} giao dịch nội bộ trong 2 năm` : "";
+    out.textContent = q ? `${acts.length} sự kiện quyền sắp tới · ${deals.length} giao dịch nội bộ trong 2 năm`
+      : `${actsAll.length} sự kiện quyền sắp tới · ${dealsAll.length} giao dịch nội bộ trong 12 tháng`;
   });
 }

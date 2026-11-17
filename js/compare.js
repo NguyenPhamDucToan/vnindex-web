@@ -9,6 +9,7 @@ import { computeQualityScore, classifySignal, SIGNAL_VI, SIGNAL_COLOR } from "./
 import { computeTTM } from "./ttm.js";
 import { axesFor, normalise, allAxesFor } from "./sector-metrics.js";
 import * as F from "./format.js";
+import { describe } from "./corp-actions.js";
 
 const el = (h) => { const t = document.createElement("template"); t.innerHTML = h.trim(); return t.content.firstElementChild; };
 const FONT = { family: "Fira Code, monospace", size: 10, color: "#0a121d" };
@@ -28,27 +29,6 @@ const median = (xs) => {
   return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2;
 };
 
-// The series palette is tuned for chart marks on white; as 14px text on the
-// page background several of those hues land near 2.5:1. Darken toward black
-// until the contrast is readable, keeping the hue so a cell still reads as
-// belonging to its column.
-function readable(hex, bg = [242, 245, 251], target = 4.5) {
-  const rgb = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
-  const lum = (c) => {
-    const [r, g, b] = c.map((v) => {
-      const x = v / 255;
-      return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
-    });
-    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  };
-  const ratio = (c) => {
-    const a = lum(c), b = lum(bg);
-    return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
-  };
-  let out = rgb;
-  for (let k = 0; k < 20 && ratio(out) < target; k++) out = out.map((v) => Math.round(v * 0.9));
-  return "#" + out.map((v) => v.toString(16).padStart(2, "0")).join("");
-}
 
 export async function renderCompare(root, onPick) {
   root.innerHTML = `<div class="loading">Đang tải…</div>`;
@@ -83,15 +63,17 @@ export async function renderCompare(root, onPick) {
   const shell = el(`<div>
     <div class="card">
       <h2 class="sec-h">So sánh Cổ phiếu</h2>
+      <div class="cmp-bar">
       <div class="cmp-pick">
         <input id="cmp-input" placeholder="Thêm mã… (tối đa 6)" autocomplete="off" spellcheck="false" />
         <div id="cmp-sugg" class="hidden"></div>
-        <div id="cmp-chips" class="cmp-chips"></div>
       </div>
+      <div id="cmp-chips" class="cmp-chips"></div>
       <label class="cmp-ind">
         <input type="checkbox" id="cmp-industry" class="sw-in" />
         <span class="sw" aria-hidden="true"></span>
         Toàn ngành <span class="dim">· so mã đầu tiên với tất cả công ty cùng ngành</span></label>
+      </div>
     </div>
     <div id="cmp-body"></div>
   </div>`);
@@ -179,7 +161,7 @@ export async function renderCompare(root, onPick) {
         const q = computeQualityScore(v.roe, v.net_margin, v.profit_quality, v.fcf_margin, v.current_ratio, v.debt_to_equity, (d.company || {}).sector);
         const upFrac = F.isNum((d.model || {}).upside) ? d.model.upside : null;
         data.push({ t, d, v, q, upFrac, sig: upFrac != null ? classifySignal(upFrac, q) : null,
-                    ttm: computeTTM(d.financials || []) || {},
+                    ttm: computeTTM(d.financials || []) || {}, s,
                     sector: (d.company || {}).sector, name: (d.company || {}).name });
       } catch { /* unknown ticker -- skip */ }
     }
@@ -208,7 +190,7 @@ export async function renderCompare(root, onPick) {
           q: computeQualityScore(pv.roe, pv.net_margin, pv.profit_quality, pv.fcf_margin,
                                  pv.current_ratio, pv.debt_to_equity, r.sector),
           upFrac: F.isNum((pd.model || {}).upside) ? pd.model.upside : null,
-          ttm: computeTTM(pd.financials || []) || {},
+          ttm: computeTTM(pd.financials || []) || {}, s: r,
         };
         n++;
         industryPeers.push(ctx);
@@ -250,7 +232,7 @@ export async function renderCompare(root, onPick) {
       };
     }).filter(Boolean);
     pending.push(() => window.Plotly.react(perfCard.querySelector("#cmp-perf"), traces, {
-      height: 360, dragmode: false, margin: { l: 52, r: 14, t: 26, b: 30 },
+      height: 420, dragmode: false, margin: { l: 52, r: 14, t: 26, b: 30 },
       paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: FONT,
       legend: { orientation: "h", y: 1.1, x: 0, font: { size: 10 } },
       xaxis: { showgrid: false, tickfont: { size: 9 }, nticks: 8 },
@@ -265,10 +247,11 @@ export async function renderCompare(root, onPick) {
     const axes = axesFor(data.map((x) => x.sector));
     const theta = axes.map((a) => a.label);
     const radarCard = card("Hồ sơ tổng thể", "cmp-radar",
-      `<div class="vb-note">Trục: ${axes.map((a) => a.label).join(" · ")}.
-       Mỗi trục chuẩn hóa 0–100 theo ngưỡng tham chiếu; trục "càng thấp càng tốt"
-       được đảo chiều nên xa tâm luôn là tốt hơn.
-       <b>Rê chuột dọc một trục</b> để xem toàn bộ mã đang so trên tiêu chí đó, xếp từ tốt nhất.</div>`);
+      // One text node per piece (each axis label too), so the EN dictionary
+      // matches whole strings rather than a sentence built around them.
+      `<div class="vb-note"><span>Trục:</span> ${axes.map((a) => `<span>${F.escapeHtml(a.label)}</span>`).join(" · ")}.
+       <span>Mỗi trục chuẩn hóa 0–100 theo ngưỡng tham chiếu; trục "càng thấp càng tốt" được đảo chiều nên xa tâm luôn là tốt hơn.</span>
+       <b>Rê chuột dọc một trục</b> <span>để xem toàn bộ mã đang so trên tiêu chí đó, xếp từ tốt nhất.</span></div>`);
 
     const traceFor = (name, vals, labels, color, dash, fillAlpha) => ({
       type: "scatterpolar", name, fill: "toself",
@@ -333,12 +316,12 @@ export async function renderCompare(root, onPick) {
                     font: { ...FONT, size: 12, color: "#0f172a" } },
     });
     pending.push(() => window.Plotly.react(radarCard.querySelector("#cmp-radar"), radarTraces, {
-      height: 440, dragmode: false, margin: { l: 60, r: 60, t: 20, b: 60 },
+      height: 420, dragmode: false, margin: { l: 56, r: 56, t: 24, b: 56 },
       paper_bgcolor: "rgba(0,0,0,0)", font: FONT,
       // Without an explicit square domain the polar drifts to one side of a
       // very wide card; the original's container is narrow so it never did.
       polar: {
-        domain: { x: [0.28, 0.72], y: [0, 1] },
+        domain: { x: [0.04, 0.96], y: [0.04, 1] },
         bgcolor: "rgba(241,245,249,0.95)",
         radialaxis: { visible: true, range: [0, 100], showticklabels: false,
                       showline: false, ticks: "", gridcolor: "#e2e8f0" },
@@ -359,6 +342,7 @@ export async function renderCompare(root, onPick) {
     const sAxes = sectorNames.length === 1 ? allAxesFor(sectorNames[0]) : null;
 
     const pct1 = (v) => (F.isNum(v) ? `${(v * 100).toFixed(1)}%` : null);
+    const pctInt = (v) => (F.isNum(v) ? `${v >= 0 ? "+" : "−"}${Math.abs(Math.round(v * 100)).toLocaleString("en-US")}%` : null);
     const mult = (v) => (F.isNum(v) ? `${v.toFixed(2)}×` : null);
     // Price is in thousands VND and shares in millions, so the product is VND
     // billions; the original reports this column in nghìn tỷ.
@@ -386,6 +370,21 @@ export async function renderCompare(root, onPick) {
         ["D/E", (x) => x.v.debt_to_equity, false, mult],
         ["Current Ratio", (x) => x.v.current_ratio, true, mult],
       ]],
+      // Screener-row figures (add_growth.py, add_momentum.py), the same numbers
+      // as the screener's columns and the stock page's header.
+      ["Tăng trưởng quý", [
+        ["DT quý YoY", (x) => x.s.rev_yoy, true, pctInt],
+        ["LN quý YoY", (x) => x.s.ni_yoy, true, pctInt],
+        ["LN lũy kế YoY", (x) => x.s.ni_ytd_yoy, true, pctInt],
+      ]],
+      ["Xu hướng giá", [
+        ["Cách đỉnh 52 tuần", (x) => x.s.hi52, true, pctInt],
+        ["So VN-Index 3 tháng", (x) => x.s.rs3m, true, pctInt],
+        ["So VN-Index 6 tháng", (x) => x.s.rs6m, true, pctInt],
+      ]],
+      ["Cổ tức", [
+        ["Tỷ suất cổ tức", (x) => x.s.div_yield, true, pct1],
+      ]],
       ["Triển vọng", [
         ["Avg Upside", (x) => x.upFrac, true, (v) => `${v >= 0 ? "+" : ""}${(v * 100).toFixed(1)}%`],
         ["Quality", (x) => x.q, true, (v) => v.toFixed(0)],
@@ -404,8 +403,8 @@ export async function renderCompare(root, onPick) {
     }
 
     const cmpCard = el(`<div class="card">
-      <h2 class="sec-h">So sánh chỉ số tài chính${sAxes ? ` <span class="ta-sub">· gồm chỉ số riêng của ${F.escapeHtml(sectorNames[0])}</span>` : ""}</h2>
-      <div class="vb-note">★ = dẫn đầu hàng đó, tô theo màu của mã; hạng nhì đậm hơn phần còn lại.${industryAvg ? ` Cột <b style="color:#b45309">Trung vị ngành</b> lấy trên ${industryAvg.n} mã thanh khoản nhất cùng ngành. Trung vị chứ không phải trung bình, để vài mã ngoại lai không kéo lệch cả cột; đây là mốc tham chiếu nên không xếp hạng và không nhận ★.` : ""}</div>
+      <h2 class="sec-h">So sánh chỉ số tài chính${sAxes ? ` <span class="ta-sub">· <span>gồm chỉ số riêng của ngành</span> <span>${F.escapeHtml(sectorNames[0])}</span></span>` : ""}</h2>
+      <div class="vb-note"><span>★ = dẫn đầu hàng đó, tô theo màu của mã; hạng nhì đậm hơn phần còn lại.</span>${industryAvg ? ` <span>Cột</span> <b style="color:#b45309">Trung vị ngành</b> <span>lấy trên ${industryAvg.n} mã thanh khoản nhất cùng ngành.</span> <span>Trung vị chứ không phải trung bình, để vài mã ngoại lai không kéo lệch cả cột; đây là mốc tham chiếu nên không xếp hạng và không nhận ★.</span>` : ""}</div>
       <div class="ta-scroll"><table class="screen cmp-heat"><thead><tr><th>Chỉ số</th></tr></thead><tbody></tbody></table></div>
     </div>`);
     body.appendChild(cmpCard);
@@ -423,7 +422,7 @@ export async function renderCompare(root, onPick) {
 
     const head = cmpCard.querySelector("thead tr");
     for (const c of cols) {
-      head.appendChild(el(`<th style="color:${c.colour};border-top:3px solid ${c.colour}">${
+      head.appendChild(el(`<th class="${c.avg ? "cmp-avgc" : ""}" style="color:${c.colour};border-top:3px solid ${c.colour}">${
         F.escapeHtml(c.label)}</th>`));
     }
     const cmpBody = cmpCard.querySelector("tbody");
@@ -451,9 +450,9 @@ export async function renderCompare(root, onPick) {
         const rank = new Map(order.map(([, i], r) => [i, r]));
         const tr = el(`<tr><td class="dim">${F.escapeHtml(label)}</td></tr>`);
         vals.forEach((v, i) => {
-          if (!F.isNum(v)) { tr.appendChild(el(`<td class="num dim">—</td>`)); return; }
+          if (!F.isNum(v)) { tr.appendChild(el(`<td class="num cmp-na${cols[i].avg ? " cmp-avgc" : ""}">—</td>`)); return; }
           if (cols[i].avg) {
-            tr.appendChild(el(`<td class="num cmp-avg">${F.escapeHtml(fmt(v) ?? "—")}</td>`));
+            tr.appendChild(el(`<td class="num cmp-avg cmp-avgc">${F.escapeHtml(fmt(v) ?? "—")}</td>`));
             return;
           }
           const r = rank.get(i) ?? valid.length;
@@ -462,10 +461,12 @@ export async function renderCompare(root, onPick) {
           // column colour, runner-up darker, the rest grey. No cell fill.
           const best = r === 0 && valid.length > 1;
           const tier = best ? "cmp-r0" : r === 1 ? "cmp-r1" : "cmp-r2";
-          // Only the leader is tinted -- one cell per row, so the table stays
-          // calm while the winner is unmissable. Text and tint share the hue.
+          // The leader gets a solid tint and a bar in its own colour, the
+          // runner-up a faint one (only with three or more to rank). The old
+          // 13% tint was too faint to find the winner at a glance.
           const style = best
-            ? ` style="color:${readable(cols[i].colour)};background:${cols[i].colour}22"`
+            ? ` style="--c:${cols[i].colour};background:${cols[i].colour}45"`
+            : r === 1 && valid.length > 2 ? ` style="background:${cols[i].colour}1a"`
             : "";
           tr.appendChild(el(`<td class="num ${tier}"${style}>${
             F.escapeHtml(fmt(v) ?? "—")}${best ? ' <span class="cmp-star">★</span>' : ""}</td>`));
@@ -474,13 +475,30 @@ export async function renderCompare(root, onPick) {
       }
     }
 
+    // Upcoming entitlement: text, so outside the ranked rows. The nearest
+    // ex-date within 120 days, as the market view's "Sự kiện" tab lists them.
+    {
+      const today = new Date().toISOString().slice(0, 10);
+      const until = new Date(Date.now() + 120 * 86400000).toISOString().slice(0, 10);
+      cmpBody.appendChild(el(`<tr class="cmp-grp"><td colspan="${cols.length + 1}">Sự kiện</td></tr>`));
+      const tr = el(`<tr><td class="dim">Quyền sắp tới</td></tr>`);
+      for (const c of cols) {
+        const a = c.avg ? null : (c.ctx.d.actions || []).filter((x) => x.ex && x.ex >= today && x.ex <= until)
+          .sort((x, y) => x.ex.localeCompare(y.ex))[0];
+        tr.appendChild(a
+          ? el(`<td class="num cmp-ev"><div>${F.escapeHtml(describe(a))}</div><div class="dim">GDKHQ ${F.dateVN(a.ex)}</div></td>`)
+          : el(`<td class="num cmp-na${c.avg ? " cmp-avgc" : ""}">—</td>`));
+      }
+      cmpBody.appendChild(tr);
+    }
+
     // ── 3b. Who wins where ───────────────────────────────────────────
     // The sector average is a yardstick, not a contender, so it is excluded
     // from the win count -- otherwise the sector median would appear to compete.
     const contenders = cols.map((c, i) => ({ ...c, i }))
       .filter((c) => !c.avg && rankLog[c.i].length);
     if (contenders.length > 1) {
-      const summary = el(`<div class="card">
+      const summary = el(`<div class="card cmp-summary">
         <h2 class="sec-h">Tổng kết so sánh</h2>
         <div class="vb-note">Thứ hạng tính trong chính nhóm đang so, không phải toàn thị trường.</div>
         <div class="cmp-cards"></div></div>`);
@@ -499,8 +517,8 @@ export async function renderCompare(root, onPick) {
         grid.appendChild(el(`<div class="cmp-card" style="border-top-color:${c.colour}">
           <div class="cmp-t" style="color:${c.colour}">${F.escapeHtml(c.label)}</div>
           <div class="cmp-w">${c.wins}<span class="cmp-wl">/${total} chỉ số dẫn đầu</span></div>
-          <div class="cmp-l"><b>Mạnh</b> ${F.escapeHtml(strong.join(" · "))}</div>
-          <div class="cmp-l"><b>Yếu</b> ${F.escapeHtml(weak.join(" · "))}</div>
+          <div class="cmp-l"><b>Mạnh</b><span class="cmp-tags">${strong.map((x) => `<span class="cmp-tag up">${F.escapeHtml(x)}</span>`).join("")}</span></div>
+          <div class="cmp-l"><b>Yếu</b><span class="cmp-tags">${weak.map((x) => `<span class="cmp-tag dn">${F.escapeHtml(x)}</span>`).join("")}</span></div>
         </div>`));
       }
       body.insertBefore(summary, cmpCard);
@@ -547,7 +565,7 @@ export async function renderCompare(root, onPick) {
         }
       }
       pending.push(() => window.Plotly.react(c.querySelector("#" + id), tr, {
-        height: 340, dragmode: false, barmode: "group", margin: { l: 58, r: 14, t: 26, b: 34 },
+        height: 300, dragmode: false, barmode: "group", margin: { l: 58, r: 14, t: 10, b: 34 }, showlegend: false,
         paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: FONT,
         legend: { orientation: "h", y: 1.1, x: 0, font: { size: 10 } },
         xaxis: { type: "category", showgrid: false, tickfont: { size: 10 } },
@@ -571,8 +589,7 @@ export async function renderCompare(root, onPick) {
     // Revenue and profit levels are above; margins say whether the growth came
     // with operating leverage or was bought.
     const marginCard = el(`<div class="card"><h2 class="sec-h">Biên lợi nhuận (5 năm)</h2>
-      <div class="vb-note">Biên gộp và biên EBIT trống với ngân hàng và bảo hiểm — hai ngành
-        không có giá vốn hàng bán theo nghĩa thông thường.</div>
+      <div class="vb-note">Biên gộp và biên EBIT trống với ngân hàng và bảo hiểm — hai ngành không có giá vốn hàng bán theo nghĩa thông thường.</div>
       <div class="qgrid"></div></div>`);
     body.appendChild(marginCard);
     const marginChart = (title, id, pick) => {
@@ -600,7 +617,7 @@ export async function renderCompare(root, onPick) {
       }
       if (!tr.length) { box.remove(); return; }
       pending.push(() => window.Plotly.react(marginCard.querySelector("#" + id), tr, {
-        height: 320, dragmode: false, margin: { l: 52, r: 14, t: 26, b: 34 },
+        height: 300, dragmode: false, margin: { l: 52, r: 14, t: 10, b: 34 }, showlegend: false,
         paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font: FONT,
         legend: { orientation: "h", y: 1.1, x: 0, font: { size: 10 } },
         xaxis: { type: "category", showgrid: false, tickfont: { size: 10 } },
@@ -703,7 +720,7 @@ export async function renderCompare(root, onPick) {
       const bn = (v) => (F.isNum(v) ? `${v.toFixed(1)} tỷ` : "—");
       // [label, get, format, higherBetter]  -- null means neither is "better".
       const RISK_GROUPS = [
-        ["Lợi nhuận", [
+        ["Lợi suất giá", [
           ["3 tháng", (r) => r.r3, pctS, true],
           ["6 tháng", (r) => r.r6, pctS, true],
           ["1 năm", (r) => r.total, pctS, true],
@@ -728,11 +745,8 @@ export async function renderCompare(root, onPick) {
           ["GTGD bình quân/phiên", (r) => r.liq, bn, true],
         ]],
       ];
-      const rc = el(`<div class="card"><h2 class="sec-h">Rủi ro &amp; Hiệu suất <span class="ta-sub">· 1 năm</span></h2>
-        <div class="vb-note">Beta &gt; 1 = dao động mạnh hơn VN-Index. Alpha = phần lãi vượt trên
-          mức mà riêng độ nhạy beta đã giải thích được. Sortino giống Sharpe nhưng chỉ tính biến
-          động của các phiên giảm — thứ rủi ro người cầm thực sự bận tâm.
-          Beta và tương quan không chấm ★: cao hay thấp tốt hơn còn tùy mục đích nắm giữ.</div>
+      const rc = el(`<div class="card cmp-risk"><h2 class="sec-h">Rủi ro &amp; Hiệu suất <span class="ta-sub">· 1 năm</span></h2>
+        <div class="vb-note">Beta &gt; 1 = dao động mạnh hơn VN-Index. Alpha = phần lãi vượt trên mức mà riêng độ nhạy beta đã giải thích được. Sortino giống Sharpe nhưng chỉ tính biến động của các phiên giảm — thứ rủi ro người cầm thực sự bận tâm. Beta và tương quan không chấm ★: cao hay thấp tốt hơn còn tùy mục đích nắm giữ.</div>
         <div class="ta-scroll"><table class="screen cmp-heat"><thead><tr><th>Chỉ số</th>${
           riskRows.map((r) => `<th style="color:${r.colour};border-top:3px solid ${r.colour}">${r.t}</th>`).join("")
         }</tr></thead><tbody></tbody></table></div></div>`);
@@ -750,7 +764,7 @@ export async function renderCompare(root, onPick) {
           vals.forEach((v, i) => {
             const best = i === bestIdx;
             tr.appendChild(el(best
-              ? `<td class="num cmp-r0" style="color:${readable(riskRows[i].colour)};background:${riskRows[i].colour}22">${
+              ? `<td class="num cmp-r0" style="--c:${riskRows[i].colour};background:${riskRows[i].colour}45">${
                   F.escapeHtml(fmt(v))} <span class="cmp-star">★</span></td>`
               : `<td class="num cmp-r2">${F.escapeHtml(fmt(v))}</td>`));
           });
@@ -763,6 +777,40 @@ export async function renderCompare(root, onPick) {
     // (Two blocks that used to close this view are gone: a detail table that
     // repeated the comparison table's numbers transposed, and a pairwise
     // co-movement list -- you read the latter as noise, not signal.)
+
+    // ── Layout: the verdict first, the two pictures side by side, the
+    // table, five years of history as one tabbed card, risk last. Built in
+    // calculation order above, placed in reading order here.
+    {
+      const duo = el(`<div class="cmp-duo"></div>`);
+      radarCard.classList.add("cmp-radar-card");
+      duo.append(radarCard, perfCard);
+      const hist = el(`<div class="card cmp-hist">
+        <div class="cmp-hist-h"><h2 class="sec-h">Lịch sử 5 năm</h2>
+          <div class="range-row cmp-tabs" role="tablist">
+            <button class="range-btn active" data-p="0" role="tab">Doanh thu &amp; lợi nhuận</button>
+            <button class="range-btn" data-p="1" role="tab">Biên lợi nhuận</button></div></div>
+        <div class="cmp-legend">${data.map((x, i) => `<span><i style="background:${SERIES[i % SERIES.length]}"></i>${x.t}</span>`).join("")}${
+          industryPeers.length ? `<span><i class="cmp-leg-med"></i>Trung vị ngành (${industryPeers.length})</span>` : ""}</div>
+      </div>`);
+      const panes = [annCard, marginCard];
+      panes.forEach((pc, k) => {
+        pc.classList.remove("card");
+        pc.classList.add("cmp-pane");
+        pc.querySelector(":scope > h2")?.remove();
+        if (k) pc.classList.add("hidden");
+        hist.appendChild(pc);
+      });
+      hist.querySelectorAll(".cmp-tabs .range-btn").forEach((b) => {
+        b.onclick = () => {
+          hist.querySelectorAll(".cmp-tabs .range-btn").forEach((x) => x.classList.toggle("active", x === b));
+          panes.forEach((pc, k) => pc.classList.toggle("hidden", String(k) !== b.dataset.p));
+        };
+      });
+      const summaryEl = body.querySelector(".cmp-summary");
+      const riskEl = body.querySelector(".cmp-risk");
+      body.replaceChildren(...[summaryEl, duo, cmpCard, hist, riskEl].filter(Boolean));
+    }
 
     pending.forEach((fn) => fn());
   }

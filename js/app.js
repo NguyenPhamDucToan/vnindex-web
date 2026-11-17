@@ -15,12 +15,13 @@ import { sectorMacroCard, sectorMacroSection, focusSector } from "./sector-macro
 import * as F from "./format.js";
 import { initI18n, trPlot, langToggle, NUM_LOCALE } from "./i18n.js";
 import { buildScreener, isScreenerHash } from "./screener.js";
-import { markers, actionsSection, KIND_COLOR } from "./corp-actions.js";
+import { markers, actionsSection, KIND_COLOR, describe } from "./corp-actions.js";
 import { insidersSection } from "./insiders.js";
 import { earningsSection } from "./earnings.js";
 import { tabbedCard } from "./tabcard.js";
 import { renderEarningsBoard } from "./earnings-board.js";
 import { breadthCard, renderEvents } from "./market-extra.js";
+import { sectorValuationCard } from "./sector-valuation.js";
 // "Kiểm định chiến lược" (Phase 10 backtest) is built but private for now: the
 // owner doesn't want it public yet. With the flag off nothing loads backtest.js
 // (deploy.yml also leaves it and data/backtest.json out of the upload).
@@ -265,9 +266,28 @@ async function renderStock(t) {
   // Identity, price and the metric grid share one row in the original; the
   // port had the price pushed to the far edge with the grid on a line below.
   const headRow = el(`<div class="head-row"></div>`);
-  headRow.appendChild(header(co, last, prev, chg, chgPct));
-  headRow.appendChild(metricsGrid(co, v, q, mcap, shares, vol15));
+  const head = header(co, last, prev, chg, chgPct);
+  headRow.appendChild(head);
+  const allRows = await loadScreener().catch(() => []);
+  const grid = metricsGrid(co, v, q, mcap, shares, vol15);
+  trendCells(grid, allRows.find((r) => r.ticker === co.ticker) || {}, allRows);
+  headRow.appendChild(grid);
   root.appendChild(headRow);
+  // An ex-date within 30 days: one line under the ticker's name, which opens
+  // the "Quyền & cổ tức" tab -- the tab itself is far down the page.
+  const soon = upcomingAction(d.actions, 30);
+  if (soon) {
+    const chip = el(`<button type="button" class="ev-chip"><span>📅 Sắp có quyền</span> <b></b></button>`);
+    chip.querySelector("b").textContent = `${describe(soon)} · GDKHQ ${F.dateVN(soon.ex)}`;
+    chip.onclick = () => {
+      const card = root.querySelector(".tabcard");
+      if (!card) return;
+      card.open = true;
+      card.querySelector('.tc-tab[data-tab="Quyền & cổ tức"]')?.click();
+      card.scrollIntoView({ behavior: "smooth", block: "start" });
+    };
+    head.querySelector(".sh-left").appendChild(chip);
+  }
   // Before any of the numbers, say if they are old ones. The screener row
   // carries how far behind this ticker's last trade and last filing are,
   // measured against the rest of the market at export time.
@@ -557,6 +577,45 @@ function metricsGrid(co, v, q, mcap, shares, vol15) {
   for (const [k, val, accent] of cells)
     grid.appendChild(el(`<div class="metric"><div class="mk">${k}</div><div class="mv${accent ? " accent" : ""}">${val}</div></div>`));
   return grid;
+}
+
+// A fourth row under the original's 3x3 header grid: the latest quarter's
+// profit growth against the sector's median, distance from the 52-week high,
+// and the 3-month return against VN-Index (add_growth.py / add_momentum.py,
+// carried on the screener row). Same figures as the screener's columns.
+function trendCells(grid, r, rows) {
+  const med = (() => {
+    const xs = rows.filter((x) => x.sector === r.sector && x.g_q === r.g_q && F.isNum(x.ni_yoy) && x.ni_p >= 5)
+      .map((x) => x.ni_yoy).sort((a, b) => a - b);
+    if (xs.length < 3) return null;
+    const n = xs.length;
+    return n % 2 ? xs[(n - 1) / 2] : (xs[n / 2 - 1] + xs[n / 2]) / 2;
+  })();
+  const pc = (g) => `${g >= 0 ? "+" : "−"}${Math.abs(Math.round(g * 100)).toLocaleString("en-US")}%`;
+  const tone = (g, bar) => (g >= bar ? "gain" : g <= -bar ? "loss" : "");
+  const qn = r.g_q ? r.g_q.replace(/^(\d{4})-Q(\d)$/, "Q$2/$1") : "";
+  let ni = "—", niSub = "";
+  if (F.isNum(r.ni_yoy)) ni = `<span class="${tone(r.ni_yoy, 0.1)}">${pc(r.ni_yoy)}</span>`;
+  else if (F.isNum(r.ni_p) && r.ni_p <= 0 && F.isNum(r.ni_q)) ni = r.ni_q > 0 ? `<span class="gain">lãi trở lại</span>` : `<span class="loss">vẫn lỗ</span>`;
+  if (F.isNum(med)) niSub = `<span>ngành</span> ${pc(med)}`;
+  const hi = F.isNum(r.hi52) ? (r.brk ? `<span class="gain">▲ đỉnh mới</span>` : `<span class="${r.hi52 >= -0.05 ? "gain" : r.hi52 <= -0.3 ? "loss" : ""}">${pc(r.hi52)}</span>`) : "—";
+  const rs = F.isNum(r.rs3m) ? `<span class="${tone(r.rs3m, 0)}">${pc(r.rs3m)}</span>` : "—";
+  const rsSub = F.isNum(r.rs6m) ? `<span>6 tháng</span> ${pc(r.rs6m)}` : "";
+  const cells = [
+    [`LN quý YoY${qn ? ` · ${qn}` : ""}`, ni, niSub, "Lợi nhuận sau thuế quý gần nhất so với cùng quý năm trước; dòng dưới là trung vị của các mã cùng ngành"],
+    ["Cách đỉnh 52 tuần", hi, "", "Giá đóng cửa so với giá đóng cửa cao nhất 52 tuần"],
+    ["So VN-Index 3 tháng", rs, rsSub, "Mức tăng giá 3 tháng trừ mức tăng của VN-Index cùng kỳ"],
+  ];
+  for (const [k, val, sub, tip] of cells)
+    grid.appendChild(el(`<div class="metric" title="${F.escapeHtml(tip)}"><div class="mk">${k}</div><div class="mv">${val}</div>${sub ? `<div class="msub">${sub}</div>` : ""}</div>`));
+}
+
+// The nearest action whose ex-date is today or within `days`.
+function upcomingAction(actions, days) {
+  const today = new Date().toISOString().slice(0, 10);
+  const until = new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
+  return (actions || []).filter((a) => a.ex && a.ex >= today && a.ex <= until)
+    .sort((a, b) => a.ex.localeCompare(b.ex))[0] || null;
 }
 
 // ── TTM ratio scorecard (from stored ratios) ────────────────────────
@@ -1176,7 +1235,7 @@ async function renderSector() {
   };
   let metricName = "Avg Estimate vs Thị trường";
 
-  const heat = el(`<div class="card">
+  const heat = el(`<div class="card sc-heat">
     <h2 class="sec-h">Bản đồ nhiệt theo Ngành</h2>
     <div class="sel-lab">Màu / Sắp xếp theo:</div>
     <div class="range-row" id="sec-metric"></div>
@@ -1248,7 +1307,7 @@ async function renderSector() {
       branchvalues: "total",
       tiling: { squarifyratio: 1 },
     }], {
-      height: 1000, margin: { l: 0, r: 0, t: 0, b: 0 }, dragmode: false,
+      height: 600, margin: { l: 0, r: 0, t: 0, b: 0 }, dragmode: false,
       paper_bgcolor: "rgba(0,0,0,0)",
       font: { family: "'Fira Code', monospace", size: 11, color: "#0a121d" },
     }, { displayModeBar: false, responsive: true });
@@ -1270,12 +1329,17 @@ async function renderSector() {
   }
   drawTree();
 
+  // ── 1c. Each sector against its own history (export_market_history.py) ──
+  await sectorValuationCard(root);
+
   // ── 2. Valuation multiples by sector — four ranked bar charts ─────
   // Four charts on a 2x2, as the original lays them out. .qgrid is three wide
   // (that matches the financial report), which left this card at 3+1.
-  const multi = el(`<div class="card"><h2 class="sec-h">Hệ số Định giá theo Ngành</h2><div class="qgrid grid-2"></div></div>`);
+  // One chart with a selector: the four rankings are read one at a time, and
+  // four 470px charts on a 2x2 made this the tallest card on the page.
+  const multi = el(`<div class="card sc-multi"><h2 class="sec-h">Hệ số Định giá theo Ngành</h2>
+    <div class="range-row" id="sec-multi-tabs"></div><div class="qchart sc-multi-box"><div class="qtitle"></div><div id="sec-multi"></div></div></div>`);
   root.appendChild(multi);
-  const mgrid = multi.querySelector(".qgrid");
   // One flat colour per chart, as the original draws them. Colouring each bar
   // green or red against the median put a value judgement on every sector in
   // a chart whose job is just to rank them.
@@ -1285,13 +1349,12 @@ async function renderSector() {
     ["ROE trung vị theo Ngành", "roe", true, "#f59e0b"],
     ["Biên LN ròng trung vị theo Ngành", "nm", true, "#2ca02c"],
   ];
-  const pending = [];
-  for (const [title, key, isPct, colour] of barSpecs) {
+  const drawMulti = (k) => {
+    const [title, key, isPct, colour] = barSpecs[k];
     const data = agg.filter((s) => F.isNum(s[key])).sort((a, b) => a[key] - b[key]);
-    const box = el(`<div class="qchart"><div class="qtitle">${title}</div><div></div></div>`);
-    mgrid.appendChild(box);
-    const canvas = box.lastElementChild;
-    pending.push(() => window.Plotly.react(canvas, [{
+    multi.querySelector(".sc-multi-box .qtitle").textContent = title;
+    multi.querySelectorAll("#sec-multi-tabs .range-btn").forEach((b, i) => b.classList.toggle("active", i === k));
+    window.Plotly.react(multi.querySelector("#sec-multi"), [{
       type: "bar", orientation: "h",
       x: data.map((s) => (isPct ? s[key] * 100 : s[key])),
       y: data.map((s) => s.sector),
@@ -1303,10 +1366,15 @@ async function renderSector() {
       paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
       font: { family: "'Fira Code', monospace", size: 9, color: "#0a121d" },
       xaxis: { gridcolor: "rgba(148,163,184,0.22)", tickfont: { size: 9 }, ticksuffix: isPct ? "%" : "×" },
-      yaxis: { tickfont: { size: 8.5 }, automargin: true },
-    }, { displayModeBar: false, responsive: true }));
-  }
-  pending.forEach((fn) => fn());
+      yaxis: { tickfont: { size: 9 }, automargin: true },
+    }, { displayModeBar: false, responsive: true });
+  };
+  barSpecs.forEach(([, key], k) => {
+    const b = el(`<button class="range-btn">${["P/E", "P/B", "ROE", "Biên LN ròng"][k]}</button>`);
+    b.onclick = () => drawMulti(k);
+    multi.querySelector("#sec-multi-tabs").appendChild(b);
+  });
+  drawMulti(0);
 
   // ── 3. Quality vs a selectable metric, one bubble per sector ─────
   // The original plots sectors here (bubble size = how many tickers), not
@@ -1321,7 +1389,7 @@ async function renderSector() {
   };
   let scName = "Upside %";
 
-  const scat = el(`<div class="card">
+  const scat = el(`<div class="card sc-scat">
     <h2 class="sec-h" id="sec-sc-h">Quality Score vs ${scName}</h2>
     <div class="sel-lab">X axis:</div>
     <div class="range-row" id="sec-sc-metric"></div>
@@ -1336,7 +1404,9 @@ async function renderSector() {
     $("#sec-sc-h", scat).textContent = `Quality Score vs ${scName}`;
     window.Plotly.react($("#sec-scatter", scat), [{
       type: "scatter", mode: "markers+text",
-      x: xs, y: pts.map((x) => x.q), text: pts.map((x) => x.sector),
+      // Labels only on sectors of 25+ tickers: 25 labels on one plot piled
+      // into an unreadable heap. Every bubble still names itself on hover.
+      x: xs, y: pts.map((x) => x.q), text: pts.map((x) => (x.n >= 25 ? x.sector : "")),
       textposition: "top center", textfont: { family: "Fira Code, monospace", size: 9, color: "#6b7280" },
       marker: {
         size: pts.map((x) => x.n), sizemode: "area",
@@ -1346,8 +1416,8 @@ async function renderSector() {
         colorbar: { title: { text: "ROE %", font: { size: 10 } }, thickness: 10, len: 0.7 },
         line: { width: 0.5, color: "#1f2937" },
       },
-      customdata: pts.map((x) => [x.n, F.isNum(x.roe) ? x.roe * 100 : null]),
-      hovertemplate: "%{text}<br>" + m.label + ": %{x:.1f}<br>"
+      customdata: pts.map((x) => [x.n, F.isNum(x.roe) ? x.roe * 100 : null, x.sector]),
+      hovertemplate: "<b>%{customdata[2]}</b><br>" + m.label + ": %{x:.1f}<br>"
                    + "Quality %{y:.0f} · %{customdata[0]} mã<extra></extra>",
     }], {
       height: 460, dragmode: false, margin: { l: 54, r: 14, t: 10, b: 46 },
@@ -1375,43 +1445,59 @@ async function renderSector() {
   }
   drawScatter();
 
-  // ── 4. Top 5 per sector by model upside ──────────────────────────
-  const top5 = el(`<div class="card"><h2 class="sec-h">Top 5 mỗi Ngành — theo Avg Est Upside</h2>
-    <div class="top5-grid"></div></div>`);
-  const t5grid = top5.querySelector(".top5-grid");
-  for (const s of [...agg].sort((a, b) => (b.up ?? -1e9) - (a.up ?? -1e9))) {
-    const best = rows.filter((r) => r.sector === s.sector && F.isNum(r.upFrac))
-      .sort((a, b) => b.upFrac - a.upFrac).slice(0, 5);
-    if (!best.length) continue;
-    const box = el(`<div class="t5-box"><div class="t5-h">${F.escapeHtml(s.sector)}</div></div>`);
-    for (const r of best) {
-      const row = el(`<div class="t5-row"><b>${r.ticker}</b>
-        <span style="color:${r.upFrac >= 0 ? "#15803d" : "#b91c1c"}">${fmtUpside(r.upFrac)}</span></div>`);
-      row.onclick = () => selectTicker(r.ticker);
-      box.appendChild(row);
-    }
-    t5grid.appendChild(box);
-  }
-  root.appendChild(top5);
-
-  // ── 3. Sector summary table — same columns as the original ───────
-  const tbl = el(`<div class="card"><h2 class="sec-h">Bảng tổng hợp theo Ngành</h2>
-    <table class="screen"><thead><tr>
+  // ── 4. Sector summary table; a row opens that sector's five names with
+  //       the highest model upside (formerly a separate grid of 25 cards).
+  const tbl = el(`<div class="card sc-tbl"><h2 class="sec-h">Bảng tổng hợp theo Ngành</h2>
+    <div class="chart-sub">Bấm một ngành để xem 5 mã có upside cao nhất.</div>
+    <div class="ta-scroll"><table class="screen sc-table"><thead><tr>
       <th>Ngành</th><th>Số mã</th><th>Upside</th><th>P/E</th><th>P/B</th><th>ROE</th>
       <th>Biên LN ròng</th><th>FCF Margin</th><th>D/E</th><th>Curr Ratio</th><th>Quality</th>
-    </tr></thead><tbody></tbody></table></div>`);
+    </tr></thead><tbody></tbody></table></div></div>`);
   const tb = $("tbody", tbl);
   for (const s of [...agg].sort((a, b) => (b.up ?? -1e9) - (a.up ?? -1e9))) {
-    tb.appendChild(el(`<tr>
-      <td class="dim">${F.escapeHtml(s.sector)}</td>
+    const tr = el(`<tr class="sc-row">
+      <td class="dim"><span class="sc-caret">▸</span>${F.escapeHtml(s.sector)}</td>
       <td>${s.n}</td>
       <td style="color:${(s.up ?? 0) >= 0 ? "#15803d" : "#b91c1c"}">${fmtUpside(s.up)}</td>
       <td>${F.mult(s.pe, 1)}</td><td>${F.mult(s.pb)}</td><td>${F.pct(s.roe)}</td>
       <td>${F.pct(s.nm)}</td><td>${F.pct(s.fcf)}</td>
       <td>${F.mult(s.de)}</td><td>${F.mult(s.cr)}</td>
-      <td>${F.isNum(s.q) ? s.q.toFixed(0) : "—"}</td></tr>`));
+      <td>${F.isNum(s.q) ? s.q.toFixed(0) : "—"}</td></tr>`);
+    const best = rows.filter((r) => r.sector === s.sector && F.isNum(r.upFrac))
+      .sort((a, b) => b.upFrac - a.upFrac).slice(0, 5);
+    tr.onclick = () => {
+      const open = tr.nextElementSibling?.classList.contains("sc-detail");
+      if (open) { tr.nextElementSibling.remove(); tr.classList.remove("sc-open"); return; }
+      tr.classList.add("sc-open");
+      const d = el(`<tr class="sc-detail"><td colspan="11"><span class="sc-dl">Upside cao nhất</span></td></tr>`);
+      const cell = d.firstElementChild;
+      if (!best.length) cell.appendChild(el(`<span class="dim">Chưa có mã nào có giá mô hình.</span>`));
+      for (const r of best) {
+        const chip = el(`<button type="button" class="sc-chip"><b>${r.ticker}</b><span class="${r.upFrac >= 0 ? "gain" : "loss"}">${fmtUpside(r.upFrac)}</span></button>`);
+        chip.onclick = (e) => { e.stopPropagation(); selectTicker(r.ticker); };
+        cell.appendChild(chip);
+      }
+      tr.after(d);
+    };
+    tb.appendChild(tr);
   }
   root.appendChild(tbl);
+
+  // Reading order with labelled groups, as on the market tab.
+  {
+    const q = (cls) => root.querySelector(`:scope > .${cls}`);
+    const group = (t) => el(`<div class="mk-group"><span>${t}</span></div>`);
+    const duo = el(`<div class="mk-duo sc-duo"></div>`);
+    duo.append(...[q("sc-multi"), q("sc-scat")].filter(Boolean));
+    const order = [
+      root.querySelector(":scope > .view-title"),
+      group("Vĩ mô"), smc,
+      group("Toàn cảnh"), q("sc-heat"),
+      group("Định giá"), q("sv-card"), duo,
+      group("Chi tiết từng ngành"), q("sc-tbl"),
+    ];
+    root.replaceChildren(...order.filter((n, i) => n && !(n.classList?.contains("mk-group") && !order[i + 1])));
+  }
 
 }
 
@@ -1510,6 +1596,7 @@ async function renderMarket() {
     fetch("data/market.json").then((r) => r.json()).catch(() => ({ vnindex: [], foreign: [] })),
   ]);
   const withChg = rows.filter((r) => F.isNum(r.chg));
+  const kpi = {};       // headline figures gathered by the sections, shown in the strip on top
 
   const up = withChg.filter((r) => r.chg > 0).length;
   const down = withChg.filter((r) => r.chg < 0).length;
@@ -1574,7 +1661,7 @@ async function renderMarket() {
       `${iDay == null ? "" : ` (${F.pctSigned(iDay, 2)})`}` +
       `${iYr == null ? "" : ` · ${F.pctSigned(iYr)} trong 1 năm`}`
     : "";
-  const top = el(`<div class="card split-31">
+  const top = el(`<div class="card split-31 mk-top">
     <div><h2 class="sec-h">VN-Index (1 năm)</h2>
       <div class="chart-sub">${idxSub}</div><div id="vni-chart"></div></div>
     <div><h2 class="sec-h">Tăng / Giảm</h2><div id="ad-panel"></div></div>
@@ -1632,7 +1719,7 @@ async function renderMarket() {
     <div class="ad-total">trong ${withChg.length} mã</div>`;
 
   // ── 1b. Breadth: share of stocks above MA50 / MA200 (add_momentum.py) ──
-  await breadthCard(root);
+  const breadth = await breadthCard(root);
 
   // ── 2. Market P/E and P/B, each against its own history ──────────
   // Two charts, as the original has them: a single dual-axis line can show the
@@ -1640,7 +1727,7 @@ async function renderMarket() {
   // question this section answers.
   const hist = await fetch("data/market_history.json").then((r) => r.json()).catch(() => []);
   if (hist.length > 3) {
-    const wrap = el(`<div class="card">
+    const wrap = el(`<div class="card mk-val">
       <h2 class="sec-h">Định giá Thị trường (P/E &amp; P/B) so với Lịch sử</h2>
       <div class="mkt-pair"><div id="mkt-pe"></div><div id="mkt-pb"></div></div>
       <div class="vb-note" id="mkt-hist-note"></div></div>`);
@@ -1713,6 +1800,7 @@ async function renderMarket() {
     };
 
     const pe = multipleChart($("#mkt-pe", wrap), "pe", "P/E", 1);
+    kpi.pe = pe;
     multipleChart($("#mkt-pb", wrap), "pb", "P/B", 2);
     if (pe) {
       const rel = (pe.cur / pe.avg - 1) * 100;
@@ -1740,7 +1828,8 @@ async function renderMarket() {
     const signed = (v) => `${v >= 0 ? "+" : "−"}${Math.abs(v).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
     // The original carries both: a section heading and, inside the plot, a
     // title with the latest net figure.
-    const c = el(`<div class="card">
+    kpi.ff5 = y.slice(-5).reduce((a, b) => a + b, 0);
+    const c = el(`<div class="card mk-ff">
       <h2 class="sec-h">Giá trị Giao dịch ròng Nước ngoài</h2>
       <div class="chart-sub">Mua-bán ròng nước ngoài · 15 phiên gần nhất
         <span style="color:${tone(lastNet)}">(gần nhất ${signed(lastNet)} tỷ)</span></div>
@@ -1782,7 +1871,7 @@ async function renderMarket() {
     const W = [[5, "5 phiên"], [20, "1 tháng"], [60, "3 tháng"], [250, "1 năm"]];
     const row = (name, rows) => `<tr><td><b>${name}</b></td>${W.map(([n]) => {
       const v = sumLast(rows, n); return `<td class="num ${tcls(v)}">${rows.length ? sgn(v) : "—"}</td>`; }).join("")}</tr>`;
-    const c = el(`<div class="card">
+    const c = el(`<div class="card mk-flow">
       <h2 class="sec-h">Dòng tiền khối ngoại & tự doanh</h2>
       <div class="chart-sub">Mua-bán ròng cộng dồn (tỷ VND) so với VN-Index</div>
       <div id="flow-cum"></div>
@@ -1855,15 +1944,14 @@ async function renderMarket() {
   // ── 4. Movers. "Thanh khoản tốt" = drawn from the 20 most-traded names, as
   //       in the original, so a 7% jump on a barely-traded ticker can't top it.
   const liquid = [...withChg].filter((r) => F.isNum(r.vol)).sort((a, b) => b.vol - a.vol).slice(0, 20);
-  const moversCard = (title, list, valFn) => {
-    const c = el(`<div class="card mv-card"><h2 class="sec-h">${title}</h2>
-      <table class="screen"><thead><tr><th>Mã</th><th>Công ty</th><th>Giá</th><th>Thay đổi</th><th>Khối lượng</th></tr></thead>
+  const moversCard = (title, sub, list, valFn) => {
+    const c = el(`<div class="card mv-card"><h2 class="sec-h">${title}</h2><div class="chart-sub">${sub}</div>
+      <table class="screen mv-t"><thead><tr><th>Mã</th><th>Giá</th><th>Thay đổi</th><th>Khối lượng</th></tr></thead>
       <tbody></tbody></table></div>`);
     const tb = $("tbody", c);
     for (const r of list) {
       const v = valFn(r);
-      const tr = el(`<tr><td><b>${r.ticker}</b></td>
-        <td class="dim">${F.escapeHtml((r.name || r.sector || "").slice(0, 26))}</td>
+      const tr = el(`<tr><td><b>${r.ticker}</b><div class="mv-nm" title="${F.escapeHtml(r.name || "")}">${F.escapeHtml(r.name || r.sector || "")}</div></td>
         <td>${F.priceVND(r.close)}</td>
         <td style="color:${v.c}">${v.t}</td>
         <td>${F.isNum(r.vol) ? (r.vol / 1e6).toFixed(2) + "M" : "—"}</td></tr>`);
@@ -1872,14 +1960,14 @@ async function renderMarket() {
     }
     return c;
   };
-  const wrap = el(`<div class="mv-row"></div>`);
-  wrap.appendChild(moversCard("Top 10 Tăng giá (thanh khoản tốt)",
+  const wrap = el(`<div class="mv-row mk-movers"></div>`);
+  wrap.appendChild(moversCard("Tăng mạnh nhất", "trong 20 mã thanh khoản tốt nhất",
     [...liquid].sort((a, b) => b.chg - a.chg).slice(0, 10),
     (r) => ({ t: F.pctSigned(r.chg * 100), c: "#15803d" })));
-  wrap.appendChild(moversCard("Top 10 Giảm giá (thanh khoản tốt)",
+  wrap.appendChild(moversCard("Giảm mạnh nhất", "trong 20 mã thanh khoản tốt nhất",
     [...liquid].sort((a, b) => a.chg - b.chg).slice(0, 10),
     (r) => ({ t: F.pctSigned(r.chg * 100), c: "#b91c1c" })));
-  wrap.appendChild(moversCard("Top 10 Khối lượng",
+  wrap.appendChild(moversCard("Khối lượng lớn nhất", "toàn thị trường",
     [...withChg].filter((r) => F.isNum(r.vol)).sort((a, b) => b.vol - a.vol).slice(0, 10),
     (r) => ({ t: F.pctSigned(r.chg * 100), c: r.chg >= 0 ? "#15803d" : "#b91c1c" })));
   root.appendChild(wrap);
@@ -1890,7 +1978,7 @@ async function renderMarket() {
   const perf = Object.entries(bySec)
     .map(([s, cs]) => [s, cs.reduce((a, b) => a + b, 0) / cs.length])
     .sort((a, b) => b[1] - a[1]);
-  const perfCard = el(`<div class="card"><h2 class="sec-h">Hiệu suất theo Ngành</h2><div id="perf-chart"></div></div>`);
+  const perfCard = el(`<div class="card mk-secperf"><h2 class="sec-h">Hiệu suất theo Ngành</h2><div id="perf-chart"></div></div>`);
   root.appendChild(perfCard);
   window.Plotly.react($("#perf-chart", perfCard), [{
     type: "bar", orientation: "h",
@@ -1898,7 +1986,7 @@ async function renderMarket() {
     marker: { color: perf.map((p) => (p[1] >= 0 ? "#22c55e" : "#ef4444")).reverse() },
     hovertemplate: "%{y}: %{x:.2%}<extra></extra>",
   }], {
-    height: Math.max(320, perf.length * 20), dragmode: false,
+    height: Math.max(430, perf.length * 17), dragmode: false,
     margin: { l: 150, r: 20, t: 8, b: 30 },
     paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
     font: { family: "Fira Code, monospace", size: 10, color: "#0a121d" },
@@ -1924,7 +2012,7 @@ async function renderMarket() {
     const count = (k) => states.filter((st) => st === PRICE_STATES[k]).length;
     const nCeil = count("ceiling"), nUp = count("up"), nFlat = count("flat"),
           nDn = count("down"), nFloor = count("floor");
-    const hc = el(`<div class="card"><h2 class="sec-h">Bản đồ nhiệt Thị trường Hôm nay</h2>
+    const hc = el(`<div class="card mk-heat"><h2 class="sec-h">Bản đồ nhiệt Thị trường Hôm nay</h2>
       <div id="mkt-heat"></div>
       <div class="vb-note">
         <span style="color:${PRICE_STATES.ceiling.c}">▲ Trần: ${nCeil}</span> ·
@@ -1962,6 +2050,67 @@ async function renderMarket() {
       font: { family: "Fira Code, monospace", size: 10, color: "#0a121d" },
     }, { displayModeBar: false, responsive: true });
   }
+
+  marketLayout(root, {
+    vni: { last: iLast, day: iDay, yr: iYr }, up, down, flat,
+    ma50: breadth ? breadth.p50 : null, pe: kpi.pe, ff5: kpi.ff5,
+  });
+}
+
+// Reading order for the market tab: a strip of headline figures, then the
+// sections in labelled groups. Sections are built in data order above and
+// placed here, so a section that had no data simply leaves its group thinner.
+function marketLayout(root, k) {
+  const q = (cls) => root.querySelector(`:scope > .${cls}`);
+  const sign = (v, d = 1) => `${v >= 0 ? "+" : "−"}${Math.abs(v).toLocaleString("en-US", { maximumFractionDigits: d })}`;
+  const tone = (v) => (v > 0 ? "gain" : v < 0 ? "loss" : "");
+  const tiles = [];
+  if (F.isNum(k.vni.last)) tiles.push(["VN-Index", k.vni.last.toLocaleString("en-US", { maximumFractionDigits: 2 }),
+    `${F.isNum(k.vni.day) ? `<span class="${tone(k.vni.day)}">${sign(k.vni.day, 2)}%</span> hôm nay` : ""}${F.isNum(k.vni.yr) ? ` · <span class="${tone(k.vni.yr)}">${sign(k.vni.yr)}%</span> <span>1 năm</span>` : ""}`, "mk-top"]);
+  if (k.up + k.down + k.flat) tiles.push(["Tăng / Giảm", `<span class="gain">${k.up}</span> / <span class="loss">${k.down}</span>`,
+    `${k.flat} đứng giá · tỷ lệ ${(k.up / Math.max(k.down, 1)).toFixed(2)}`, "mk-top"]);
+  if (F.isNum(k.ma50)) tiles.push(["Mã trên MA50", `${Math.round(k.ma50 * 100)}%`,
+    k.ma50 >= 0.6 ? "độ rộng tốt" : k.ma50 <= 0.35 ? "đa số cổ phiếu yếu" : "trung tính", "mk-breadth"]);
+  if (k.pe) {
+    const rel = (k.pe.cur / k.pe.avg - 1) * 100;
+    tiles.push(["P/E thị trường", `${k.pe.cur.toFixed(1)}x`,
+      `<span class="${rel < -10 ? "gain" : rel > 10 ? "loss" : ""}">${sign(rel, 0)}%</span> so với trung bình`, "mk-val"]);
+  }
+  if (F.isNum(k.ff5)) tiles.push(["Khối ngoại 5 phiên", `<span class="${tone(k.ff5)}">${sign(k.ff5, 0)}</span> tỷ`,
+    k.ff5 >= 0 ? "mua ròng" : "bán ròng", "mk-flow"]);
+  const strip = el(`<div class="mk-kpis">${tiles.map(([l, v, sub, target]) =>
+    `<button type="button" class="mk-kpi" data-go="${target}"><span class="mk-kl">${l}</span><span class="mk-kv">${v}</span><span class="mk-ks">${sub}</span></button>`).join("")}</div>`);
+  strip.querySelectorAll(".mk-kpi").forEach((b) => {
+    b.onclick = () => root.querySelector(`.${b.dataset.go}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+
+  // The 15-session bars and the cumulative line answer one question (what
+  // foreign money is doing), so they share the flow card, side by side.
+  const ff = q("mk-ff"), flow = q("mk-flow");
+  if (ff && flow) {
+    const cum = flow.querySelector("#flow-cum");
+    const sub = flow.querySelector(":scope > .chart-sub");
+    const duo = el(`<div class="mk-flow-duo"><div class="mk-ff-box"></div><div class="mk-cum-box"></div></div>`);
+    duo.firstElementChild.append(...[...ff.children].filter((n) => !n.matches("h2")));
+    duo.lastElementChild.append(...[sub, cum].filter(Boolean));
+    flow.insertBefore(duo, flow.querySelector(":scope > table") || flow.children[1]);
+    ff.remove();
+  }
+  const sectorsDuo = el(`<div class="mk-duo"></div>`);
+  sectorsDuo.append(...[q("mk-secperf"), q("mk-heat")].filter(Boolean));
+
+  const group = (title) => el(`<div class="mk-group"><span>${title}</span></div>`);
+  const order = [
+    strip,
+    group("Diễn biến"), q("mk-top"), q("mk-breadth"),
+    group("Định giá"), q("mk-val"),
+    group("Dòng tiền"), q("mk-flow") || ff,
+    group("Cổ phiếu nổi bật"), q("mk-movers"),
+    group("Ngành hôm nay"), sectorsDuo.children.length ? sectorsDuo : null,
+  ];
+  // Drop a group heading whose section is missing.
+  const out = order.filter((n, i) => n && !(n.classList?.contains("mk-group") && !order[i + 1]));
+  root.replaceChildren(...out);
 }
 
 // ── stock comparison view ───────────────────────────────────────────

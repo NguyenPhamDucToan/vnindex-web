@@ -248,9 +248,9 @@ export async function renderMacro(root) {
   const names = Object.keys(GROUPS);
   let active = names[0];
 
+  // No page title or source line of its own: it sits under "Tổng quan thị
+  // trường" already, and the sources are listed at the foot of the tab.
   const shell = el(`<div>
-    <h2 class="view-title">Kinh tế vĩ mô</h2>
-    <div class="vb-note">Nguồn: Tổng cục Thống kê (nso.gov.vn)</div>
     <div class="card"><h2 class="sec-h">Bức tranh vĩ mô hiện nay</h2>
       <div class="mp-sum" id="macro-sum"></div>
       <div class="mp-grid" id="macro-kpi"></div>

@@ -137,10 +137,10 @@ function trTree(root) {
 // titles, annotations, category labels) before it is drawn.
 const PLOT_KEYS = new Set(["name", "hovertemplate", "text", "title", "ticktext", "texttemplate", "legendgrouptitle", "ticksuffix", "tickprefix", "suffix", "prefix"]);
 function deep(v, key) {
-  if (typeof v === "string") return PLOT_KEYS.has(key) || key === "x" || key === "y" || key === "labels" || key === "customdata" ? tr(v) : v;
+  if (typeof v === "string") return PLOT_KEYS.has(key) || key === "x" || key === "y" || key === "theta" || key === "labels" || key === "customdata" ? tr(v) : v;
   if (Array.isArray(v)) {
-    // category axes and pie/treemap labels are arrays of strings
-    return (key === "x" || key === "y" || key === "labels" || key === "text" || key === "ticktext" || key === "parents" || key === "ids" || key === "customdata")
+    // category axes, radar axes (theta) and pie/treemap labels are arrays of strings
+    return (key === "x" || key === "y" || key === "theta" || key === "labels" || key === "text" || key === "ticktext" || key === "parents" || key === "ids" || key === "customdata")
       ? v.map((x) => (typeof x === "string" ? tr(x) : deep(x, key))) : v.map((x) => deep(x, key));
   }
   if (v && typeof v === "object" && !(v instanceof Date) && !ArrayBuffer.isView(v)) {
